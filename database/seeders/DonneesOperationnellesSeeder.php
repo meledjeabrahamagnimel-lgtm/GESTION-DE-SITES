@@ -194,7 +194,9 @@ class DonneesOperationnellesSeeder extends Seeder
 
         Charge::withoutGlobalScopes()
             ->where('entreprise_id', $entrepriseId)
-            ->update(['montant' => DB::raw('CAST(montant * '.round($facteur, 4).' AS INTEGER)')]);
+            // ROUND() plutôt que CAST(... AS INTEGER) : ce type n'existe pas en MySQL,
+            // qui attend SIGNED. ROUND est comprise à l'identique par MySQL et SQLite.
+            ->update(['montant' => DB::raw('ROUND(montant * '.round($facteur, 4).')')]);
     }
 
     private function genererCharges(int $entrepriseId, int $siteId, Carbon $date): void
