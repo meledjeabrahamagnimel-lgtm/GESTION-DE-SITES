@@ -49,6 +49,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::middleware(['role:commercial'])->group(function () {
         Volt::route('/ma-performance', 'ma-performance')->name('ma-performance');
+        Volt::route('/mes-prospections', 'mes-prospections')->name('mes-prospections');
     });
 
     // Super Admin — plateforme, hors périmètre d'une entreprise.

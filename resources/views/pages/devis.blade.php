@@ -126,7 +126,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
 <div>
     <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
 
-    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="Devis émis" :value="$this->kpis['emis']" :sub="ae($this->kpis['montantEmis'])" />
         <x-kpi-card label="Validés" :value="$this->kpis['valides']" :sub="ae($this->kpis['montantValide'])" couleur="#0E9F6E" />
         <x-kpi-card label="Refusés" :value="$this->kpis['refuses']" couleur="#C8102E" />

@@ -124,7 +124,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
 <div>
     <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
 
-    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="CA total facturé" :value="ae($this->kpis['total'])" :sub="$this->detail->count().' facture(s)'" />
         <x-kpi-card label="CA Mécanique" :value="ae($this->kpis['mecanique'])" />
         <x-kpi-card label="CA Carrosserie" :value="ae($this->kpis['carrosserie'])" />

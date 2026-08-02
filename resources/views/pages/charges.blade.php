@@ -89,7 +89,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('da
 <div>
     <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
 
-    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="Total charges" :value="ae($this->kpis['total'])" sub="Hors transferts et décaissements DG" />
         <x-kpi-card label="Achats pièces" :value="ae($this->kpis['pieces'])" />
         <x-kpi-card label="Salaires & personnel" :value="ae($this->kpis['salaires'])" />

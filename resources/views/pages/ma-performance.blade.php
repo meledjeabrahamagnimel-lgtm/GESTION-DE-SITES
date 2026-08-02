@@ -57,7 +57,7 @@ $kpis = computed(function () {
 
         <x-filtre-periode :periode="$periode" />
 
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:14px; margin-bottom:20px;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
             <x-kpi-card label="Objectif mensuel" :value="ae($this->commercial->objectif_mensuel)" />
             <x-kpi-card label="Objectif de la période" :value="ae($this->kpis['objectif'])" />
             <x-kpi-card label="Réalisation" :value="ae($this->kpis['realisation'])" />

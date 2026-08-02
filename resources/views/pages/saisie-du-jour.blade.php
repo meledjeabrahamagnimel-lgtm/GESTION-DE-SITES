@@ -29,6 +29,8 @@ state([
     'chgDate' => null, 'chgTypeOp' => 'Charges', 'chgLibelle' => 'Achats pièces',
     'chgMoyen' => 'Espèces', 'chgMontant' => '', 'chgTiers' => '', 'chgObs' => '',
 
+    'motifRefus' => [],
+
     'vehiculesSansFacture' => 0,
     'commentaireProspects' => '', 'commentaireDevis' => '', 'commentaireCA' => '',
     'commentaireTresorerie' => '', 'commentaireCharges' => '',
@@ -128,9 +130,30 @@ $commerciaux = computed(fn () => Commercial::where('site_id', $this->site?->id ?
 
 $commerciauxSelectables = computed(fn () => Commercial::where('site_id', $this->site?->id ?? 0)->where('statut', 'Actif')->orderBy('numero')->pluck('nom', 'id'));
 
-$prospectionsDuJour = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->where('date', $this->date)->with('commercial')->orderByDesc('id')->get());
+$prospectionsATraiter = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)
+    ->aTraiter()->with('commercial')->orderBy('date')->get());
 
-$prospectionsAttenteDevis = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->where('devis_apres_passage', true)->doesntHave('devis')->with('commercial')->orderBy('date')->limit(12)->get());
+$validerProspection = function (int $id) {
+    Prospection::where('site_id', $this->site->id)->aTraiter()->where('id', $id)
+        ->update(['statut_validation' => 'Validée', 'motif_refus' => null]);
+    unset($this->prospectionsATraiter, $this->prospectionsDuJour);
+};
+
+$refuserProspection = function (int $id) {
+    Prospection::where('site_id', $this->site->id)->aTraiter()->where('id', $id)
+        ->update(['statut_validation' => 'Refusée', 'motif_refus' => $this->motifRefus[$id] ?? null]);
+    unset($this->prospectionsATraiter, $this->prospectionsDuJour);
+};
+
+$validerToutesProspections = function () {
+    Prospection::where('site_id', $this->site->id)->aTraiter()
+        ->update(['statut_validation' => 'Validée', 'motif_refus' => null]);
+    unset($this->prospectionsATraiter, $this->prospectionsDuJour);
+};
+
+$prospectionsDuJour = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->visibles()->where('date', $this->date)->with('commercial')->orderByDesc('id')->get());
+
+$prospectionsAttenteDevis = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->where('statut_validation', 'Validée')->where('devis_apres_passage', true)->doesntHave('devis')->with('commercial')->orderBy('date')->limit(12)->get());
 
 $devisDuJour = computed(fn () => Devis::where('site_id', $this->site?->id ?? 0)->where('date_emission', $this->date)->with('commercial')->orderByDesc('id')->get());
 
@@ -542,6 +565,51 @@ $ajouterCharge = function () {
                     « Client spontané » recense les clients venus sans démarchage. Un commercial « Inactif » disparaît des listes déroulantes dès le jour de désactivation, jusqu'à réactivation.
                 </span>
             </div>
+
+            @if ($this->prospectionsATraiter->isNotEmpty())
+                <x-sous-titre n="2" t="Prospections transmises par vos commerciaux" />
+                <p style="font-size:12.5px; font-weight:700; color:var(--th-bleu,#2563EB); margin:0 0 8px;">
+                    {{ $this->prospectionsATraiter->count() }} prospection(s) en attente de votre validation.
+                    <button type="button" wire:click="validerToutesProspections"
+                        wire:confirm="Valider toutes les prospections transmises ?"
+                        class="bouton bouton-petit" style="margin-left:10px;">Tout valider</button>
+                </p>
+                <div class="tableau-conteneur">
+                    <table class="tableau">
+                        <thead>
+                            <tr>
+                                <th>N°</th><th>Date</th><th>Commercial</th><th>Clients visités</th>
+                                <th>Localisation</th><th>Moyens</th><th>Activité</th>
+                                <th>Passage</th><th>Devis après passage</th><th>Observations</th>
+                                <th>Motif si refus</th><th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($this->prospectionsATraiter as $p)
+                                <tr wire:key="a-traiter-{{ $p->id }}">
+                                    <td style="font-weight:700;">{{ $p->numero }}</td>
+                                    <td>{{ $p->date->format('d/m/Y') }}</td>
+                                    <td>{{ $p->commercial->nom }}</td>
+                                    <td>{{ $p->client }}</td>
+                                    <td style="color:var(--th-gris,#6B6E76);">{{ $p->localisation ?? '—' }}</td>
+                                    <td>{{ $p->moyen }}</td>
+                                    <td>{{ $p->activite }}</td>
+                                    <td>{{ $p->passage ? '☑' : '☐' }}</td>
+                                    <td>{{ $p->devis_apres_passage ? '☑' : '☐' }}</td>
+                                    <td style="color:var(--th-gris,#6B6E76);">{{ $p->observations ?? '—' }}</td>
+                                    <td><input type="text" wire:model="motifRefus.{{ $p->id }}" class="champ" style="width:150px;" placeholder="Facultatif"></td>
+                                    <td style="text-align:right; white-space:nowrap;">
+                                        <button type="button" wire:click="validerProspection({{ $p->id }})"
+                                            class="bouton bouton-petit bouton-vert" style="margin-right:5px;">Valider</button>
+                                        <button type="button" wire:click="refuserProspection({{ $p->id }})"
+                                            class="bouton bouton-petit bouton-secondaire">Refuser</button>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
 
             <x-sous-titre n="2" t="Prospections" />
             <div class="tableau-conteneur">

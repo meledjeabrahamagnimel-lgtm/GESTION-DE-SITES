@@ -121,7 +121,7 @@ $graphiqueFlux = computed(function () {
 
     @php $portee = $siteFiltre ? $this->sitesRetenus->first()?->nom : 'groupe'; @endphp
 
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="CA {{ $portee }}" :value="ae($this->kpis['ca'])" />
         <x-kpi-card label="Charges {{ $portee }}" :value="ae($this->kpis['charges'])" />
         <x-kpi-card label="Résultat net {{ $portee }}" :value="ae($this->kpis['resultat'])"

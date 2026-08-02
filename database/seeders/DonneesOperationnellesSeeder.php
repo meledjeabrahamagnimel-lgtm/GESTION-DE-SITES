@@ -90,6 +90,12 @@ class DonneesOperationnellesSeeder extends Seeder
                         'activite' => $commercial->activite ?? (random_int(0, 1) ? 'Mécanique' : 'Carrosserie'),
                         'passage' => $passage,
                         'devis_apres_passage' => $devisApresPassage,
+                        // Circuit de validation : l'essentiel est validé, mais les tout derniers
+                        // jours gardent des lignes transmises ou refusées pour illustrer
+                        // l'arbitrage du responsable sur les saisies de ses commerciaux.
+                        'statut_validation' => $jour >= self::JOURS_HISTORIQUE - 2
+                            ? ['Validée', 'Validée', 'Validée', 'Transmise', 'Refusée'][random_int(0, 4)]
+                            : 'Validée',
                     ]);
 
                     if (! $devisApresPassage) {
