@@ -61,16 +61,23 @@ $kpis = computed(function () {
 
 $graphique = computed(function () {
     [$debut, $fin] = $this->plage;
-    $points = PeriodeCalculateur::pointsHebdomadaires($debut, $fin);
+    $points = PeriodeCalculateur::points($debut, $fin);
 
     $labels = [];
     $entrees = [];
     $sorties = [];
+    $cumul = [];
+    $total = 0;
 
     foreach ($points as $point) {
+        $e = (int) (clone $this->encaissementsQ)->whereBetween('date', [$point['debut'], $point['fin']])->sum('montant');
+        $so = (int) (clone $this->chargesQ)->whereBetween('date', [$point['debut'], $point['fin']])->sum('montant');
+        $total += $e - $so;
+
         $labels[] = $point['label'];
-        $entrees[] = (int) (clone $this->encaissementsQ)->whereBetween('date', [$point['debut'], $point['fin']])->sum('montant');
-        $sorties[] = (int) (clone $this->chargesQ)->whereBetween('date', [$point['debut'], $point['fin']])->sum('montant');
+        $entrees[] = $e;
+        $sorties[] = $so;
+        $cumul[] = $total;
     }
 
     return [
@@ -78,6 +85,7 @@ $graphique = computed(function () {
         'datasets' => [
             ['label' => 'Entrées', 'data' => $entrees, 'color' => '#0E9F6E'],
             ['label' => 'Sorties', 'data' => $sorties, 'color' => '#C8102E'],
+            ['label' => 'Trésorerie nette cumulée', 'data' => $cumul, 'color' => '#2563EB', 'type' => 'line'],
         ],
     ];
 });

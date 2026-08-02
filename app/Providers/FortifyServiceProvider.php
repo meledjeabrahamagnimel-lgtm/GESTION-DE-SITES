@@ -40,6 +40,11 @@ class FortifyServiceProvider extends ServiceProvider
 
         Fortify::loginView(fn () => view('auth.connexion'));
 
+        // Sans ces deux déclarations, Fortify ne sait pas résoudre les vues de
+        // réinitialisation et lève une BindingResolutionException sur /mot-de-passe-oublie.
+        Fortify::requestPasswordResetLinkView(fn () => view('auth.mot-de-passe-oublie'));
+        Fortify::resetPasswordView(fn (Request $request) => view('auth.reinitialiser-mot-de-passe', ['request' => $request]));
+
         Fortify::authenticateUsing(function (Request $request) {
             $utilisateur = User::where('email', $request->email)->first();
 
