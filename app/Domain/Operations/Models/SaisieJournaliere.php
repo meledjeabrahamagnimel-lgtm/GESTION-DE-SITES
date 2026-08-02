@@ -1,0 +1,32 @@
+<?php
+
+namespace App\Domain\Operations\Models;
+
+use App\Domain\Shared\Concerns\AppartientAUneEntreprise;
+use App\Domain\Tenants\Models\Site;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+#[Fillable([
+    'entreprise_id', 'site_id', 'date', 'vehicules_sans_facture',
+    'commentaire_prospects', 'commentaire_devis', 'commentaire_ca',
+    'commentaire_tresorerie', 'commentaire_charges',
+])]
+class SaisieJournaliere extends Model
+{
+    use AppartientAUneEntreprise, HasFactory;
+
+    protected $table = 'saisies_journalieres';
+
+    protected function casts(): array
+    {
+        return ['date' => 'date'];
+    }
+
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
+    }
+}
