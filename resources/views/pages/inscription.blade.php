@@ -4,8 +4,10 @@ use App\Domain\Tenants\Actions\CreerAcces;
 use App\Domain\Tenants\Actions\CreerEntreprise;
 use App\Domain\Tenants\Models\Entreprise;
 use App\Domain\Tenants\Models\Site;
-use function Livewire\Volt\{state, computed, layout, title};
+use App\Domain\Tenants\Services\EnregistreurLogo;
+use function Livewire\Volt\{state, computed, layout, title, usesFileUploads};
 
+usesFileUploads();
 layout('layouts.guest');
 title('Inscrire mon entreprise');
 
@@ -25,6 +27,7 @@ state([
     // Étape 1 — Compte de connexion
     'compteEmail' => '', 'compteMotDePasse' => '', 'compteMotDePasse_confirmation' => '',
     'codeEntreprise' => '',
+    'logo' => null,
 
     // Étape 2 — Site
     'siteNom' => '', 'siteVille' => '', 'siteCommune' => '', 'siteTelephone' => '', 'siteAdresse' => '',
@@ -59,7 +62,7 @@ $genererCode = function () {
 
 // ---------------------------------------------------------------- Étape 1
 
-$creerEntreprise = function (CreerEntreprise $action) {
+$creerEntreprise = function (CreerEntreprise $action, EnregistreurLogo $enregistreurLogo) {
     $donnees = $this->validate([
         'nom' => ['required', 'string', 'max:255'],
         'gerantNom' => ['required', 'string', 'max:255'],
@@ -82,12 +85,13 @@ $creerEntreprise = function (CreerEntreprise $action) {
         'compteEmail' => ['required', 'email', 'max:255', 'unique:users,email'],
         'compteMotDePasse' => ['required', 'string', 'min:8', 'confirmed'],
         'codeEntreprise' => ['required', 'string', 'max:20', 'unique:entreprises,code_entreprise'],
+        'logo' => EnregistreurLogo::REGLES,
     ], [], [
         'nom' => "nom de l'entreprise", 'gerantNom' => 'nom du gérant', 'gerantPrenom' => 'prénom du gérant',
         'gerantFonction' => 'fonction du gérant', 'ncc' => 'NCC', 'regimeImposition' => "régime d'imposition",
         'centreImpots' => 'centre des impôts', 'compteContribuable' => 'compte contribuable', 'idu' => 'IDU',
         'compteEmail' => 'e-mail de connexion', 'compteMotDePasse' => 'mot de passe',
-        'codeEntreprise' => 'code entreprise',
+        'codeEntreprise' => 'code entreprise', 'logo' => 'logo',
     ]);
 
     $gerant = $action->executer([
@@ -113,6 +117,13 @@ $creerEntreprise = function (CreerEntreprise $action) {
         'compte_email' => $donnees['compteEmail'],
         'compte_mot_de_passe' => $donnees['compteMotDePasse'],
     ]);
+
+    if ($this->logo) {
+        $entreprise = $gerant->entreprise;
+        $entreprise->update([
+            'logo_chemin' => $enregistreurLogo->enregistrer($this->logo, $entreprise),
+        ]);
+    }
 
     auth()->login($gerant);
 
@@ -236,6 +247,23 @@ $terminer = function () {
                         <x-champ label="Téléphone" model="telephone" placeholder="Ex : +225 27 22 23 72" />
                         <x-champ label="E-mail" model="email" type="email" placeholder="Ex : dcknowing@gmail.com" />
                         <x-champ label="RCCM — Registre du Commerce et du Crédit Mobilier" model="rccm" placeholder="Ex : CI-ABJ-2019-B-18764" />
+                    </div>
+
+                    <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--th-ligne,#E2E0D8);">
+                        <label class="champ-libelle">Logo principal de l'entreprise</label>
+                        <p style="font-size:12.5px; color:var(--th-gris,#6B6E76); margin:0 0 8px;">
+                            PNG, JPG ou WEBP, 2 Mo maximum. Il apparaîtra sur votre page de connexion et dans le bandeau de l'application.
+                        </p>
+                        <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+                            <input type="file" wire:model="logo" accept="image/png,image/jpeg,image/webp" class="champ" style="max-width:340px;">
+                            <div wire:loading wire:target="logo" style="font-size:13px; color:var(--th-gris,#6B6E76);">Chargement…</div>
+                            @if ($logo)
+                                <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; padding:8px 14px;">
+                                    <img src="{{ $logo->temporaryUrl() }}" alt="Aperçu du logo" style="height:46px; display:block;">
+                                </div>
+                            @endif
+                        </div>
+                        @error('logo') <span class="champ-erreur">{{ $message }}</span> @enderror
                     </div>
                 </x-carte-section>
 
