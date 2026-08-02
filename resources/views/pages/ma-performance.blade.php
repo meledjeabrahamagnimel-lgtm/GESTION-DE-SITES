@@ -21,7 +21,7 @@ $factures = computed(function () {
     }
     [$debut, $fin] = $this->plage;
 
-    return Facture::where('commercial_id', $this->commercial->id)->whereBetween('date', [$debut, $fin])->latest('date')->get();
+    return Facture::with('site')->where('commercial_id', $this->commercial->id)->whereBetween('date', [$debut, $fin])->latest('date')->get();
 });
 
 $kpis = computed(function () {
@@ -76,9 +76,11 @@ $kpis = computed(function () {
                         <tr>
                             <th>N°</th>
                             <th>Date</th>
-                            <th>Client</th>
                             <th>Activité</th>
+                            <th>Site</th>
+                            <th>Clients</th>
                             <th>Type</th>
+                            <th>N° de facture</th>
                             <th>Montant facturé</th>
                         </tr>
                     </thead>
@@ -87,13 +89,15 @@ $kpis = computed(function () {
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td style="font-weight:700;">{{ $facture->numero }}</td>
                                 <td>{{ $facture->date->format('d/m/Y') }}</td>
-                                <td>{{ $facture->client }}</td>
                                 <td>{{ $facture->activite }}</td>
+                                <td>{{ $facture->site->nom }}</td>
+                                <td>{{ $facture->client }}</td>
                                 <td>{{ $facture->type }}</td>
+                                <td>{{ $facture->n_facture }}</td>
                                 <td style="font-variant-numeric:tabular-nums; font-weight:700;">{{ ae($facture->montant) }}</td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="6" texte="Aucune facture sur cette période." />
+                            <x-table-vide :colspan="8" texte="Aucune facture sur cette période." />
                         @endforelse
                     </tbody>
                 </table>

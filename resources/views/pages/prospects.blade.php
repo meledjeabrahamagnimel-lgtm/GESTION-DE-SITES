@@ -132,9 +132,9 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                 <thead>
                     <tr>
                         <th>N°</th>
-                        <th>Client</th>
+                        <th>Clients visités</th>
                         <th>Localisation</th>
-                        <th>Moyen</th>
+                        <th>Moyens</th>
                         <th>Commercial</th>
                         <th>Activité</th>
                         @if ($this->estGerant && ! $siteFiltre)
@@ -142,6 +142,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                         @endif
                         <th>Passage</th>
                         <th>Devis après passage</th>
+                        <th>Observations</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -158,9 +159,10 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                             @endif
                             <td>{{ $ligne->passage ? '✓' : '—' }}</td>
                             <td>{{ $ligne->devis_apres_passage ? '✓' : '—' }}</td>
+                            <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 9 : 8" texte="Aucune prospection enregistrée sur cette période." />
+                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 10 : 9" texte="Aucune prospection enregistrée sur cette période." />
                     @endforelse
                 </tbody>
             </table>

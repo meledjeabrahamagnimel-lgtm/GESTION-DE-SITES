@@ -32,17 +32,29 @@ $classement = computed(function () {
         $q->where('site_id', $this->monSite?->id ?? 0);
     }
 
-    return $q->get()->map(function ($commercial) use ($debut, $fin, $joursPeriode) {
+    $commerciaux = $q->get();
+
+    // CA du site sur la période, pour exprimer la contribution de chaque commercial.
+    $caParSite = Facture::whereIn('site_id', $commerciaux->pluck('site_id')->unique())
+        ->whereBetween('date', [$debut, $fin])
+        ->selectRaw('site_id, SUM(montant) as total')
+        ->groupBy('site_id')
+        ->pluck('total', 'site_id');
+
+    return $commerciaux->map(function ($commercial) use ($debut, $fin, $joursPeriode, $caParSite) {
         $realisation = (int) Facture::where('commercial_id', $commercial->id)->whereBetween('date', [$debut, $fin])->sum('montant');
         $objectifProrata = (int) round($commercial->objectif_mensuel / 30 * $joursPeriode);
         $ecart = $realisation - $objectifProrata;
+        $caSite = (int) ($caParSite[$commercial->site_id] ?? 0);
 
         return [
             'commercial' => $commercial,
             'objectif' => $objectifProrata,
+            'objectifJournalier' => (int) round($commercial->objectif_mensuel / 30),
             'realisation' => $realisation,
             'ecart' => $ecart,
             'taux' => $objectifProrata > 0 ? $realisation / $objectifProrata : null,
+            'contribution' => $caSite > 0 ? $realisation / $caSite : null,
         ];
     })->sortByDesc(fn ($l) => $l['taux'] ?? -1)->values();
 });
@@ -93,33 +105,41 @@ $graphique = computed(fn () => [
                 <thead>
                     <tr>
                         <th>Rang</th>
+                        <th>N°</th>
                         <th>Commercial</th>
                         @if ($this->estGerant && ! $siteFiltre)
                             <th>Site</th>
                         @endif
                         <th>Activité</th>
-                        <th>Objectif</th>
+                        <th>Objectif mensuel</th>
+                        <th>Objectif journalier (mensuel/30)</th>
+                        <th>Objectif de la période</th>
                         <th>Réalisation</th>
                         <th>Écart</th>
                         <th>Taux d'atteinte</th>
+                        <th>Contribution au CA du site</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($this->classement as $i => $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); {{ $i === 0 ? 'background:#FFFBEA;' : '' }}">
                             <td style="font-weight:800;">{{ $i + 1 }}</td>
+                            <td style="font-weight:700;">{{ $ligne['commercial']->numero }}</td>
                             <td style="font-weight:700;">{{ $ligne['commercial']->nom }}</td>
                             @if ($this->estGerant && ! $siteFiltre)
                                 <td>{{ $ligne['commercial']->site->nom }}</td>
                             @endif
                             <td>{{ $ligne['commercial']->activite }}</td>
+                            <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['commercial']->objectif_mensuel) }}</td>
+                            <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['objectifJournalier']) }}</td>
                             <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['objectif']) }}</td>
                             <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['realisation']) }}</td>
                             <td style="font-variant-numeric:tabular-nums; color:{{ $ligne['ecart'] >= 0 ? '#0E9F6E' : '#C8102E' }};">{{ ae($ligne['ecart']) }}</td>
                             <td style="font-weight:700; color:{{ ($ligne['taux'] ?? 0) >= 1 ? '#0E9F6E' : '#D97706' }};">{{ an($ligne['taux']) }}</td>
+                            <td style="font-variant-numeric:tabular-nums;">{{ an($ligne['contribution']) }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 8 : 7" texte="Aucun commercial actif pour ce filtre." />
+                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 11 : 10" texte="Aucun commercial actif pour ce filtre." />
                     @endforelse
                 </tbody>
             </table>
