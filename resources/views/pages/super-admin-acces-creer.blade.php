@@ -75,7 +75,7 @@ $creer = function (CreerAcces $action) {
 ?>
 
 <div>
-    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:24px;">
+    <div class="carte">
         <h1 style="font-size:18px; font-weight:800; margin:0 0 4px;">Créer un accès</h1>
         <p style="color:#6B6E76; font-size:15px; margin:0 0 18px;">Provisionnez un compte pour n'importe quel rôle, dans n'importe quelle entreprise cliente.</p>
 

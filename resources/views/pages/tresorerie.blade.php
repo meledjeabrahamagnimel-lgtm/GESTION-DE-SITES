@@ -103,25 +103,25 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
     </div>
 
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
-        <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+        <div class="carte">
             <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Encaissements ({{ $this->detailEncaissements->count() }})</h3>
-            <div style="overflow-x:auto;">
-                <table style="border-collapse:collapse; width:100%; font-size:14px;">
+            <div class="tableau-conteneur">
+                <table class="tableau">
                     <thead>
-                        <tr style="text-align:left; border-bottom:2px solid var(--th-ink,#191B20);">
-                            <th style="padding:8px 10px;">Date</th>
-                            <th style="padding:8px 10px;">Type</th>
-                            <th style="padding:8px 10px;">Moyen</th>
-                            <th style="padding:8px 10px;">Montant</th>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Moyen</th>
+                            <th>Montant</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->detailEncaissements as $ligne)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="padding:8px 10px;">{{ $ligne->date->format('d/m/Y') }}</td>
-                                <td style="padding:8px 10px;">{{ $ligne->type }}</td>
-                                <td style="padding:8px 10px;">{{ $ligne->moyen }}</td>
-                                <td style="padding:8px 10px; font-variant-numeric:tabular-nums; font-weight:700; color:#0E9F6E;">{{ ae($ligne->montant) }}</td>
+                                <td>{{ $ligne->date->format('d/m/Y') }}</td>
+                                <td>{{ $ligne->type }}</td>
+                                <td>{{ $ligne->moyen }}</td>
+                                <td style="font-variant-numeric:tabular-nums; font-weight:700; color:#0E9F6E;">{{ ae($ligne->montant) }}</td>
                             </tr>
                         @empty
                             <x-table-vide :colspan="4" texte="Aucun encaissement sur cette période." />
@@ -131,25 +131,25 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
             </div>
         </div>
 
-        <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+        <div class="carte">
             <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Décaissements ({{ $this->detailDecaissements->count() }})</h3>
-            <div style="overflow-x:auto;">
-                <table style="border-collapse:collapse; width:100%; font-size:14px;">
+            <div class="tableau-conteneur">
+                <table class="tableau">
                     <thead>
-                        <tr style="text-align:left; border-bottom:2px solid var(--th-ink,#191B20);">
-                            <th style="padding:8px 10px;">Date</th>
-                            <th style="padding:8px 10px;">Libellé</th>
-                            <th style="padding:8px 10px;">Moyen</th>
-                            <th style="padding:8px 10px;">Montant</th>
+                        <tr>
+                            <th>Date</th>
+                            <th>Libellé</th>
+                            <th>Moyen</th>
+                            <th>Montant</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->detailDecaissements as $ligne)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="padding:8px 10px;">{{ $ligne->date->format('d/m/Y') }}</td>
-                                <td style="padding:8px 10px;">{{ $ligne->libelle }}</td>
-                                <td style="padding:8px 10px;">{{ $ligne->moyen }}</td>
-                                <td style="padding:8px 10px; font-variant-numeric:tabular-nums; font-weight:700; color:#C8102E;">{{ ae($ligne->montant) }}</td>
+                                <td>{{ $ligne->date->format('d/m/Y') }}</td>
+                                <td>{{ $ligne->libelle }}</td>
+                                <td>{{ $ligne->moyen }}</td>
+                                <td style="font-variant-numeric:tabular-nums; font-weight:700; color:#C8102E;">{{ ae($ligne->montant) }}</td>
                             </tr>
                         @empty
                             <x-table-vide :colspan="4" texte="Aucun décaissement sur cette période." />

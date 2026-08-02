@@ -15,6 +15,8 @@ Route::get('/auth/callback', [GoogleAuthController::class, 'callback'])->name('a
 
 Route::middleware(['guest'])->group(function () {
     Volt::route('/inscription', 'inscription')->name('inscription');
+    // Auto-inscription du personnel avec le code communiqué par le gérant.
+    Volt::route('/rejoindre', 'inscription-personnel')->name('inscription.personnel');
 });
 
 Route::middleware(['auth'])->group(function () {
@@ -25,6 +27,7 @@ Route::middleware(['auth'])->group(function () {
     // Espace entreprise (Gérant, Responsable de site, Commercial).
     Route::middleware(['role:gerant'])->group(function () {
         Volt::route('/tableau-de-bord', 'tableau-de-bord')->name('tableau-de-bord');
+        Volt::route('/parametres', 'parametres')->name('parametres');
     });
 
     Route::middleware(['role:responsable_site'])->group(function () {
@@ -56,5 +59,6 @@ Route::middleware(['auth'])->group(function () {
         Volt::route('/acces', 'super-admin-acces-index')->name('acces.index');
         Volt::route('/acces/creer', 'super-admin-acces-creer')->name('acces.creer');
         Volt::route('/journal', 'super-admin-journal-index')->name('journal.index');
+        Volt::route('/maintenance', 'super-admin-maintenance')->name('maintenance');
     });
 });

@@ -13,6 +13,7 @@ use App\Domain\Tenants\Models\Entreprise;
 use App\Domain\Tenants\Models\Site;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Jeu de données opérationnelles réaliste (60 jours) pour la démonstration :
@@ -21,6 +22,9 @@ use Illuminate\Database\Seeder;
 class DonneesOperationnellesSeeder extends Seeder
 {
     private const JOURS_HISTORIQUE = 60;
+
+    /** Poids visé des charges dans le chiffre d'affaires facturé. */
+    private const PART_CHARGES = 0.65;
 
     private const CLIENTS_DEMO = [
         'SODECI', 'CIE', 'Orange CI', 'Nestlé CI', 'Bolloré Transport', 'SIFCA',
@@ -94,7 +98,7 @@ class DonneesOperationnellesSeeder extends Seeder
 
                     $montantDevis = random_int(45, 850) * 1000;
                     $tirage = random_int(1, 100);
-                    $statut = $tirage <= 40 ? 'Validé' : ($tirage <= 85 ? 'Refusé' : 'En attente');
+                    $statut = $tirage <= 55 ? 'Validé' : ($tirage <= 85 ? 'Refusé' : 'En attente');
                     $montantValide = $statut === 'Validé' ? (int) round($montantDevis * (random_int(70, 98) / 100)) : null;
 
                     $devis = Devis::create([
@@ -113,7 +117,7 @@ class DonneesOperationnellesSeeder extends Seeder
                         'montant_valide' => $montantValide,
                     ]);
 
-                    if ($statut !== 'Validé' || random_int(1, 100) > 75) {
+                    if ($statut !== 'Validé' || random_int(1, 100) > 88) {
                         continue;
                     }
 
@@ -153,22 +157,48 @@ class DonneesOperationnellesSeeder extends Seeder
                 $this->genererCharges($entreprise->id, $site->id, $date);
             }
         }
+
+        $this->calibrerCharges($entreprise->id);
+    }
+
+    /**
+     * Les montants sont tirés au hasard : sans recalage, le poids des charges peut osciller
+     * de 40 % à 90 % du chiffre d'affaires d'une exécution à l'autre. On applique donc un
+     * facteur d'échelle unique pour viser une structure de coûts réaliste (~65 % du CA),
+     * qui laisse un résultat net positif et lisible dans la démonstration.
+     */
+    private function calibrerCharges(int $entrepriseId): void
+    {
+        $ca = Facture::withoutGlobalScopes()->where('entreprise_id', $entrepriseId)->sum('montant');
+        $charges = Charge::withoutGlobalScopes()->where('entreprise_id', $entrepriseId)->sum('montant');
+
+        if ($ca <= 0 || $charges <= 0) {
+            return;
+        }
+
+        $facteur = ($ca * self::PART_CHARGES) / $charges;
+
+        Charge::withoutGlobalScopes()
+            ->where('entreprise_id', $entrepriseId)
+            ->update(['montant' => DB::raw('CAST(montant * '.round($facteur, 4).' AS INTEGER)')]);
     }
 
     private function genererCharges(int $entrepriseId, int $siteId, Carbon $date): void
     {
-        if (random_int(1, 100) > 60) {
+        if (random_int(1, 100) > 85) {
             return;
         }
 
         $nature = array_rand(self::LIBELLES_CHARGES);
         $libelles = self::LIBELLES_CHARGES[$nature];
 
+        // Calibrés pour que le total des charges représente environ 60 à 70 % du CA facturé,
+        // afin que le résultat net de la démonstration reste positif et lisible.
         $montants = [
-            'Achats pièces' => [60, 400],
-            'Salaires & personnel' => [150, 700],
-            'Fonctionnement' => [15, 120],
-            'Autres décaissements' => [10, 90],
+            'Achats pièces' => [55, 330],
+            'Salaires & personnel' => [120, 480],
+            'Fonctionnement' => [14, 100],
+            'Autres décaissements' => [10, 75],
         ];
 
         [$min, $max] = $montants[$nature];

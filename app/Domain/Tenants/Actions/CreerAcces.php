@@ -25,8 +25,11 @@ class CreerAcces
                 'name' => $donnees['nom'],
                 'email' => $donnees['email'],
                 'password' => $donnees['mot_de_passe'],
+                'telephone' => $donnees['telephone'] ?? null,
                 'email_verified_at' => now(),
-                'doit_changer_mot_de_passe' => true,
+                // Un accès créé par un administrateur impose un changement de mot de passe ;
+                // une inscription volontaire (par code entreprise) non, le mot de passe étant déjà choisi.
+                'doit_changer_mot_de_passe' => $donnees['doit_changer_mot_de_passe'] ?? true,
             ]);
 
             app(PermissionRegistrar::class)->setPermissionsTeamId($entreprise->id);

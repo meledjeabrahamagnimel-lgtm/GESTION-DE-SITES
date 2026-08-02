@@ -24,24 +24,24 @@ $repartition = computed(function () {
 ?>
 
 <x-a-venir titre="{{ $this->entreprise->nom }}" description="Répartition des personnes par catégorie et par site.">
-        <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
+        <div class="tableau-conteneur">
+            <table class="tableau">
                 <thead>
-                    <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                        <th style="padding:8px 10px;">Site</th>
-                        <th style="padding:8px 10px;">Responsables</th>
-                        <th style="padding:8px 10px;">Commerciaux</th>
+                    <tr>
+                        <th>Site</th>
+                        <th>Responsables</th>
+                        <th>Commerciaux</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach ($this->repartition as $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                            <td style="padding:8px 10px; font-weight:600;">
+                            <td style="font-weight:600;">
                                 <span style="display:inline-block; width:8px; height:8px; border-radius:99px; background:{{ $ligne['site']->couleur }}; margin-right:6px;"></span>
                                 {{ $ligne['site']->nom }}
                             </td>
-                            <td style="padding:8px 10px;">{{ $ligne['responsables'] }}</td>
-                            <td style="padding:8px 10px;">{{ $ligne['commerciaux'] }}</td>
+                            <td>{{ $ligne['responsables'] }}</td>
+                            <td>{{ $ligne['commerciaux'] }}</td>
                         </tr>
                     @endforeach
                 </tbody>

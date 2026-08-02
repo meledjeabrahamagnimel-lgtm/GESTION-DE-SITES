@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['entreprise_id', 'code', 'nom', 'couleur', 'responsable_id', 'est_actif'])]
+#[Fillable(['entreprise_id', 'code', 'nom', 'ville', 'commune', 'telephone', 'adresse', 'couleur', 'responsable_id', 'est_actif'])]
 class Site extends Model
 {
     use AppartientAUneEntreprise, HasFactory;

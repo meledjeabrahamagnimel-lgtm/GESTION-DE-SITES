@@ -29,7 +29,26 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
         $entreprise = Entreprise::create([
             'nom' => "L'Artisan Automobile",
             'slug' => 'artisan-automobile',
+            'code_entreprise' => 'ART-2026CI',
             'logo_chemin' => $cheminLogo,
+            // Identification légale et fiscale (Côte d'Ivoire).
+            'gerant_nom' => 'KOUASSI',
+            'gerant_prenom' => 'Jean-Baptiste',
+            'gerant_fonction' => 'Gérant',
+            'gerant_email' => 'direction@artisan-automobile.ci',
+            'adresse' => 'Zone industrielle de Yopougon, ABIDJAN, CÔTE D\'IVOIRE',
+            'telephone' => '+225 27 23 45 67 89',
+            'email' => 'contact@artisan-automobile.ci',
+            'rccm' => 'CI-ABJ-2018-B-14520',
+            'ncc' => '1745820 K',
+            'regime_imposition' => "RNI — Régime Normal d'Imposition",
+            'centre_impots' => 'YOPOUGON INDUSTRIEL',
+            'compte_contribuable' => '1745820 K',
+            'idu' => 'CI-001-2026-A874512',
+            'commune' => 'YOPOUGON',
+            'quartier' => 'Zone Industrielle',
+            'reference_cadastrale' => 'Section D, Parcelle 118',
+            'proprietaire_local' => 'SCI LES ATELIERS DU LAGON',
             'couleur_ink' => '#191B20',
             'couleur_paper' => '#F4F3EF',
             'couleur_ligne' => '#E2E0D8',
@@ -54,10 +73,10 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
         $gerant->assignRole('gerant');
 
         $sites = [
-            ['code' => 'BKE', 'nom' => 'Bouaké', 'couleur' => '#7C3AED', 'resp_nom' => 'David K.', 'resp_email' => 'david.k@artisan-automobile.ci'],
-            ['code' => 'AB1', 'nom' => 'Abidjan — Site 1', 'couleur' => '#2563EB', 'resp_nom' => 'Responsable Site 1', 'resp_email' => 'resp.site1@artisan-automobile.ci'],
-            ['code' => 'AB2', 'nom' => 'Abidjan — Site 2', 'couleur' => '#059669', 'resp_nom' => 'Responsable Site 2', 'resp_email' => 'resp.site2@artisan-automobile.ci'],
-            ['code' => 'SPD', 'nom' => 'San Pedro', 'couleur' => '#D97706', 'resp_nom' => 'Rama Gaiho', 'resp_email' => 'rama.gaiho@artisan-automobile.ci'],
+            ['code' => 'BKE', 'nom' => 'Bouaké', 'couleur' => '#7C3AED', 'ville' => 'Bouaké', 'commune' => 'Koko', 'telephone' => '+225 31 63 22 11', 'adresse' => 'Route de Katiola, face station Total', 'resp_nom' => 'David K.', 'resp_email' => 'david.k@artisan-automobile.ci'],
+            ['code' => 'AB1', 'nom' => 'Abidjan — Site 1', 'couleur' => '#2563EB', 'ville' => 'Abidjan', 'commune' => 'Yopougon', 'telephone' => '+225 27 23 45 67 90', 'adresse' => 'Zone industrielle, Rue des Artisans', 'resp_nom' => 'Responsable Site 1', 'resp_email' => 'resp.site1@artisan-automobile.ci'],
+            ['code' => 'AB2', 'nom' => 'Abidjan — Site 2', 'couleur' => '#059669', 'ville' => 'Abidjan', 'commune' => 'Marcory', 'telephone' => '+225 27 21 34 55 08', 'adresse' => 'Boulevard du Gabon, Zone 4', 'resp_nom' => 'Responsable Site 2', 'resp_email' => 'resp.site2@artisan-automobile.ci'],
+            ['code' => 'SPD', 'nom' => 'San Pedro', 'couleur' => '#D97706', 'ville' => 'San Pedro', 'commune' => 'Bardot', 'telephone' => '+225 34 71 18 42', 'adresse' => 'Avenue du Port, quartier Bardot', 'resp_nom' => 'Rama Gaiho', 'resp_email' => 'rama.gaiho@artisan-automobile.ci'],
         ];
 
         $commerciauxParSite = [
@@ -95,6 +114,10 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
                 'entreprise_id' => $entreprise->id,
                 'code' => $infoSite['code'],
                 'nom' => $infoSite['nom'],
+                'ville' => $infoSite['ville'],
+                'commune' => $infoSite['commune'],
+                'telephone' => $infoSite['telephone'],
+                'adresse' => $infoSite['adresse'],
                 'couleur' => $infoSite['couleur'],
                 'responsable_id' => $responsable->id,
                 'est_actif' => true,

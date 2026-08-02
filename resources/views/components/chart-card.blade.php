@@ -5,8 +5,8 @@
     $cle = $id.'-'.md5(json_encode(['l' => $labels, 'd' => $datasets, 'a' => $aDesDonnees]));
 @endphp
 
-<div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
-    <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">{{ $titre }}</h3>
+<div class="carte">
+    <h3 class="titre-section">{{ $titre }}</h3>
 
     @if ($aDesDonnees)
         <div wire:key="{{ $cle }}" wire:ignore style="position:relative; height:280px;">
@@ -45,6 +45,20 @@
             ></canvas>
         </div>
     @else
-        <div class="etat-vide"><span class="etat-vide-texte">{{ $messageVide }}</span></div>
+        {{--
+            Pas de données : on garde la carte, son titre et sa légende, avec un filigrane.
+            Aucune graduation d'axe n'est affichée puisqu'il n'y a rien à graduer.
+        --}}
+        <div class="etat-vide">
+            <span class="etat-vide-texte">{{ $messageVide }}</span>
+            <span class="etat-vide-sous">Le graphique s'affichera dès la première saisie.</span>
+        </div>
+        @if (count($datasets) > 0)
+            <div class="legende-vide">
+                @foreach ($datasets as $serie)
+                    <span><i style="background:{{ $serie['color'] ?? '#C8102E' }};"></i>{{ $serie['label'] ?? '' }}</span>
+                @endforeach
+            </div>
+        @endif
     @endif
 </div>

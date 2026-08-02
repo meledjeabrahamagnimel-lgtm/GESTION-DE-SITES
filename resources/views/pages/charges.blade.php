@@ -101,35 +101,35 @@ $detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('da
             :labels="$this->graphique['labels']" :datasets="$this->graphique['datasets']" />
     </div>
 
-    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+    <div class="carte">
         <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Détail des opérations ({{ $this->detail->count() }})</h3>
-        <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
+        <div class="tableau-conteneur">
+            <table class="tableau">
                 <thead>
-                    <tr style="text-align:left; border-bottom:2px solid var(--th-ink,#191B20);">
-                        <th style="padding:9px 12px;">Date</th>
-                        <th style="padding:9px 12px;">Type d'opération</th>
-                        <th style="padding:9px 12px;">Libellé</th>
-                        <th style="padding:9px 12px;">Moyen</th>
-                        <th style="padding:9px 12px;">Tiers</th>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type d'opération</th>
+                        <th>Libellé</th>
+                        <th>Moyen</th>
+                        <th>Tiers</th>
                         @if ($this->estGerant && ! $siteFiltre)
-                            <th style="padding:9px 12px;">Site</th>
+                            <th>Site</th>
                         @endif
-                        <th style="padding:9px 12px;">Montant</th>
+                        <th>Montant</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($this->detail as $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                            <td style="padding:9px 12px;">{{ $ligne->date->format('d/m/Y') }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne->type_operation }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne->libelle }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne->moyen }}</td>
-                            <td style="padding:9px 12px; color:#6B6E76;">{{ $ligne->tiers ?? '—' }}</td>
+                            <td>{{ $ligne->date->format('d/m/Y') }}</td>
+                            <td>{{ $ligne->type_operation }}</td>
+                            <td>{{ $ligne->libelle }}</td>
+                            <td>{{ $ligne->moyen }}</td>
+                            <td style="color:#6B6E76;">{{ $ligne->tiers ?? '—' }}</td>
                             @if ($this->estGerant && ! $siteFiltre)
-                                <td style="padding:9px 12px;">{{ $ligne->site->nom }}</td>
+                                <td>{{ $ligne->site->nom }}</td>
                             @endif
-                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums; font-weight:700;">{{ ae($ligne->montant) }}</td>
+                            <td style="font-variant-numeric:tabular-nums; font-weight:700;">{{ ae($ligne->montant) }}</td>
                         </tr>
                     @empty
                         <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 7 : 6" texte="Aucune charge enregistrée sur cette période." />
