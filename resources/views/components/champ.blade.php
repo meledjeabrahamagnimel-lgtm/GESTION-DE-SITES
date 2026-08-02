@@ -34,6 +34,15 @@
             </select>
         @elseif ($type === 'textarea')
             <textarea {{ $wire }}="{{ $model }}" rows="2" placeholder="{{ $placeholder }}" class="champ" style="resize:vertical;"></textarea>
+        @elseif ($type === 'password')
+            {{-- Bouton œil : bascule entre texte masqué et texte lisible. --}}
+            <div class="champ-mot-de-passe">
+                <input type="password" {{ $wire }}="{{ $model }}" placeholder="{{ $placeholder }}" class="champ">
+                <button type="button" tabindex="-1" aria-label="Afficher ou masquer le mot de passe"
+                    onclick="const i=this.previousElementSibling; const v=i.type==='password'; i.type=v?'text':'password'; this.firstElementChild.textContent=v?'🙈':'👁';">
+                    <span>👁</span>
+                </button>
+            </div>
         @else
             <input type="{{ $type }}" {{ $wire }}="{{ $model }}" placeholder="{{ $placeholder }}" class="champ"
                 @if ($liste) list="{{ $liste }}" @endif>

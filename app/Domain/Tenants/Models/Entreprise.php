@@ -71,9 +71,23 @@ class Entreprise extends Model
         return $this->hasMany(User::class);
     }
 
+    /**
+     * URL publique du logo, ou null s'il n'est pas réellement servable.
+     * Le lien symbolique public/storage n'est pas versionné : sans « php artisan storage:link »
+     * le fichier existe mais n'est pas accessible. On préfère alors afficher le nom de
+     * l'entreprise plutôt qu'une image cassée.
+     */
     public function logoUrl(): ?string
     {
-        return $this->logo_chemin ? Storage::disk('public')->url($this->logo_chemin) : null;
+        if (! $this->logo_chemin || ! Storage::disk('public')->exists($this->logo_chemin)) {
+            return null;
+        }
+
+        if (! is_link(public_path('storage')) && ! is_dir(public_path('storage'))) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($this->logo_chemin);
     }
 
     /** Palette de marque, prête à être injectée en custom properties CSS. */

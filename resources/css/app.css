@@ -181,6 +181,26 @@ input[type="password"].champ, input[type="date"].champ, select.champ, textarea.c
 
 .champ-erreur { color: var(--th-accent); font-size: 12px; margin-top: 3px; display: block; }
 
+/* Champ mot de passe avec bouton œil intégré. */
+.champ-mot-de-passe { position: relative; display: block; }
+.champ-mot-de-passe .champ { padding-right: 42px; }
+
+.champ-mot-de-passe button {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+    font-size: 15px;
+    color: var(--th-gris);
+}
+
+.champ-mot-de-passe button:hover { opacity: .7; }
+
 /* --------------------------------------------------------------- Boutons */
 
 .bouton {
