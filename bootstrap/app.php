@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\DefinirEquipePermissions;
+use App\Http\Middleware\ForcerChangementMotDePasse;
 use App\Http\Middleware\VerifierCompteActif;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToGroup('web', [
             DefinirEquipePermissions::class,
             VerifierCompteActif::class,
+            ForcerChangementMotDePasse::class,
         ]);
 
         $middleware->alias([

@@ -88,7 +88,6 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
                 'email' => $infoSite['resp_email'],
                 'password' => 'password',
                 'email_verified_at' => now(),
-                'doit_changer_mot_de_passe' => true,
             ]);
             $responsable->assignRole('responsable_site');
 
@@ -111,7 +110,6 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
                     'email' => $slug.'@artisan-automobile.ci',
                     'password' => 'password',
                     'email_verified_at' => now(),
-                    'doit_changer_mot_de_passe' => true,
                 ]);
                 $utilisateurCommercial->assignRole('commercial');
 

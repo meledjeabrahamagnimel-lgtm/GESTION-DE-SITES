@@ -14,7 +14,7 @@ return new class extends Migration
             $table->foreignId('site_id')->constrained('sites')->cascadeOnDelete();
             $table->foreignId('facture_id')->nullable()->constrained('factures')->nullOnDelete();
             $table->date('date');
-            $table->enum('type', ['Client', 'Autres tiers'])->default('Client');
+            $table->enum('type', ['Client', 'Appro', 'Autres'])->default('Client');
             $table->enum('moyen', ['Espèces', 'Mobile Money', 'Chèque', 'Virement', 'Autres'])->default('Espèces');
             $table->unsignedBigInteger('montant');
             $table->string('client')->nullable();

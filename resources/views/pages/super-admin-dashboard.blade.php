@@ -1,33 +1,92 @@
 <?php
 
+use App\Domain\Tenants\Models\Entreprise;
+use App\Models\User;
 use function Livewire\Volt\{computed};
 
 $stats = computed(fn () => [
-    'entreprises' => \App\Domain\Tenants\Models\Entreprise::count(),
-    'entreprises_actives' => \App\Domain\Tenants\Models\Entreprise::where('est_active', true)->count(),
-    'utilisateurs' => \App\Models\User::count(),
+    'entreprises' => Entreprise::count(),
+    'entreprises_actives' => Entreprise::where('est_active', true)->count(),
+    'utilisateurs' => User::count(),
     'sites' => \App\Domain\Tenants\Models\Site::count(),
 ]);
+
+$repartition = computed(function () {
+    $entreprises = Entreprise::withCount('sites')->orderBy('nom')->get();
+    $roles = User::nomsRolesParUtilisateur(User::pluck('id'));
+
+    return $entreprises->map(function ($entreprise) use ($roles) {
+        $utilisateurs = User::where('entreprise_id', $entreprise->id)->pluck('id');
+        $comptage = ['gerant' => 0, 'responsable_site' => 0, 'commercial' => 0];
+
+        foreach ($utilisateurs as $id) {
+            foreach (explode(', ', $roles[$id] ?? '') as $role) {
+                if (array_key_exists($role, $comptage)) {
+                    $comptage[$role]++;
+                }
+            }
+        }
+
+        return [
+            'entreprise' => $entreprise,
+            'gerants' => $comptage['gerant'],
+            'responsables' => $comptage['responsable_site'],
+            'commerciaux' => $comptage['commercial'],
+            'total' => $utilisateurs->count(),
+        ];
+    });
+});
 
 ?>
 
 <div>
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px;">
-        <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:16px 18px;">
-            <div style="font-size:12.5px; text-transform:uppercase; color:#6B6E76; margin-bottom:6px;">Entreprises</div>
-            <div style="font-size:26px; font-weight:800;">{{ $this->stats['entreprises'] }}</div>
-            <div style="font-size:13.5px; color:#0E9F6E;">{{ $this->stats['entreprises_actives'] }} actives</div>
-        </div>
-        <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:16px 18px;">
-            <div style="font-size:12.5px; text-transform:uppercase; color:#6B6E76; margin-bottom:6px;">Utilisateurs</div>
-            <div style="font-size:26px; font-weight:800;">{{ $this->stats['utilisateurs'] }}</div>
-        </div>
-        <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:16px 18px;">
-            <div style="font-size:12.5px; text-transform:uppercase; color:#6B6E76; margin-bottom:6px;">Sites</div>
-            <div style="font-size:26px; font-weight:800;">{{ $this->stats['sites'] }}</div>
-        </div>
+        <x-kpi-card label="Entreprises" :value="$this->stats['entreprises']" :sub="$this->stats['entreprises_actives'].' actives'" couleur="#0E9F6E" />
+        <x-kpi-card label="Utilisateurs" :value="$this->stats['utilisateurs']" />
+        <x-kpi-card label="Sites" :value="$this->stats['sites']" />
+        <x-kpi-card label="Moyenne utilisateurs / entreprise" :value="$this->stats['entreprises'] > 0 ? round($this->stats['utilisateurs'] / $this->stats['entreprises'], 1) : 0" />
     </div>
 
-    <x-a-venir titre="Répartition par entreprise"
-        description="Nombre de personnes par catégorie et par site, pour chaque entreprise cliente." />
+    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+        <h2 style="font-size:16.5px; font-weight:800; margin:0 0 4px;">Répartition par entreprise</h2>
+        <p style="color:#6B6E76; font-size:14px; margin:0 0 16px;">Nombre de personnes par catégorie, pour chaque entreprise cliente de la plateforme.</p>
+        <div style="overflow-x:auto;">
+            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
+                <thead>
+                    <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
+                        <th style="padding:8px 10px;">Entreprise</th>
+                        <th style="padding:8px 10px;">Sites</th>
+                        <th style="padding:8px 10px;">Gérants</th>
+                        <th style="padding:8px 10px;">Responsables de site</th>
+                        <th style="padding:8px 10px;">Commerciaux</th>
+                        <th style="padding:8px 10px;">Total utilisateurs</th>
+                        <th style="padding:8px 10px;">Statut</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($this->repartition as $ligne)
+                        <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                            <td style="padding:8px 10px; font-weight:700;">
+                                <a href="{{ route('super-admin.entreprises.show', $ligne['entreprise']) }}" wire:navigate style="color:inherit;">{{ $ligne['entreprise']->nom }}</a>
+                            </td>
+                            <td style="padding:8px 10px;">{{ $ligne['entreprise']->sites_count }}</td>
+                            <td style="padding:8px 10px;">{{ $ligne['gerants'] }}</td>
+                            <td style="padding:8px 10px;">{{ $ligne['responsables'] }}</td>
+                            <td style="padding:8px 10px;">{{ $ligne['commerciaux'] }}</td>
+                            <td style="padding:8px 10px; font-weight:700;">{{ $ligne['total'] }}</td>
+                            <td style="padding:8px 10px;">
+                                @if ($ligne['entreprise']->est_active)
+                                    <span style="color:#0E9F6E; font-weight:600;">Active</span>
+                                @else
+                                    <span style="color:#C8102E; font-weight:600;">Suspendue</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <x-table-vide :colspan="7" texte="Aucune entreprise inscrite sur la plateforme pour le moment." />
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>

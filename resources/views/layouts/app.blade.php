@@ -37,12 +37,13 @@
                 </nav>
             </div>
             <div style="display:flex; align-items:center; gap:16px;">
-                <span style="font-size:13.5px; color:#C7C9CF;">
+                <a href="{{ route('mot-de-passe.modifier') }}" wire:navigate
+                   style="font-size:13.5px; color:#C7C9CF; text-decoration:none;">
                     {{ auth()->user()?->name }}
                     @if (auth()->user()?->entreprise)
                         — {{ auth()->user()->entreprise->nom }}
                     @endif
-                </span>
+                </a>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit" style="background:transparent; border:1px solid #4B4E55; color:#fff; border-radius:7px; padding:8px 16px; font-size:13.5px; font-weight:600; cursor:pointer;">
