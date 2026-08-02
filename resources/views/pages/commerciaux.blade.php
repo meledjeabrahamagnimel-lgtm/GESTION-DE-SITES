@@ -123,7 +123,19 @@ $graphique = computed(fn () => [
                 <tbody>
                     @forelse ($this->classement as $i => $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); {{ $i === 0 ? 'background:#FFFBEA;' : '' }}">
-                            <td style="font-weight:800;">{{ $i + 1 }}</td>
+                            <td>
+                                @php
+                                    // Or, argent, bronze pour le podium, comme dans la maquette.
+                                    $medaille = ['#D4AF37', '#9CA3AF', '#B87333'][$i] ?? null;
+                                @endphp
+                                @if ($medaille)
+                                    <span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px;
+                                                 border-radius:99px; background:{{ $medaille }}; color:#fff; font-weight:700;
+                                                 font-family:'Barlow Condensed',sans-serif; font-size:14px;">{{ $i + 1 }}</span>
+                                @else
+                                    <span style="font-weight:800;">{{ $i + 1 }}</span>
+                                @endif
+                            </td>
                             <td style="font-weight:700;">{{ $ligne['commercial']->numero }}</td>
                             <td style="font-weight:700;">{{ $ligne['commercial']->nom }}</td>
                             @if ($this->estGerant && ! $siteFiltre)
