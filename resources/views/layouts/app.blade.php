@@ -16,7 +16,7 @@
 <body class="antialiased" style="background:var(--th-paper, #F4F3EF); color:var(--th-ink, #191B20); font-family:var(--font-sans); min-height:100vh; margin:0;">
 
     <header style="background:var(--th-ink, #191B20); color:#fff;">
-        <div style="max-width:1680px; margin:0 auto; padding:12px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; min-height:64px;">
+        <div style="max-width:1680px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; min-height:56px;">
             <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
                 <a href="{{ route('redirection') }}" wire:navigate style="display:flex; align-items:center; gap:10px; text-decoration:none;">
                     @if (auth()->user()?->entreprise?->logoUrl())
@@ -38,7 +38,8 @@
             </div>
             <div style="display:flex; align-items:center; gap:16px;">
                 <a href="{{ route('mot-de-passe.modifier') }}" wire:navigate
-                   style="font-size:13.5px; color:#C7C9CF; text-decoration:none;">
+                   style="font-size:13.5px; color:#C7C9CF; text-decoration:none; display:flex; align-items:center; gap:8px;">
+                    <x-avatar :utilisateur="auth()->user()" :taille="28" />
                     {{ auth()->user()?->name }}
                     @if (auth()->user()?->entreprise)
                         — {{ auth()->user()->entreprise->nom }}
@@ -54,7 +55,7 @@
         </div>
     </header>
 
-    <main style="max-width:1680px; margin:0 auto; padding:26px 24px;">
+    <main style="max-width:1680px; margin:0 auto; padding:20px 16px;">
         {{ $slot }}
     </main>
 

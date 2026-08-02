@@ -4,6 +4,7 @@ use App\Domain\Operations\Models\Charge;
 use App\Domain\Operations\Models\Devis;
 use App\Domain\Operations\Models\Encaissement;
 use App\Domain\Operations\Models\Facture;
+use App\Domain\Operations\Models\Commercial;
 use App\Domain\Operations\Models\Prospection;
 use App\Domain\Operations\Models\SaisieJournaliere;
 use App\Domain\Shared\Services\PeriodeCalculateur;
@@ -114,6 +115,79 @@ $graphiqueFlux = computed(function () {
     ];
 });
 
+/**
+ * Alertes de gestion, classées par gravité : un résultat ou une trésorerie négative,
+ * des devis restés sans statut, et surtout les véhicules restitués sans facture.
+ */
+$alertes = computed(function () {
+    $alertes = [];
+
+    foreach ($this->synthese as $ligne) {
+        $site = $ligne['site']->nom;
+
+        if ($ligne['sansFacture'] > 0) {
+            $alertes[] = ['niveau' => 'CRITIQUE', 'texte' => "$site : {$ligne['sansFacture']} véhicule(s) restitué(s) sans facture"];
+        }
+        if ($ligne['resultat'] < 0) {
+            $alertes[] = ['niveau' => 'ÉLEVÉ', 'texte' => "$site : résultat net négatif (".ae($ligne['resultat']).')'];
+        }
+        if ($ligne['treso'] < 0) {
+            $alertes[] = ['niveau' => 'ÉLEVÉ', 'texte' => "$site : trésorerie nette négative (".ae($ligne['treso']).')'];
+        }
+        if ($ligne['devisAttente'] > 0) {
+            $alertes[] = ['niveau' => 'MOYEN', 'texte' => "$site : {$ligne['devisAttente']} devis en attente de statut"];
+        }
+    }
+
+    $ordre = ['CRITIQUE' => 0, 'ÉLEVÉ' => 1, 'MOYEN' => 2];
+
+    return collect($alertes)->sortBy(fn ($a) => $ordre[$a['niveau']])->values();
+});
+
+/** Classement des commerciaux du groupe par taux d'atteinte de leur objectif au prorata. */
+$topCommerciaux = computed(function () {
+    [$debut, $fin] = $this->plage;
+    $jours = PeriodeCalculateur::nombreDeJours($debut, $fin);
+
+    return Commercial::actifs()->where('est_spontane', false)
+        ->whereIn('site_id', $this->sitesRetenus->pluck('id'))
+        ->with('site')->get()
+        ->map(function ($c) use ($debut, $fin, $jours) {
+            $realisation = (int) Facture::where('commercial_id', $c->id)->whereBetween('date', [$debut, $fin])->sum('montant');
+            $objectif = (int) round($c->objectif_mensuel / 30 * $jours);
+
+            return [
+                'commercial' => $c,
+                'realisation' => $realisation,
+                'taux' => $objectif > 0 ? $realisation / $objectif : null,
+            ];
+        })
+        ->sortByDesc(fn ($l) => $l['taux'] ?? -1)
+        ->take(3)->values();
+});
+
+/** Commentaires laissés par les responsables de site dans leur saisie journalière. */
+$commentaires = computed(function () {
+    [$debut, $fin] = $this->plage;
+
+    $saisies = SaisieJournaliere::whereIn('site_id', $this->sitesRetenus->pluck('id'))
+        ->whereBetween('date', [$debut, $fin])
+        ->with('site')->orderByDesc('date')->get();
+
+    $rubriques = [
+        'Prospects' => 'commentaire_prospects',
+        'Devis' => 'commentaire_devis',
+        "Chiffre d'affaires" => 'commentaire_ca',
+        'Trésorerie' => 'commentaire_tresorerie',
+        'Charges' => 'commentaire_charges',
+    ];
+
+    return collect($rubriques)->map(fn ($colonne) => $saisies
+        ->filter(fn ($s) => filled($s->$colonne))
+        ->map(fn ($s) => ['site' => $s->site->nom, 'date' => $s->date, 'texte' => $s->$colonne])
+        ->take(6)->values());
+});
+
 ?>
 
 <div>
@@ -140,6 +214,74 @@ $graphiqueFlux = computed(function () {
             :labels="$this->graphiqueSites['labels']" :datasets="$this->graphiqueSites['datasets']" />
         <x-chart-card titre="Flux de trésorerie" id="flux-treso"
             :labels="$this->graphiqueFlux['labels']" :datasets="$this->graphiqueFlux['datasets']" />
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:16px; margin-bottom:20px;">
+        <div class="carte">
+            <h3 class="titre-section">Alertes ({{ $this->alertes->count() }})</h3>
+            @forelse ($this->alertes as $alerte)
+                @php
+                    $couleur = ['CRITIQUE' => 'pastille-rouge', 'ÉLEVÉ' => 'pastille-ambre', 'MOYEN' => 'pastille-bleu'][$alerte['niveau']];
+                @endphp
+                <div style="display:flex; gap:9px; align-items:flex-start; padding:7px 0; border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                    <span class="pastille {{ $couleur }}" style="flex:0 0 auto;">{{ $alerte['niveau'] }}</span>
+                    <span style="font-size:13px; line-height:1.4;">{{ $alerte['texte'] }}</span>
+                </div>
+            @empty
+                <div class="etat-vide" style="min-height:130px;">
+                    <span class="etat-vide-texte">Aucune alerte sur cette période.</span>
+                </div>
+            @endforelse
+        </div>
+
+        <div class="carte">
+            <h3 class="titre-section">Top commerciaux (taux d'atteinte)</h3>
+            @forelse ($this->topCommerciaux as $rang => $ligne)
+                @php
+                    // Or, argent, bronze : la couleur du rang, comme dans la maquette.
+                    $medaille = ['#D4AF37', '#9CA3AF', '#B87333'][$rang] ?? '#9CA3AF';
+                @endphp
+                <div style="display:flex; gap:11px; align-items:center; padding:8px 0; border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                    <span style="flex:0 0 auto; width:26px; height:26px; border-radius:99px; background:{{ $medaille }};
+                                 color:#fff; display:inline-flex; align-items:center; justify-content:center;
+                                 font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;">{{ $rang + 1 }}</span>
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-weight:700; font-size:13.5px;">{{ $ligne['commercial']->nom }}</div>
+                        <div style="font-size:11.5px; color:var(--th-gris,#6B6E76);">
+                            {{ $ligne['commercial']->site->nom }} · {{ $ligne['commercial']->activite }}
+                        </div>
+                        <div style="font-size:11.5px; color:var(--th-gris,#6B6E76);">
+                            Réalisation {{ ae($ligne['realisation']) }} · atteinte
+                            <b style="color:{{ ($ligne['taux'] ?? 0) >= 1 ? '#0E9F6E' : '#D97706' }};">{{ an($ligne['taux']) }}</b>
+                        </div>
+                    </div>
+                </div>
+            @empty
+                <div class="etat-vide" style="min-height:130px;">
+                    <span class="etat-vide-texte">Aucun commercial sur cette période.</span>
+                </div>
+            @endforelse
+        </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px; margin-bottom:20px;">
+        @foreach ($this->commentaires as $rubrique => $lignes)
+            <div class="carte">
+                <h3 class="titre-section">Commentaires — {{ $rubrique }}</h3>
+                @forelse ($lignes as $c)
+                    <div style="padding:7px 0; border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                        <div style="font-size:11.5px; color:var(--th-gris,#6B6E76); font-weight:600;">
+                            {{ $c['site'] }} · {{ $c['date']->format('d/m/Y') }}
+                        </div>
+                        <div style="font-size:13px; line-height:1.45;">{{ $c['texte'] }}</div>
+                    </div>
+                @empty
+                    <div class="etat-vide" style="min-height:110px;">
+                        <span class="etat-vide-texte">Aucun commentaire saisi sur la période.</span>
+                    </div>
+                @endforelse
+            </div>
+        @endforeach
     </div>
 
     <div class="carte">
