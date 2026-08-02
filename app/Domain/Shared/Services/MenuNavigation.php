@@ -17,6 +17,7 @@ class MenuNavigation
                 ['label' => 'Entreprises', 'route' => 'super-admin.entreprises.index'],
                 ['label' => 'Accès', 'route' => 'super-admin.acces.index', 'actifPattern' => 'super-admin.acces.*'],
                 ['label' => 'Journal', 'route' => 'super-admin.journal.index'],
+                ['label' => 'Maintenance', 'route' => 'super-admin.maintenance'],
             ]);
         }
 
@@ -28,8 +29,11 @@ class MenuNavigation
 
         $onglets = [];
 
+        $suffixe = [];
+
         if ($utilisateur->hasRole('gerant')) {
             $onglets[] = ['label' => 'Tableau de bord', 'route' => 'tableau-de-bord'];
+            $suffixe[] = ['label' => 'Paramètres', 'route' => 'parametres'];
         }
 
         if ($utilisateur->hasRole('responsable_site')) {
@@ -45,6 +49,7 @@ class MenuNavigation
             ['label' => 'Trésorerie', 'route' => 'tresorerie'],
             ['label' => 'Commerciaux', 'route' => 'commerciaux'],
             ['label' => 'Ajouter un accès', 'route' => 'acces.creer'],
+            ...$suffixe,
         ]);
     }
 

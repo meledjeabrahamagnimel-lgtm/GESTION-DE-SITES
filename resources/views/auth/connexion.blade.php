@@ -11,80 +11,123 @@
         <link rel="icon" type="image/png" href="{{ $entreprise->logoUrl() }}">
     @endif
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <style>
+        .ecran-connexion { display:grid; grid-template-columns:1fr 1fr; min-height:100vh; }
+        @media (max-width: 900px) {
+            .ecran-connexion { grid-template-columns:1fr; }
+            .ecran-connexion .panneau-gauche { display:none; }
+        }
+    </style>
 </head>
-<body class="antialiased" style="background:var(--th-ink, #191B20); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; font-family:var(--font-sans);">
+<body class="antialiased" style="margin:0; font-family:var(--font-sans); background:var(--th-paper,#F4F3EF);">
 
-    <div style="width:100%; max-width:420px;">
-        <div style="text-align:center; margin-bottom:20px;">
-            @if ($entreprise?->logoUrl())
-                <div style="background:#fff; border-radius:12px; padding:14px 24px; display:inline-block;">
-                    <img src="{{ $entreprise->logoUrl() }}" alt="{{ $entreprise->nom }}" style="width:200px; display:block;">
-                </div>
-            @else
-                <h1 style="color:#fff; font-size:22px; font-weight:800;">{{ config('app.name') }}</h1>
-            @endif
-            <p style="color:#9A9DA5; font-size:13.5px; margin-top:10px;">Suivi d'activité multi-sites</p>
-        </div>
+<div class="ecran-connexion">
 
-        <div style="background:#fff; border-radius:12px; padding:24px; box-shadow:0 20px 50px rgba(0,0,0,.35);">
-            <h2 style="font-size:15px; font-weight:700; margin:0 0 16px; color:var(--th-ink, #191B20);">Connexion à votre espace</h2>
+    {{-- Panneau de présentation, aux couleurs de l'entreprise. --}}
+    <div class="panneau-gauche" style="background:var(--th-ink,#191B20); color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:48px; text-align:center;">
+        @if ($entreprise?->logoUrl())
+            <div style="background:#fff; border-radius:12px; padding:14px 26px; display:inline-block; margin-bottom:22px;">
+                <img src="{{ $entreprise->logoUrl() }}" alt="{{ $entreprise->nom }}" style="width:210px; display:block;">
+            </div>
+        @else
+            <h1 style="font-family:'Barlow Condensed',sans-serif; font-size:40px; font-weight:700; text-transform:uppercase; letter-spacing:2px; margin:0 0 22px;">
+                {{ $entreprise?->nom ?? config('app.name') }}
+            </h1>
+        @endif
+
+        <span style="background:var(--th-ambre,#D97706); color:#fff; font-size:13.5px; font-weight:700; border-radius:99px; padding:7px 18px;">
+            La solution pour mieux gérer
+        </span>
+
+        <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:42px; font-weight:700; line-height:1.15; margin:26px 0 16px; max-width:14ch;">
+            Pilotez votre entreprise avec intelligence
+        </h2>
+
+        <p style="color:#C7C9CF; font-size:15.5px; line-height:1.6; max-width:44ch; margin:0;">
+            La plateforme intelligente pour vos prospections, devis, facturations,
+            charges et trésorerie en temps réel, sur tous vos sites.
+        </p>
+    </div>
+
+    {{-- Panneau formulaire. --}}
+    <div style="display:flex; align-items:center; justify-content:center; padding:40px 24px;">
+        <div class="carte" style="width:100%; max-width:430px; padding:30px; box-shadow:0 18px 44px rgba(25,27,32,.10);">
+
+            <h2 style="font-family:'Barlow Condensed',sans-serif; font-size:30px; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin:0; text-align:center; color:var(--th-ink,#191B20);">
+                Connexion
+            </h2>
+            <p style="color:var(--th-gris,#6B6E76); font-size:14px; margin:6px 0 24px; text-align:center;">
+                Connectez-vous pour accéder à votre tableau de bord
+            </p>
 
             @if ($errors->any())
-                <div style="background:#FDF2F4; border:1px solid #C8102E33; color:#C8102E; border-radius:8px; padding:10px 12px; font-size:14.5px; margin-bottom:14px;">
+                <div class="encart encart-alerte">
                     @foreach ($errors->all() as $erreur)
                         <div>{{ $erreur }}</div>
                     @endforeach
                 </div>
             @endif
 
+            @if (session('status'))
+                <div class="encart encart-succes">{{ session('status') }}</div>
+            @endif
+
             <form method="POST" action="{{ route('login') }}" novalidate>
                 @csrf
 
-                <label for="email" style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin-bottom:6px;">Adresse e-mail</label>
-                <input id="email" name="email" type="email" value="{{ old('email') }}" required autofocus autocomplete="username"
-                    placeholder="vous@entreprise.ci"
-                    style="width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid #E2E0D8; border-radius:8px; font-size:15.5px; margin-bottom:14px;">
+                <label for="email" class="champ-libelle">Email</label>
+                <input id="email" name="email" type="email" value="{{ old('email') }}" required autofocus
+                       autocomplete="username" placeholder="vous@entreprise.ci" class="champ" style="margin-bottom:16px;">
 
-                <label for="password" style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin-bottom:6px;">Mot de passe</label>
-                <input id="password" name="password" type="password" required autocomplete="current-password"
-                    placeholder="••••••••"
-                    style="width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid #E2E0D8; border-radius:8px; font-size:15.5px; margin-bottom:16px;">
+                <label for="password" class="champ-libelle">Mot de passe</label>
+                <div style="position:relative;">
+                    <input id="password" name="password" type="password" required
+                           autocomplete="current-password" placeholder="••••••••" class="champ" style="padding-right:44px;">
+                    <button type="button" aria-label="Afficher le mot de passe"
+                            onclick="const c=document.getElementById('password'); c.type = c.type === 'password' ? 'text' : 'password'; this.textContent = c.type === 'password' ? '👁' : '🙈';"
+                            style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:transparent; border:0; cursor:pointer; color:var(--th-gris,#6B6E76); font-size:15px; padding:4px; line-height:1;">👁</button>
+                </div>
 
-                <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:#4B4E55; margin-bottom:18px;">
-                    <input type="checkbox" name="remember"> Se souvenir de moi
-                </label>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin:16px 0 20px; font-size:13.5px; gap:10px; flex-wrap:wrap;">
+                    <label style="display:flex; align-items:center; gap:7px; color:#4B4E55; cursor:pointer;">
+                        <input type="checkbox" name="remember"> Se souvenir de moi
+                    </label>
+                    <a href="{{ route('password.request') }}" style="color:var(--th-accent,#C8102E); font-weight:700; text-decoration:none;">Mot de passe oublié ?</a>
+                </div>
 
-                <button type="submit"
-                    style="width:100%; background:var(--th-accent, #C8102E); color:#fff; border:0; border-radius:8px; padding:11px; font-weight:700; font-size:15.5px; cursor:pointer;">
+                <button type="submit" class="bouton bouton-sombre" style="width:100%; justify-content:center; padding:12px;">
                     Se connecter
                 </button>
             </form>
 
-            <div style="display:flex; align-items:center; gap:10px; margin:18px 0;">
-                <div style="flex:1; height:1px; background:#E2E0D8;"></div>
-                <span style="font-size:12.5px; color:#9A9DA5; text-transform:uppercase; letter-spacing:.04em;">ou</span>
-                <div style="flex:1; height:1px; background:#E2E0D8;"></div>
+            <div style="display:flex; align-items:center; gap:12px; margin:20px 0;">
+                <span style="flex:1; height:1px; background:var(--th-ligne,#E2E0D8);"></span>
+                <span style="font-size:12.5px; color:#9A9DA5;">ou</span>
+                <span style="flex:1; height:1px; background:var(--th-ligne,#E2E0D8);"></span>
             </div>
 
             <a href="{{ route('auth.google') }}"
-               style="display:flex; align-items:center; justify-content:center; gap:10px; width:100%; box-sizing:border-box; background:#fff; color:#191B20; border:1px solid #E2E0D8; border-radius:8px; padding:10px; font-weight:600; font-size:15px; text-decoration:none;">
-                <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
-                    <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 01-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
-                    <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 009 18z"/>
-                    <path fill="#FBBC05" d="M3.97 10.72A5.4 5.4 0 013.68 9c0-.6.1-1.18.29-1.72V4.95H.96A9 9 0 000 9c0 1.45.35 2.83.96 4.05l3.01-2.33z"/>
-                    <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.59-2.59C13.46.89 11.43 0 9 0A9 9 0 00.96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
+               style="display:flex; align-items:center; justify-content:center; gap:10px; width:100%; box-sizing:border-box; padding:11px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; text-decoration:none; color:var(--th-ink,#191B20); font-size:14.5px; font-weight:600; background:#fff;">
+                <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                    <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.2 0 24 0 14.6 0 6.5 5.4 2.5 13.2l7.9 6.1C12.3 13.2 17.7 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-2.8-.4-4.1H24v7.4h12.7c-.3 2.1-1.6 5.3-4.7 7.4l7.6 5.9c4.5-4.2 7.1-10.4 7.1-16.6z"/>
+                    <path fill="#FBBC05" d="M10.4 28.7c-.5-1.5-.8-3.1-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.8l7.9-6.1z"/>
+                    <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2 1.4-4.8 2.4-8.3 2.4-6.3 0-11.7-3.7-13.6-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/>
                 </svg>
-                Continuer avec Google
+                Se connecter avec Google
             </a>
 
-            <div style="text-align:center; margin-top:16px;">
-                <a href="{{ route('password.request') }}" style="font-size:14px; color:#6B6E76; text-decoration:none;">Mot de passe oublié ?</a>
-            </div>
-            <div style="text-align:center; margin-top:8px;">
-                <a href="{{ route('inscription') }}" wire:navigate style="font-size:14px; color:#6B6E76; text-decoration:none;">Nouvelle entreprise ? <span style="color:var(--th-accent,#C8102E); font-weight:600;">Créer un compte</span></a>
-            </div>
+            <p style="text-align:center; font-size:13.5px; color:var(--th-gris,#6B6E76); margin:22px 0 0;">
+                Pas encore de compte ?
+                <a href="{{ route('inscription') }}" style="color:var(--th-accent,#C8102E); font-weight:700; text-decoration:none;">Inscrire mon entreprise</a>
+            </p>
+            <p style="text-align:center; font-size:13.5px; color:var(--th-gris,#6B6E76); margin:8px 0 0;">
+                Vous êtes un collaborateur ?
+                <a href="{{ route('inscription.personnel') }}" style="color:var(--th-accent,#C8102E); font-weight:700; text-decoration:none;">Rejoindre avec un code entreprise</a>
+            </p>
         </div>
     </div>
+</div>
 
 </body>
 </html>

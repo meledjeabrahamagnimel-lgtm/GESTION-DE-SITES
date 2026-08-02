@@ -116,7 +116,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
             :labels="$this->graphique['labels']" :datasets="$this->graphique['datasets']" />
     </div>
 
-    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+    <div class="carte">
         <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Détail des opérations ({{ $this->detail->count() }})</h3>
         <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
             <input type="text" wire:model.live.debounce.400ms="recherche" placeholder="Client / tiers…"
@@ -128,37 +128,37 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                 @endforeach
             </select>
         </div>
-        <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
+        <div class="tableau-conteneur">
+            <table class="tableau">
                 <thead>
-                    <tr style="text-align:left; border-bottom:2px solid var(--th-ink,#191B20);">
-                        <th style="padding:9px 12px;">N°</th>
-                        <th style="padding:9px 12px;">Client</th>
-                        <th style="padding:9px 12px;">Date d'émission</th>
-                        <th style="padding:9px 12px;">Commercial</th>
+                    <tr>
+                        <th>N°</th>
+                        <th>Client</th>
+                        <th>Date d'émission</th>
+                        <th>Commercial</th>
                         @if ($this->estGerant && ! $siteFiltre)
-                            <th style="padding:9px 12px;">Site</th>
+                            <th>Site</th>
                         @endif
-                        <th style="padding:9px 12px;">Statut</th>
-                        <th style="padding:9px 12px;">Montant du devis</th>
-                        <th style="padding:9px 12px;">Montant validé</th>
+                        <th>Statut</th>
+                        <th>Montant du devis</th>
+                        <th>Montant validé</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($this->detail as $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                            <td style="padding:9px 12px; font-weight:700;">{{ $ligne->numero }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne->client }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne->date_emission->format('d/m/Y') }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne->commercial->nom }}</td>
+                            <td style="font-weight:700;">{{ $ligne->numero }}</td>
+                            <td>{{ $ligne->client }}</td>
+                            <td>{{ $ligne->date_emission->format('d/m/Y') }}</td>
+                            <td>{{ $ligne->commercial->nom }}</td>
                             @if ($this->estGerant && ! $siteFiltre)
-                                <td style="padding:9px 12px;">{{ $ligne->site->nom }}</td>
+                                <td>{{ $ligne->site->nom }}</td>
                             @endif
-                            <td style="padding:9px 12px;">
+                            <td>
                                 <span style="font-weight:700; color:{{ ['En attente' => '#D97706', 'Validé' => '#0E9F6E', 'Refusé' => '#C8102E'][$ligne->statut] }};">{{ $ligne->statut }}</span>
                             </td>
-                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums;">{{ ae($ligne->montant_devis) }}</td>
-                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums;">{{ ae($ligne->montant_valide) }}</td>
+                            <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne->montant_devis) }}</td>
+                            <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne->montant_valide) }}</td>
                         </tr>
                     @empty
                         <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 8 : 7" texte="Aucun devis enregistré sur cette période." />

@@ -78,34 +78,34 @@ $graphique = computed(function () {
             :labels="$this->graphique['labels']" :datasets="$this->graphique['datasets']" />
     </div>
 
-    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+    <div class="carte">
         <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Synthèse par site</h3>
-        <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
+        <div class="tableau-conteneur">
+            <table class="tableau">
                 <thead>
-                    <tr style="text-align:left; border-bottom:2px solid var(--th-ink,#191B20);">
-                        <th style="padding:9px 12px;">Site</th>
-                        <th style="padding:9px 12px;">CA facturé</th>
-                        <th style="padding:9px 12px;">Charges</th>
-                        <th style="padding:9px 12px;">Résultat net</th>
-                        <th style="padding:9px 12px;">Encaissé</th>
-                        <th style="padding:9px 12px;">Trésorerie nette</th>
-                        <th style="padding:9px 12px;">Devis en attente</th>
+                    <tr>
+                        <th>Site</th>
+                        <th>CA facturé</th>
+                        <th>Charges</th>
+                        <th>Résultat net</th>
+                        <th>Encaissé</th>
+                        <th>Trésorerie nette</th>
+                        <th>Devis en attente</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach ($this->synthese as $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                            <td style="padding:9px 12px; font-weight:700;">
+                            <td style="font-weight:700;">
                                 <span style="display:inline-block; width:9px; height:9px; border-radius:99px; background:{{ $ligne['site']->couleur }}; margin-right:8px;"></span>
                                 {{ $ligne['site']->nom }}
                             </td>
-                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums;">{{ ae($ligne['ca']) }}</td>
-                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums;">{{ ae($ligne['charges']) }}</td>
-                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums; color:{{ $ligne['resultat'] >= 0 ? '#0E9F6E' : '#C8102E' }}; font-weight:700;">{{ ae($ligne['resultat']) }}</td>
-                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums;">{{ ae($ligne['encaisse']) }}</td>
-                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums; color:{{ $ligne['treso'] >= 0 ? 'inherit' : '#C8102E' }};">{{ ae($ligne['treso']) }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne['devisAttente'] }}</td>
+                            <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['ca']) }}</td>
+                            <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['charges']) }}</td>
+                            <td style="font-variant-numeric:tabular-nums; color:{{ $ligne['resultat'] >= 0 ? '#0E9F6E' : '#C8102E' }}; font-weight:700;">{{ ae($ligne['resultat']) }}</td>
+                            <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['encaisse']) }}</td>
+                            <td style="font-variant-numeric:tabular-nums; color:{{ $ligne['treso'] >= 0 ? 'inherit' : '#C8102E' }};">{{ ae($ligne['treso']) }}</td>
+                            <td>{{ $ligne['devisAttente'] }}</td>
                         </tr>
                     @endforeach
                 </tbody>

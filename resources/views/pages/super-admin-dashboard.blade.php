@@ -47,34 +47,34 @@ $repartition = computed(function () {
         <x-kpi-card label="Moyenne utilisateurs / entreprise" :value="$this->stats['entreprises'] > 0 ? round($this->stats['utilisateurs'] / $this->stats['entreprises'], 1) : 0" />
     </div>
 
-    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+    <div class="carte">
         <h2 style="font-size:16.5px; font-weight:800; margin:0 0 4px;">Répartition par entreprise</h2>
         <p style="color:#6B6E76; font-size:14px; margin:0 0 16px;">Nombre de personnes par catégorie, pour chaque entreprise cliente de la plateforme.</p>
-        <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
+        <div class="tableau-conteneur">
+            <table class="tableau">
                 <thead>
-                    <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                        <th style="padding:8px 10px;">Entreprise</th>
-                        <th style="padding:8px 10px;">Sites</th>
-                        <th style="padding:8px 10px;">Gérants</th>
-                        <th style="padding:8px 10px;">Responsables de site</th>
-                        <th style="padding:8px 10px;">Commerciaux</th>
-                        <th style="padding:8px 10px;">Total utilisateurs</th>
-                        <th style="padding:8px 10px;">Statut</th>
+                    <tr>
+                        <th>Entreprise</th>
+                        <th>Sites</th>
+                        <th>Gérants</th>
+                        <th>Responsables de site</th>
+                        <th>Commerciaux</th>
+                        <th>Total utilisateurs</th>
+                        <th>Statut</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($this->repartition as $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                            <td style="padding:8px 10px; font-weight:700;">
+                            <td style="font-weight:700;">
                                 <a href="{{ route('super-admin.entreprises.show', $ligne['entreprise']) }}" wire:navigate style="color:inherit;">{{ $ligne['entreprise']->nom }}</a>
                             </td>
-                            <td style="padding:8px 10px;">{{ $ligne['entreprise']->sites_count }}</td>
-                            <td style="padding:8px 10px;">{{ $ligne['gerants'] }}</td>
-                            <td style="padding:8px 10px;">{{ $ligne['responsables'] }}</td>
-                            <td style="padding:8px 10px;">{{ $ligne['commerciaux'] }}</td>
-                            <td style="padding:8px 10px; font-weight:700;">{{ $ligne['total'] }}</td>
-                            <td style="padding:8px 10px;">
+                            <td>{{ $ligne['entreprise']->sites_count }}</td>
+                            <td>{{ $ligne['gerants'] }}</td>
+                            <td>{{ $ligne['responsables'] }}</td>
+                            <td>{{ $ligne['commerciaux'] }}</td>
+                            <td style="font-weight:700;">{{ $ligne['total'] }}</td>
+                            <td>
                                 @if ($ligne['entreprise']->est_active)
                                     <span style="color:#0E9F6E; font-weight:600;">Active</span>
                                 @else

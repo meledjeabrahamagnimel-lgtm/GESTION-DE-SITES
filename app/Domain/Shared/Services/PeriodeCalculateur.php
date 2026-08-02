@@ -14,7 +14,7 @@ class PeriodeCalculateur
     {
         $aujourdhui = Carbon::today();
 
-        return match ($periode) {
+        [$debut, $fin] = match ($periode) {
             'jour' => [$aujourdhui->copy(), $aujourdhui->copy()],
             'semaine' => [$aujourdhui->copy()->startOfWeek(), $aujourdhui->copy()->endOfWeek()],
             'mois' => [$aujourdhui->copy()->startOfMonth(), $aujourdhui->copy()->endOfMonth()],
@@ -24,6 +24,16 @@ class PeriodeCalculateur
             ],
             default => [$aujourdhui->copy()->startOfWeek(), $aujourdhui->copy()->endOfWeek()],
         };
+
+        // endOfWeek()/endOfMonth() renvoient 23:59:59.999999 : sans normalisation, un
+        // diffInDays() donne 6,9999 au lieu de 7 et fausse tous les objectifs au prorata.
+        return [$debut->startOfDay(), $fin->startOfDay()];
+    }
+
+    /** Nombre de jours calendaires inclus dans la plage (1 pour une journée). */
+    public static function nombreDeJours(Carbon $debut, Carbon $fin): int
+    {
+        return (int) $debut->copy()->startOfDay()->diffInDays($fin->copy()->startOfDay()) + 1;
     }
 
     /** Découpe la plage en points hebdomadaires pour les graphiques (max ~12 points). */

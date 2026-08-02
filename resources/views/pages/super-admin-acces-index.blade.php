@@ -50,34 +50,34 @@ $forcerReinitialisation = function (int $id) {
             </div>
         @endif
 
-        <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
+        <div class="tableau-conteneur">
+            <table class="tableau">
                 <thead>
-                    <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                        <th style="padding:8px 10px;">Utilisateur</th>
-                        <th style="padding:8px 10px;">Entreprise</th>
-                        <th style="padding:8px 10px;">Rôle</th>
-                        <th style="padding:8px 10px;">Statut</th>
-                        <th style="padding:8px 10px;"></th>
+                    <tr>
+                        <th>Utilisateur</th>
+                        <th>Entreprise</th>
+                        <th>Rôle</th>
+                        <th>Statut</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach ($this->utilisateurs as $utilisateur)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                            <td style="padding:8px 10px;">
+                            <td>
                                 <div style="font-weight:600;">{{ $utilisateur->name }}</div>
                                 <div style="color:#6B6E76; font-size:13.5px;">{{ $utilisateur->email }}</div>
                             </td>
-                            <td style="padding:8px 10px;">{{ $utilisateur->entreprise?->nom ?? '— Plateforme —' }}</td>
-                            <td style="padding:8px 10px;">{{ $this->roles[$utilisateur->id] ?? '—' }}</td>
-                            <td style="padding:8px 10px;">
+                            <td>{{ $utilisateur->entreprise?->nom ?? '— Plateforme —' }}</td>
+                            <td>{{ $this->roles[$utilisateur->id] ?? '—' }}</td>
+                            <td>
                                 @if ($utilisateur->est_actif)
                                     <span style="color:#0E9F6E; font-weight:600;">Actif</span>
                                 @else
                                     <span style="color:#C8102E; font-weight:600;">Révoqué</span>
                                 @endif
                             </td>
-                            <td style="padding:8px 10px; text-align:right; white-space:nowrap;">
+                            <td style="text-align:right;">
                                 @if ($utilisateur->id !== auth()->id())
                                     <button type="button" wire:click="basculerActif({{ $utilisateur->id }})"
                                         wire:confirm="{{ $utilisateur->est_actif ? 'Révoquer l\'accès de '.$utilisateur->name.' ?' : 'Réactiver l\'accès de '.$utilisateur->name.' ?' }}"

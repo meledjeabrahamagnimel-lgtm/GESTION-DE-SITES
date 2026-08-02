@@ -59,7 +59,7 @@ $modifier = function () {
                 style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
 
             <button type="submit" wire:loading.attr="disabled"
-                style="background:var(--th-accent,#C8102E); color:#fff; border:0; border-radius:8px; padding:10px 20px; font-weight:700; font-size:15.5px; cursor:pointer; margin-top:20px; width:100%;">
+                class="bouton">
                 Enregistrer le nouveau mot de passe
             </button>
         </form>

@@ -29,7 +29,7 @@ $kpis = computed(function () {
         return null;
     }
     [$debut, $fin] = $this->plage;
-    $joursPeriode = max(1, $debut->diffInDays($fin) + 1);
+    $joursPeriode = PeriodeCalculateur::nombreDeJours($debut, $fin);
     $realisation = (int) $this->factures->sum('montant');
     $objectif = (int) round($this->commercial->objectif_mensuel / 30 * $joursPeriode);
 
@@ -65,29 +65,29 @@ $kpis = computed(function () {
             <x-kpi-card label="Contribution au CA du site" :value="an($this->kpis['contribution'])" />
         </div>
 
-        <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+        <div class="carte">
             <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Détail des facturations ({{ $this->factures->count() }})</h3>
-            <div style="overflow-x:auto;">
-                <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
+            <div class="tableau-conteneur">
+                <table class="tableau">
                     <thead>
-                        <tr style="text-align:left; border-bottom:2px solid var(--th-ink,#191B20);">
-                            <th style="padding:9px 12px;">N°</th>
-                            <th style="padding:9px 12px;">Date</th>
-                            <th style="padding:9px 12px;">Client</th>
-                            <th style="padding:9px 12px;">Activité</th>
-                            <th style="padding:9px 12px;">Type</th>
-                            <th style="padding:9px 12px;">Montant facturé</th>
+                        <tr>
+                            <th>N°</th>
+                            <th>Date</th>
+                            <th>Client</th>
+                            <th>Activité</th>
+                            <th>Type</th>
+                            <th>Montant facturé</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->factures as $facture)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="padding:9px 12px; font-weight:700;">{{ $facture->numero }}</td>
-                                <td style="padding:9px 12px;">{{ $facture->date->format('d/m/Y') }}</td>
-                                <td style="padding:9px 12px;">{{ $facture->client }}</td>
-                                <td style="padding:9px 12px;">{{ $facture->activite }}</td>
-                                <td style="padding:9px 12px;">{{ $facture->type }}</td>
-                                <td style="padding:9px 12px; font-variant-numeric:tabular-nums; font-weight:700;">{{ ae($facture->montant) }}</td>
+                                <td style="font-weight:700;">{{ $facture->numero }}</td>
+                                <td>{{ $facture->date->format('d/m/Y') }}</td>
+                                <td>{{ $facture->client }}</td>
+                                <td>{{ $facture->activite }}</td>
+                                <td>{{ $facture->type }}</td>
+                                <td style="font-variant-numeric:tabular-nums; font-weight:700;">{{ ae($facture->montant) }}</td>
                             </tr>
                         @empty
                             <x-table-vide :colspan="6" texte="Aucune facture sur cette période." />

@@ -20,7 +20,7 @@ $sites = computed(fn () => $this->estGerant ? Site::where('entreprise_id', auth(
 
 $classement = computed(function () {
     [$debut, $fin] = $this->plage;
-    $joursPeriode = max(1, $debut->diffInDays($fin) + 1);
+    $joursPeriode = PeriodeCalculateur::nombreDeJours($debut, $fin);
 
     $q = Commercial::actifs()->where('est_spontane', false)->with('site');
 
@@ -86,37 +86,37 @@ $graphique = computed(fn () => [
             :labels="$this->graphique['labels']" :datasets="$this->graphique['datasets']" />
     </div>
 
-    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+    <div class="carte">
         <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Classement des commerciaux par performance</h3>
-        <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
+        <div class="tableau-conteneur">
+            <table class="tableau">
                 <thead>
-                    <tr style="text-align:left; border-bottom:2px solid var(--th-ink,#191B20);">
-                        <th style="padding:9px 12px;">Rang</th>
-                        <th style="padding:9px 12px;">Commercial</th>
+                    <tr>
+                        <th>Rang</th>
+                        <th>Commercial</th>
                         @if ($this->estGerant && ! $siteFiltre)
-                            <th style="padding:9px 12px;">Site</th>
+                            <th>Site</th>
                         @endif
-                        <th style="padding:9px 12px;">Activité</th>
-                        <th style="padding:9px 12px;">Objectif</th>
-                        <th style="padding:9px 12px;">Réalisation</th>
-                        <th style="padding:9px 12px;">Écart</th>
-                        <th style="padding:9px 12px;">Taux d'atteinte</th>
+                        <th>Activité</th>
+                        <th>Objectif</th>
+                        <th>Réalisation</th>
+                        <th>Écart</th>
+                        <th>Taux d'atteinte</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($this->classement as $i => $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); {{ $i === 0 ? 'background:#FFFBEA;' : '' }}">
-                            <td style="padding:9px 12px; font-weight:800;">{{ $i + 1 }}</td>
-                            <td style="padding:9px 12px; font-weight:700;">{{ $ligne['commercial']->nom }}</td>
+                            <td style="font-weight:800;">{{ $i + 1 }}</td>
+                            <td style="font-weight:700;">{{ $ligne['commercial']->nom }}</td>
                             @if ($this->estGerant && ! $siteFiltre)
-                                <td style="padding:9px 12px;">{{ $ligne['commercial']->site->nom }}</td>
+                                <td>{{ $ligne['commercial']->site->nom }}</td>
                             @endif
-                            <td style="padding:9px 12px;">{{ $ligne['commercial']->activite }}</td>
-                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums;">{{ ae($ligne['objectif']) }}</td>
-                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums;">{{ ae($ligne['realisation']) }}</td>
-                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums; color:{{ $ligne['ecart'] >= 0 ? '#0E9F6E' : '#C8102E' }};">{{ ae($ligne['ecart']) }}</td>
-                            <td style="padding:9px 12px; font-weight:700; color:{{ ($ligne['taux'] ?? 0) >= 1 ? '#0E9F6E' : '#D97706' }};">{{ an($ligne['taux']) }}</td>
+                            <td>{{ $ligne['commercial']->activite }}</td>
+                            <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['objectif']) }}</td>
+                            <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['realisation']) }}</td>
+                            <td style="font-variant-numeric:tabular-nums; color:{{ $ligne['ecart'] >= 0 ? '#0E9F6E' : '#C8102E' }};">{{ ae($ligne['ecart']) }}</td>
+                            <td style="font-weight:700; color:{{ ($ligne['taux'] ?? 0) >= 1 ? '#0E9F6E' : '#D97706' }};">{{ an($ligne['taux']) }}</td>
                         </tr>
                     @empty
                         <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 8 : 7" texte="Aucun commercial actif pour ce filtre." />

@@ -114,7 +114,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
             :labels="$this->graphique['labels']" :datasets="$this->graphique['datasets']" />
     </div>
 
-    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+    <div class="carte">
         <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Détail des opérations ({{ $this->detail->count() }})</h3>
         <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
             <input type="text" wire:model.live.debounce.400ms="recherche" placeholder="Client / tiers…"
@@ -126,37 +126,37 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                 @endforeach
             </select>
         </div>
-        <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
+        <div class="tableau-conteneur">
+            <table class="tableau">
                 <thead>
-                    <tr style="text-align:left; border-bottom:2px solid var(--th-ink,#191B20);">
-                        <th style="padding:9px 12px;">N°</th>
-                        <th style="padding:9px 12px;">Client</th>
-                        <th style="padding:9px 12px;">Localisation</th>
-                        <th style="padding:9px 12px;">Moyen</th>
-                        <th style="padding:9px 12px;">Commercial</th>
-                        <th style="padding:9px 12px;">Activité</th>
+                    <tr>
+                        <th>N°</th>
+                        <th>Client</th>
+                        <th>Localisation</th>
+                        <th>Moyen</th>
+                        <th>Commercial</th>
+                        <th>Activité</th>
                         @if ($this->estGerant && ! $siteFiltre)
-                            <th style="padding:9px 12px;">Site</th>
+                            <th>Site</th>
                         @endif
-                        <th style="padding:9px 12px;">Passage</th>
-                        <th style="padding:9px 12px;">Devis après passage</th>
+                        <th>Passage</th>
+                        <th>Devis après passage</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($this->detail as $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                            <td style="padding:9px 12px; font-weight:700;">{{ $ligne->numero }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne->client }}</td>
-                            <td style="padding:9px 12px; color:#6B6E76;">{{ $ligne->localisation ?? '—' }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne->moyen }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne->commercial->nom }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne->activite }}</td>
+                            <td style="font-weight:700;">{{ $ligne->numero }}</td>
+                            <td>{{ $ligne->client }}</td>
+                            <td style="color:#6B6E76;">{{ $ligne->localisation ?? '—' }}</td>
+                            <td>{{ $ligne->moyen }}</td>
+                            <td>{{ $ligne->commercial->nom }}</td>
+                            <td>{{ $ligne->activite }}</td>
                             @if ($this->estGerant && ! $siteFiltre)
-                                <td style="padding:9px 12px;">{{ $ligne->site->nom }}</td>
+                                <td>{{ $ligne->site->nom }}</td>
                             @endif
-                            <td style="padding:9px 12px;">{{ $ligne->passage ? '✓' : '—' }}</td>
-                            <td style="padding:9px 12px;">{{ $ligne->devis_apres_passage ? '✓' : '—' }}</td>
+                            <td>{{ $ligne->passage ? '✓' : '—' }}</td>
+                            <td>{{ $ligne->devis_apres_passage ? '✓' : '—' }}</td>
                         </tr>
                     @empty
                         <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 9 : 8" texte="Aucune prospection enregistrée sur cette période." />

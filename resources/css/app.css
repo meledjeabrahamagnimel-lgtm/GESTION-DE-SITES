@@ -8,29 +8,324 @@
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
+/*
+ * Police condensée de la maquette, auto-hébergée : un @import vers fonts.googleapis.com
+ * bloque le rendu tant que la requête externe n'a pas abouti, ce qui est pénalisant
+ * sur une connexion lente et empêche tout affichage hors ligne.
+ */
+@font-face {
+    font-family: 'Barlow Condensed';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/fonts/barlow-condensed-600.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Barlow Condensed';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/barlow-condensed-700.woff2') format('woff2');
+}
+
+/*
+ * Palette de la maquette L'Artisan Automobile.
+ * Ces valeurs sont surchargées par entreprise via le style inline sur <html> (thème du tenant).
+ */
+:root {
+    --th-ink: #191B20;
+    --th-steel: #2A2E35;
+    --th-paper: #F4F3EF;
+    --th-ligne: #E2E0D8;
+    --th-accent: #C8102E;
+    --th-vert: #0E9F6E;
+    --th-ambre: #D97706;
+    --th-bleu: #2563EB;
+    --th-champ: #FFFBEA;
+    --th-gris: #6B6E76;
+}
+
 body { font-size: 16px; }
 
-/* État vide des graphiques : icône de fond discrète + message, la carte reste visible et à taille normale */
-.etat-vide {
-    position: relative;
-    min-height: 260px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='%23D8D6CE' stroke-width='2.5'%3E%3Cpath d='M8 52h48M16 52V28M32 52V16M48 52V34' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: 96px 96px;
+/* ---------------------------------------------------------------- Titres */
+
+.titre-section {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 20px;
+    color: var(--th-steel);
+    border-bottom: 2px solid var(--th-ink);
+    padding-bottom: 6px;
+    margin: 0 0 14px;
 }
-.etat-vide .etat-vide-texte {
-    background: rgba(255,255,255,.92);
+
+/* Sous-titre numéroté « 1 — Liste des commerciaux » : rouge, comme la maquette. */
+.sous-titre {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--th-accent);
+    margin: 20px 0 10px;
+}
+
+.chiffre {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------- Tableaux */
+
+.tableau {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+}
+
+/* En-tête plein sombre : c'est la signature visuelle de la maquette. */
+.tableau thead tr {
+    background: var(--th-ink);
+    color: #fff;
+}
+
+.tableau thead th {
+    padding: 9px 10px;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+    font-size: 13px;
+    letter-spacing: .02em;
+}
+
+.tableau thead th:first-child { border-top-left-radius: 8px; }
+.tableau thead th:last-child { border-top-right-radius: 8px; }
+
+.tableau tbody td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--th-ligne);
+    white-space: nowrap;
+}
+
+.tableau tbody tr:nth-child(even) { background: #FAF9F5; }
+.tableau tbody tr:hover { background: #F4F3EF; }
+
+.tableau-conteneur { overflow-x: auto; width: 100%; }
+
+/* ----------------------------------------------------------------- Cartes */
+
+.carte {
+    background: #fff;
+    border: 1px solid var(--th-ligne);
+    border-radius: 10px;
+    padding: 18px;
+}
+
+/* Carte KPI : liseré coloré en haut (acier / rouge si alerte / vert si bon). */
+.carte-kpi { border-top: 3px solid var(--th-steel); }
+.carte-kpi.est-alerte { border-top-color: var(--th-accent); }
+.carte-kpi.est-bon { border-top-color: var(--th-vert); }
+
+.kpi-libelle {
+    color: var(--th-gris);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.kpi-valeur {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+    color: var(--th-ink);
+}
+
+.kpi-valeur.est-alerte { color: var(--th-accent); }
+.kpi-valeur.est-bon { color: var(--th-vert); }
+.kpi-sous { font-size: 12.5px; color: var(--th-gris); margin-top: 5px; }
+
+/* ---------------------------------------------- Champs de saisie (crème) */
+
+.champ,
+input[type="text"].champ, input[type="number"].champ, input[type="email"].champ,
+input[type="password"].champ, input[type="date"].champ, select.champ, textarea.champ {
+    border: 1px solid var(--th-ligne);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 14px;
+    background: var(--th-champ);
+    color: var(--th-ink);
+    font-family: inherit;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.champ:focus {
+    outline: none;
+    border-color: var(--th-accent);
+    box-shadow: 0 0 0 3px rgba(200, 16, 46, .12);
+}
+
+.champ-libelle {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #4B4E55;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.champ-erreur { color: var(--th-accent); font-size: 12px; margin-top: 3px; display: block; }
+
+/* --------------------------------------------------------------- Boutons */
+
+.bouton {
+    background: var(--th-accent);
+    color: #fff;
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-family: inherit;
+    transition: filter .12s ease;
+}
+
+.bouton:hover { filter: brightness(1.1); }
+.bouton:active { filter: brightness(.94); }
+.bouton:disabled { opacity: .55; cursor: not-allowed; }
+
+.bouton-sombre { background: var(--th-ink); }
+.bouton-petit { padding: 7px 12px; font-size: 13px; }
+
+.bouton-secondaire {
+    background: transparent;
+    color: #4B4E55;
+    border: 1px solid var(--th-ligne);
+}
+.bouton-secondaire:hover { background: var(--th-paper); filter: none; }
+
+.bouton-vert { background: var(--th-vert); }
+.bouton-danger { background: var(--th-accent); }
+
+/* Onglets de période (Jour / Semaine / Mois / Période). */
+.onglet {
     padding: 8px 16px;
     border-radius: 8px;
     font-size: 13.5px;
-    color: #6B6E76;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid var(--th-ligne);
+    background: #fff;
+    color: #4B4E55;
+    font-family: inherit;
+}
+.onglet.est-actif { background: var(--th-ink); color: #fff; border-color: var(--th-ink); }
+
+/* --------------------------------------------------------------- Pastilles */
+
+.pastille {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.pastille-vert { background: #EAF9F3; color: var(--th-vert); border: 1px solid #0E9F6E55; }
+.pastille-rouge { background: #FDF2F4; color: var(--th-accent); border: 1px solid #C8102E55; }
+.pastille-ambre { background: #FFFBEA; color: var(--th-ambre); border: 1px solid #D9770655; }
+.pastille-bleu { background: #EFF4FE; color: var(--th-bleu); border: 1px solid #2563EB55; }
+
+/* Bandeau d'alerte / de succès. */
+.encart { border-radius: 8px; padding: 11px 14px; font-size: 14px; margin-bottom: 14px; }
+.encart-succes { background: #EAF9F3; border: 1px solid #0E9F6E55; color: var(--th-vert); }
+.encart-alerte { background: #FDF2F4; border: 1px solid var(--th-accent); color: var(--th-accent); }
+.encart-info { background: #FFFBEA; border: 1px solid #D9770655; color: var(--th-ambre); }
+
+/* Bloc de saisie en pointillés (formulaires d'ajout de ligne). */
+.bloc-saisie {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: end;
+    background: #FAF9F5;
+    border: 1px dashed var(--th-ligne);
+    border-radius: 8px;
+    padding: 12px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* ------------------------------------------------------------ États vides */
+
+/*
+ * Une carte vide garde sa structure : titre, axes/légende ou en-têtes de colonnes,
+ * plus un filigrane et un message. Rien ne disparaît quand il n'y a pas de données.
+ */
+.etat-vide {
+    position: relative;
+    min-height: 240px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='%23D8D6CE' stroke-width='2.5'%3E%3Cpath d='M8 52h48M16 52V28M32 52V16M48 52V34' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 110px 110px;
+}
+
+.etat-vide .etat-vide-texte {
+    background: rgba(255, 255, 255, .92);
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--th-gris);
+    font-weight: 700;
+    text-align: center;
+}
+
+.etat-vide .etat-vide-sous {
+    background: rgba(255, 255, 255, .92);
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    color: #9A9DA5;
+    text-align: center;
+}
+
+/* Légende affichée même sans données, pour que l'axe du graphique reste lisible. */
+.legende-vide {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding-top: 12px;
+    border-top: 1px solid var(--th-ligne);
+    margin-top: 12px;
+}
+.legende-vide span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--th-gris);
     font-weight: 600;
 }
-:root[data-theme="dark"] .etat-vide .etat-vide-texte { background: rgba(30,30,34,.92); }
-@media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .etat-vide .etat-vide-texte { background: rgba(30,30,34,.92); }
+.legende-vide i {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    display: inline-block;
+    opacity: .45;
 }

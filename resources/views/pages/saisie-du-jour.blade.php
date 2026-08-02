@@ -461,7 +461,7 @@ $ajouterCharge = function () {
     @if (! $this->site)
         <x-a-venir titre="Aucun site assigné" description="Ce compte Responsable n'est rattaché à aucun site pour le moment. Contactez votre Gérant." />
     @else
-        <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px; margin-bottom:20px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between;">
+        <div class="carte">
             <div>
                 <h1 style="font-size:19px; font-weight:800; margin:0 0 4px;">Saisie du jour — {{ $this->site->nom }}</h1>
                 <p style="color:#6B6E76; font-size:14px; margin:0;">Chaque ligne est enregistrée immédiatement à l'ajout et alimente les tableaux de bord en temps réel.</p>
@@ -476,32 +476,32 @@ $ajouterCharge = function () {
 
         <x-carte-section titre="Flux commercial">
             <x-sous-titre n="1" t="Liste des commerciaux" />
-            <div style="overflow-x:auto;">
-                <table style="border-collapse:collapse; width:100%; font-size:14px;">
+            <div class="tableau-conteneur">
+                <table class="tableau">
                     <thead>
-                        <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                            <th style="padding:7px 10px;">N°</th>
-                            <th style="padding:7px 10px;">Nom et Prénoms</th>
-                            <th style="padding:7px 10px;">Activité</th>
-                            <th style="padding:7px 10px;">Objectif mensuel</th>
-                            <th style="padding:7px 10px;">Statut</th>
-                            <th style="padding:7px 10px;"></th>
+                        <tr>
+                            <th>N°</th>
+                            <th>Nom et Prénoms</th>
+                            <th>Activité</th>
+                            <th>Objectif mensuel</th>
+                            <th>Statut</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->commerciaux as $commercial)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); opacity:{{ $commercial->statut === 'Inactif' ? '.55' : '1' }};" wire:key="commercial-{{ $commercial->id }}">
-                                <td style="padding:6px 10px; font-weight:700;">{{ $commercial->numero }}</td>
-                                <td style="padding:6px 10px;">
+                                <td style="font-weight:700;">{{ $commercial->numero }}</td>
+                                <td>
                                     @if ($editionCommercialId === $commercial->id)
                                         <input type="text" wire:model="editionNom" style="padding:5px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13.5px; width:180px;">
                                     @else
                                         <b>{{ $commercial->nom }}</b>
                                     @endif
                                 </td>
-                                <td style="padding:6px 10px;">{{ $commercial->activite ?? '—' }}</td>
-                                <td style="padding:6px 10px;">{{ $commercial->est_spontane ? '—' : ae($commercial->objectif_mensuel) }}</td>
-                                <td style="padding:6px 10px;">
+                                <td>{{ $commercial->activite ?? '—' }}</td>
+                                <td>{{ $commercial->est_spontane ? '—' : ae($commercial->objectif_mensuel) }}</td>
+                                <td>
                                     @if ($commercial->est_spontane)
                                         <span style="color:#6B6E76;">Actif (fixe)</span>
                                     @else
@@ -511,7 +511,7 @@ $ajouterCharge = function () {
                                         </button>
                                     @endif
                                 </td>
-                                <td style="padding:6px 10px; text-align:right;">
+                                <td style="text-align:right;">
                                     @unless ($commercial->est_spontane)
                                         @if ($editionCommercialId === $commercial->id)
                                             <button type="button" wire:click="enregistrerEditionCommercial({{ $commercial->id }})"
@@ -530,12 +530,12 @@ $ajouterCharge = function () {
                 </table>
             </div>
 
-            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:end; background:#FAF9F5; border:1px dashed var(--th-ligne,#E2E0D8); border-radius:8px; padding:12px; margin-top:12px;">
+            <div class="bloc-saisie">
                 <x-champ label="Nom et prénoms" model="comNom" />
                 <x-champ label="Activité" model="comActivite" type="select" :options="['Mécanique' => 'Mécanique', 'Carrosserie' => 'Carrosserie']" width="150" />
                 <x-champ label="Objectif mensuel (FCFA)" model="comObjectif" type="number" width="150" />
                 <button type="button" wire:click="ajouterCommercial"
-                    style="background:var(--th-ink,#191B20); color:#fff; border:0; border-radius:8px; padding:9px 16px; font-weight:700; font-size:13.5px; cursor:pointer; white-space:nowrap;">
+                    class="bouton bouton-sombre">
                     + Ajouter un commercial
                 </button>
                 <span style="font-size:11.5px; color:#9A9DA5; flex-basis:100%;">
@@ -544,33 +544,33 @@ $ajouterCharge = function () {
             </div>
 
             <x-sous-titre n="2" t="Prospections" />
-            <div style="overflow-x:auto;">
-                <table style="border-collapse:collapse; width:100%; font-size:14px;">
+            <div class="tableau-conteneur">
+                <table class="tableau">
                     <thead>
-                        <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                            <th style="padding:7px 10px;">N°</th>
-                            <th style="padding:7px 10px;">Clients visités</th>
-                            <th style="padding:7px 10px;">Localisation</th>
-                            <th style="padding:7px 10px;">Moyens</th>
-                            <th style="padding:7px 10px;">Commercial</th>
-                            <th style="padding:7px 10px;">Activité</th>
-                            <th style="padding:7px 10px;">Passage</th>
-                            <th style="padding:7px 10px;">Devis après passage</th>
-                            <th style="padding:7px 10px;">Observations</th>
+                        <tr>
+                            <th>N°</th>
+                            <th>Clients visités</th>
+                            <th>Localisation</th>
+                            <th>Moyens</th>
+                            <th>Commercial</th>
+                            <th>Activité</th>
+                            <th>Passage</th>
+                            <th>Devis après passage</th>
+                            <th>Observations</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->prospectionsDuJour as $p)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="padding:6px 10px; font-weight:700;">{{ $p->numero }}</td>
-                                <td style="padding:6px 10px;">{{ $p->client }}</td>
-                                <td style="padding:6px 10px; color:#6B6E76;">{{ $p->localisation ?? '—' }}</td>
-                                <td style="padding:6px 10px;">{{ $p->moyen }}</td>
-                                <td style="padding:6px 10px;">{{ $p->commercial->nom }}</td>
-                                <td style="padding:6px 10px;">{{ $p->activite }}</td>
-                                <td style="padding:6px 10px;">{{ $p->passage ? '☑' : '☐' }}</td>
-                                <td style="padding:6px 10px;">{{ $p->devis_apres_passage ? '☑' : '☐' }}</td>
-                                <td style="padding:6px 10px; color:#6B6E76;">{{ $p->observations ?? '—' }}</td>
+                                <td style="font-weight:700;">{{ $p->numero }}</td>
+                                <td>{{ $p->client }}</td>
+                                <td style="color:#6B6E76;">{{ $p->localisation ?? '—' }}</td>
+                                <td>{{ $p->moyen }}</td>
+                                <td>{{ $p->commercial->nom }}</td>
+                                <td>{{ $p->activite }}</td>
+                                <td>{{ $p->passage ? '☑' : '☐' }}</td>
+                                <td>{{ $p->devis_apres_passage ? '☑' : '☐' }}</td>
+                                <td style="color:#6B6E76;">{{ $p->observations ?? '—' }}</td>
                             </tr>
                         @empty
                             <x-table-vide :colspan="9" texte="Aucune prospection saisie pour cette journée." />
@@ -579,7 +579,7 @@ $ajouterCharge = function () {
                 </table>
             </div>
 
-            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:end; background:#FAF9F5; border:1px dashed var(--th-ligne,#E2E0D8); border-radius:8px; padding:12px; margin-top:12px;">
+            <div class="bloc-saisie">
                 <x-champ label="Clients visités" model="prosClient" />
                 <x-champ label="Localisation" model="prosLocalisation" width="130" />
                 <x-champ label="Moyens" model="prosMoyen" type="select" :options="['RDV' => 'RDV', 'Téléphone' => 'Téléphone', 'Mail' => 'Mail']" width="130" />
@@ -589,7 +589,7 @@ $ajouterCharge = function () {
                 <x-champ label="Devis après passage" model="prosDevisApres" type="checkbox" />
                 <x-champ label="Observations" model="prosObs" />
                 <button type="button" wire:click="ajouterProspection"
-                    style="background:var(--th-ink,#191B20); color:#fff; border:0; border-radius:8px; padding:9px 16px; font-weight:700; font-size:13.5px; cursor:pointer; white-space:nowrap;">
+                    class="bouton bouton-sombre">
                     + Ajouter
                 </button>
             </div>
@@ -608,29 +608,29 @@ $ajouterCharge = function () {
                     <p style="font-size:12.5px; font-weight:700; color:#D97706; margin:0 0 6px;">
                         Devis à effectuer, issus de la prospection ({{ $this->prospectionsAttenteDevis->count() }}) — cocher puis « Ajouter devis » :
                     </p>
-                    <div style="overflow-x:auto;">
-                        <table style="border-collapse:collapse; width:100%; font-size:13.5px;">
+                    <div class="tableau-conteneur">
+                        <table class="tableau">
                             <thead>
-                                <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                                    <th style="padding:6px 8px;">✓</th>
-                                    <th style="padding:6px 8px;">N° prospection</th>
-                                    <th style="padding:6px 8px;">Client</th>
-                                    <th style="padding:6px 8px;">Date</th>
-                                    <th style="padding:6px 8px;">Commercial</th>
-                                    <th style="padding:6px 8px;">Activité</th>
-                                    <th style="padding:6px 8px;">Observations</th>
+                                <tr>
+                                    <th>✓</th>
+                                    <th>N° prospection</th>
+                                    <th>Client</th>
+                                    <th>Date</th>
+                                    <th>Commercial</th>
+                                    <th>Activité</th>
+                                    <th>Observations</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach ($this->prospectionsAttenteDevis as $p)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="attente-devis-{{ $p->id }}">
-                                        <td style="padding:5px 8px;"><input type="checkbox" wire:model="devisSelection.{{ $p->id }}"></td>
-                                        <td style="padding:5px 8px; font-weight:700;">{{ $p->numero }}</td>
-                                        <td style="padding:5px 8px;">{{ $p->client }}</td>
-                                        <td style="padding:5px 8px;">{{ $p->date->format('d/m/Y') }}</td>
-                                        <td style="padding:5px 8px;">{{ $p->commercial->nom }}</td>
-                                        <td style="padding:5px 8px;">{{ $p->activite }}</td>
-                                        <td style="padding:5px 8px; color:#6B6E76;">{{ $p->observations ?? '—' }}</td>
+                                        <td><input type="checkbox" wire:model="devisSelection.{{ $p->id }}"></td>
+                                        <td style="font-weight:700;">{{ $p->numero }}</td>
+                                        <td>{{ $p->client }}</td>
+                                        <td>{{ $p->date->format('d/m/Y') }}</td>
+                                        <td>{{ $p->commercial->nom }}</td>
+                                        <td>{{ $p->activite }}</td>
+                                        <td style="color:#6B6E76;">{{ $p->observations ?? '—' }}</td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -664,11 +664,11 @@ $ajouterCharge = function () {
                     @endforeach
                     <div style="display:flex; gap:8px;">
                         <button type="button" wire:click="validerDevis"
-                            style="background:var(--th-accent,#C8102E); color:#fff; border:0; border-radius:8px; padding:9px 16px; font-weight:700; font-size:13.5px; cursor:pointer;">
+                            class="bouton">
                             ✓ Valider — rejoint la liste des devis
                         </button>
                         <button type="button" wire:click="annulerBrouillonsDevis"
-                            style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; padding:9px 16px; font-weight:700; font-size:13.5px; cursor:pointer;">
+                            class="bouton bouton-secondaire">
                             Annuler
                         </button>
                     </div>
@@ -676,36 +676,36 @@ $ajouterCharge = function () {
             @endif
 
             <div style="overflow-x:auto; margin-top:14px;">
-                <table style="border-collapse:collapse; width:100%; font-size:13.5px;">
+                <table class="tableau">
                     <thead>
-                        <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                            <th style="padding:6px 8px;">N°</th>
-                            <th style="padding:6px 8px;">Réception</th>
-                            <th style="padding:6px 8px;">Fiche</th>
-                            <th style="padding:6px 8px;">Client</th>
-                            <th style="padding:6px 8px;">Émission</th>
-                            <th style="padding:6px 8px;">Commercial</th>
-                            <th style="padding:6px 8px;">Statut</th>
-                            <th style="padding:6px 8px;">Montant devis</th>
-                            <th style="padding:6px 8px;">Montant validé</th>
-                            <th style="padding:6px 8px;">Activité</th>
-                            <th style="padding:6px 8px;">Obs.</th>
+                        <tr>
+                            <th>N°</th>
+                            <th>Réception</th>
+                            <th>Fiche</th>
+                            <th>Client</th>
+                            <th>Émission</th>
+                            <th>Commercial</th>
+                            <th>Statut</th>
+                            <th>Montant devis</th>
+                            <th>Montant validé</th>
+                            <th>Activité</th>
+                            <th>Obs.</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->devisDuJour as $d)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="padding:5px 8px; font-weight:700;">{{ $d->numero }}</td>
-                                <td style="padding:5px 8px;">{{ $d->date_reception?->format('d/m/Y') ?? '—' }}</td>
-                                <td style="padding:5px 8px;">{{ $d->n_fiche_reception ?? '—' }}</td>
-                                <td style="padding:5px 8px;">{{ $d->client }}</td>
-                                <td style="padding:5px 8px;">{{ $d->date_emission->format('d/m/Y') }}</td>
-                                <td style="padding:5px 8px;">{{ $d->commercial->nom }}</td>
-                                <td style="padding:5px 8px; font-weight:700; color:{{ $d->statut === 'Validé' ? '#0E9F6E' : ($d->statut === 'Refusé' ? '#C8102E' : '#D97706') }};">{{ $d->statut }}</td>
-                                <td style="padding:5px 8px;">{{ ae($d->montant_devis) }}</td>
-                                <td style="padding:5px 8px;">{{ $d->statut === 'Validé' ? ae($d->montant_valide) : '—' }}</td>
-                                <td style="padding:5px 8px;">{{ $d->activite }}</td>
-                                <td style="padding:5px 8px; color:#6B6E76;">{{ $d->observations ?? '—' }}</td>
+                                <td style="font-weight:700;">{{ $d->numero }}</td>
+                                <td>{{ $d->date_reception?->format('d/m/Y') ?? '—' }}</td>
+                                <td>{{ $d->n_fiche_reception ?? '—' }}</td>
+                                <td>{{ $d->client }}</td>
+                                <td>{{ $d->date_emission->format('d/m/Y') }}</td>
+                                <td>{{ $d->commercial->nom }}</td>
+                                <td style="font-weight:700; color:{{ $d->statut === 'Validé' ? '#0E9F6E' : ($d->statut === 'Refusé' ? '#C8102E' : '#D97706') }};">{{ $d->statut }}</td>
+                                <td>{{ ae($d->montant_devis) }}</td>
+                                <td>{{ $d->statut === 'Validé' ? ae($d->montant_valide) : '—' }}</td>
+                                <td>{{ $d->activite }}</td>
+                                <td style="color:#6B6E76;">{{ $d->observations ?? '—' }}</td>
                             </tr>
                         @empty
                             <x-table-vide :colspan="11" texte="Aucun devis émis pour cette journée." />
@@ -719,26 +719,26 @@ $ajouterCharge = function () {
                     <p style="font-size:12.5px; font-weight:700; color:#D97706; margin:0 0 6px;">
                         Devis en attente ({{ $this->devisEnAttente->count() }}) — changer le statut :
                     </p>
-                    <div style="overflow-x:auto;">
-                        <table style="border-collapse:collapse; width:100%; font-size:13.5px;">
+                    <div class="tableau-conteneur">
+                        <table class="tableau">
                             <thead>
-                                <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                                    <th style="padding:6px 8px;">N°</th>
-                                    <th style="padding:6px 8px;">Client</th>
-                                    <th style="padding:6px 8px;">Émission</th>
-                                    <th style="padding:6px 8px;">Montant</th>
-                                    <th style="padding:6px 8px;">Statut</th>
-                                    <th style="padding:6px 8px;">Montant validé</th>
+                                <tr>
+                                    <th>N°</th>
+                                    <th>Client</th>
+                                    <th>Émission</th>
+                                    <th>Montant</th>
+                                    <th>Statut</th>
+                                    <th>Montant validé</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach ($this->devisEnAttente as $d)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="devis-attente-{{ $d->id }}">
-                                        <td style="padding:5px 8px; font-weight:700;">{{ $d->numero }}</td>
-                                        <td style="padding:5px 8px;">{{ $d->client }}</td>
-                                        <td style="padding:5px 8px;">{{ $d->date_emission->format('d/m/Y') }}</td>
-                                        <td style="padding:5px 8px;">{{ ae($d->montant_devis) }}</td>
-                                        <td style="padding:5px 8px;">
+                                        <td style="font-weight:700;">{{ $d->numero }}</td>
+                                        <td>{{ $d->client }}</td>
+                                        <td>{{ $d->date_emission->format('d/m/Y') }}</td>
+                                        <td>{{ ae($d->montant_devis) }}</td>
+                                        <td>
                                             <select wire:change="changerStatutDevis({{ $d->id }}, $event.target.value)"
                                                 style="padding:5px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13px;">
                                                 <option {{ $d->statut === 'En attente' ? 'selected' : '' }}>En attente</option>
@@ -746,7 +746,7 @@ $ajouterCharge = function () {
                                                 <option {{ $d->statut === 'Refusé' ? 'selected' : '' }}>Refusé</option>
                                             </select>
                                         </td>
-                                        <td style="padding:5px 8px;">
+                                        <td>
                                             @if ($d->statut === 'Validé')
                                                 <input type="number" value="{{ $d->montant_valide }}" wire:change="changerMontantValide({{ $d->id }}, $event.target.value)"
                                                     style="padding:5px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13px; width:110px;">
@@ -770,27 +770,27 @@ $ajouterCharge = function () {
             </div>
 
             <x-sous-titre n="4" t="Statistiques des commerciaux" />
-            <div style="overflow-x:auto;">
-                <table style="border-collapse:collapse; width:100%; font-size:14px;">
+            <div class="tableau-conteneur">
+                <table class="tableau">
                     <thead>
-                        <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                            <th style="padding:6px 10px;">N°</th>
-                            <th style="padding:6px 10px;">Commercial</th>
-                            <th style="padding:6px 10px;">Site</th>
-                            <th style="padding:6px 10px;">Activité</th>
-                            <th style="padding:6px 10px;">Objectif mensuel</th>
-                            <th style="padding:6px 10px;">Objectif journalier (mensuel/30)</th>
+                        <tr>
+                            <th>N°</th>
+                            <th>Commercial</th>
+                            <th>Site</th>
+                            <th>Activité</th>
+                            <th>Objectif mensuel</th>
+                            <th>Objectif journalier (mensuel/30)</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->statistiquesCommerciaux as $s)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="padding:6px 10px; font-weight:700;">{{ $s->numero }}</td>
-                                <td style="padding:6px 10px;">{{ $s->nom }}</td>
-                                <td style="padding:6px 10px;">{{ $s->site->nom }}</td>
-                                <td style="padding:6px 10px;">{{ $s->activite }}</td>
-                                <td style="padding:6px 10px;">{{ ae($s->objectif_mensuel) }}</td>
-                                <td style="padding:6px 10px;">{{ ae($s->objectifJournalier()) }}</td>
+                                <td style="font-weight:700;">{{ $s->numero }}</td>
+                                <td>{{ $s->nom }}</td>
+                                <td>{{ $s->site->nom }}</td>
+                                <td>{{ $s->activite }}</td>
+                                <td>{{ ae($s->objectif_mensuel) }}</td>
+                                <td>{{ ae($s->objectifJournalier()) }}</td>
                             </tr>
                         @empty
                             <x-table-vide :colspan="6" texte="Aucun commercial actif sur ce site." />
@@ -806,27 +806,27 @@ $ajouterCharge = function () {
                     <p style="font-size:12.5px; font-weight:700; color:#D97706; margin:0 0 6px;">
                         Listing des devis émis validés, non facturés ({{ $this->devisValidesNonFactures->count() }}) — cocher les devis à facturer :
                     </p>
-                    <div style="overflow-x:auto;">
-                        <table style="border-collapse:collapse; width:100%; font-size:13.5px;">
+                    <div class="tableau-conteneur">
+                        <table class="tableau">
                             <thead>
-                                <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                                    <th style="padding:6px 8px;">✓</th>
-                                    <th style="padding:6px 8px;">N° devis</th>
-                                    <th style="padding:6px 8px;">Client</th>
-                                    <th style="padding:6px 8px;">Montant validé</th>
-                                    <th style="padding:6px 8px;">Commercial</th>
-                                    <th style="padding:6px 8px;">Activité</th>
+                                <tr>
+                                    <th>✓</th>
+                                    <th>N° devis</th>
+                                    <th>Client</th>
+                                    <th>Montant validé</th>
+                                    <th>Commercial</th>
+                                    <th>Activité</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach ($this->devisValidesNonFactures as $d)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="valide-non-facture-{{ $d->id }}">
-                                        <td style="padding:5px 8px;"><input type="checkbox" wire:model="factureSelection.{{ $d->id }}"></td>
-                                        <td style="padding:5px 8px; font-weight:700;">{{ $d->numero }}</td>
-                                        <td style="padding:5px 8px;">{{ $d->client }}</td>
-                                        <td style="padding:5px 8px;">{{ ae($d->montant_valide ?? $d->montant_devis) }}</td>
-                                        <td style="padding:5px 8px;">{{ $d->commercial->nom }}</td>
-                                        <td style="padding:5px 8px;">{{ $d->activite }}</td>
+                                        <td><input type="checkbox" wire:model="factureSelection.{{ $d->id }}"></td>
+                                        <td style="font-weight:700;">{{ $d->numero }}</td>
+                                        <td>{{ $d->client }}</td>
+                                        <td>{{ ae($d->montant_valide ?? $d->montant_devis) }}</td>
+                                        <td>{{ $d->commercial->nom }}</td>
+                                        <td>{{ $d->activite }}</td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -855,11 +855,11 @@ $ajouterCharge = function () {
                     @endforeach
                     <div style="display:flex; gap:8px;">
                         <button type="button" wire:click="validerFactures"
-                            style="background:var(--th-accent,#C8102E); color:#fff; border:0; border-radius:8px; padding:9px 16px; font-weight:700; font-size:13.5px; cursor:pointer;">
+                            class="bouton">
                             ✓ Valider la facturation
                         </button>
                         <button type="button" wire:click="annulerBrouillonsFactures"
-                            style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; padding:9px 16px; font-weight:700; font-size:13.5px; cursor:pointer;">
+                            class="bouton bouton-secondaire">
                             Annuler
                         </button>
                     </div>
@@ -867,30 +867,30 @@ $ajouterCharge = function () {
             @endif
 
             <div style="overflow-x:auto; margin-top:14px;">
-                <table style="border-collapse:collapse; width:100%; font-size:13.5px;">
+                <table class="tableau">
                     <thead>
-                        <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                            <th style="padding:6px 8px;">N°</th>
-                            <th style="padding:6px 8px;">Commercial</th>
-                            <th style="padding:6px 8px;">Clients</th>
-                            <th style="padding:6px 8px;">Type</th>
-                            <th style="padding:6px 8px;">N° de facture</th>
-                            <th style="padding:6px 8px;">Activité</th>
-                            <th style="padding:6px 8px;">Montant de la facture</th>
-                            <th style="padding:6px 8px;">Observations</th>
+                        <tr>
+                            <th>N°</th>
+                            <th>Commercial</th>
+                            <th>Clients</th>
+                            <th>Type</th>
+                            <th>N° de facture</th>
+                            <th>Activité</th>
+                            <th>Montant de la facture</th>
+                            <th>Observations</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->facturesDuJour as $f)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="padding:5px 8px; font-weight:700;">{{ $f->numero }}</td>
-                                <td style="padding:5px 8px;">{{ $f->commercial->nom }}</td>
-                                <td style="padding:5px 8px;">{{ $f->client }}</td>
-                                <td style="padding:5px 8px;">{{ $f->type }}</td>
-                                <td style="padding:5px 8px;">{{ $f->n_facture }}</td>
-                                <td style="padding:5px 8px;">{{ $f->activite }}</td>
-                                <td style="padding:5px 8px; font-weight:700;">{{ ae($f->montant) }}</td>
-                                <td style="padding:5px 8px; color:#6B6E76;">{{ $f->observations ?? '—' }}</td>
+                                <td style="font-weight:700;">{{ $f->numero }}</td>
+                                <td>{{ $f->commercial->nom }}</td>
+                                <td>{{ $f->client }}</td>
+                                <td>{{ $f->type }}</td>
+                                <td>{{ $f->n_facture }}</td>
+                                <td>{{ $f->activite }}</td>
+                                <td style="font-weight:700;">{{ ae($f->montant) }}</td>
+                                <td style="color:#6B6E76;">{{ $f->observations ?? '—' }}</td>
                             </tr>
                         @empty
                             <x-table-vide :colspan="8" texte="Aucune facture émise pour cette journée." />
@@ -908,25 +908,25 @@ $ajouterCharge = function () {
         </x-carte-section>
 
         <x-carte-section titre="Encaissements du jour">
-            <div style="overflow-x:auto;">
-                <table style="border-collapse:collapse; width:100%; font-size:14px;">
+            <div class="tableau-conteneur">
+                <table class="tableau">
                     <thead>
-                        <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                            <th style="padding:6px 10px;">Type d'encaissement</th>
-                            <th style="padding:6px 10px;">Moyens</th>
-                            <th style="padding:6px 10px;">Montant</th>
-                            <th style="padding:6px 10px;">Clients</th>
-                            <th style="padding:6px 10px;">Autres tiers</th>
+                        <tr>
+                            <th>Type d'encaissement</th>
+                            <th>Moyens</th>
+                            <th>Montant</th>
+                            <th>Clients</th>
+                            <th>Autres tiers</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->encaissementsDuJour as $e)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="padding:6px 10px;">{{ $e->type }}</td>
-                                <td style="padding:6px 10px;">{{ $e->moyen }}</td>
-                                <td style="padding:6px 10px; font-weight:700; color:#0E9F6E;">{{ ae($e->montant) }}</td>
-                                <td style="padding:6px 10px;">{{ $e->client ?? '—' }}</td>
-                                <td style="padding:6px 10px;">{{ $e->autres_tiers ?? '—' }}</td>
+                                <td>{{ $e->type }}</td>
+                                <td>{{ $e->moyen }}</td>
+                                <td style="font-weight:700; color:#0E9F6E;">{{ ae($e->montant) }}</td>
+                                <td>{{ $e->client ?? '—' }}</td>
+                                <td>{{ $e->autres_tiers ?? '—' }}</td>
                             </tr>
                         @empty
                             <x-table-vide :colspan="5" texte="Aucun encaissement saisi pour cette journée." />
@@ -935,7 +935,7 @@ $ajouterCharge = function () {
                 </table>
             </div>
 
-            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:end; background:#FAF9F5; border:1px dashed var(--th-ligne,#E2E0D8); border-radius:8px; padding:12px; margin-top:12px;">
+            <div class="bloc-saisie">
                 <x-champ label="Type d'encaissement" model="encType" type="select" :options="['Client' => 'Client', 'Appro' => 'Appro', 'Autres' => 'Autres']" width="140" />
                 <x-champ label="Moyens" model="encMoyen" type="select" :options="['Espèces' => 'Espèces', 'Mobile Money' => 'Mobile Money', 'Chèque' => 'Chèque', 'Virement' => 'Virement', 'Autres' => 'Autres']" width="150" />
                 <x-champ label="Montant (FCFA)" model="encMontant" type="number" width="140" />
@@ -951,7 +951,7 @@ $ajouterCharge = function () {
                 </div>
                 <x-champ label="Autres tiers à préciser" model="encTiers" />
                 <button type="button" wire:click="ajouterEncaissement"
-                    style="background:var(--th-ink,#191B20); color:#fff; border:0; border-radius:8px; padding:9px 16px; font-weight:700; font-size:13.5px; cursor:pointer; white-space:nowrap;">
+                    class="bouton bouton-sombre">
                     + Ajouter
                 </button>
             </div>
@@ -965,29 +965,29 @@ $ajouterCharge = function () {
         </x-carte-section>
 
         <x-carte-section titre="Charges & décaissements du jour">
-            <div style="overflow-x:auto;">
-                <table style="border-collapse:collapse; width:100%; font-size:14px;">
+            <div class="tableau-conteneur">
+                <table class="tableau">
                     <thead>
-                        <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                            <th style="padding:6px 10px;">Date</th>
-                            <th style="padding:6px 10px;">Type d'opération</th>
-                            <th style="padding:6px 10px;">Libellé d'opération</th>
-                            <th style="padding:6px 10px;">Moyens</th>
-                            <th style="padding:6px 10px;">Montant</th>
-                            <th style="padding:6px 10px;">Tiers</th>
-                            <th style="padding:6px 10px;">Observations</th>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type d'opération</th>
+                            <th>Libellé d'opération</th>
+                            <th>Moyens</th>
+                            <th>Montant</th>
+                            <th>Tiers</th>
+                            <th>Observations</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->chargesDuJour as $c)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="padding:6px 10px;">{{ $c->date->format('d/m/Y') }}</td>
-                                <td style="padding:6px 10px;">{{ $c->type_operation === 'Charges' ? 'Charges' : 'Décaissements' }}</td>
-                                <td style="padding:6px 10px;">{{ $c->libelle }}</td>
-                                <td style="padding:6px 10px;">{{ $c->moyen }}</td>
-                                <td style="padding:6px 10px; font-weight:700; color:#C8102E;">{{ ae($c->montant) }}</td>
-                                <td style="padding:6px 10px;">{{ $c->tiers ?? '—' }}</td>
-                                <td style="padding:6px 10px; color:#6B6E76;">{{ $c->observations ?? '—' }}</td>
+                                <td>{{ $c->date->format('d/m/Y') }}</td>
+                                <td>{{ $c->type_operation === 'Charges' ? 'Charges' : 'Décaissements' }}</td>
+                                <td>{{ $c->libelle }}</td>
+                                <td>{{ $c->moyen }}</td>
+                                <td style="font-weight:700; color:#C8102E;">{{ ae($c->montant) }}</td>
+                                <td>{{ $c->tiers ?? '—' }}</td>
+                                <td style="color:#6B6E76;">{{ $c->observations ?? '—' }}</td>
                             </tr>
                         @empty
                             <x-table-vide :colspan="7" texte="Aucune charge ni décaissement saisi pour cette journée." />
@@ -996,7 +996,7 @@ $ajouterCharge = function () {
                 </table>
             </div>
 
-            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:end; background:#FAF9F5; border:1px dashed var(--th-ligne,#E2E0D8); border-radius:8px; padding:12px; margin-top:12px;">
+            <div class="bloc-saisie">
                 <x-champ label="Date" model="chgDate" type="date" width="140" />
                 <x-champ label="Type d'opération" model="chgTypeOp" type="select" :options="['Charges' => 'Charges', 'Décaissements' => 'Décaissements']" width="150" live="true" />
                 <x-champ label="Libellé d'opération" model="chgLibelle" type="select" :options="array_combine($this->libellesOperation, $this->libellesOperation)" width="220" />
@@ -1005,7 +1005,7 @@ $ajouterCharge = function () {
                 <x-champ label="Tiers" model="chgTiers" width="160" />
                 <x-champ label="Observations" model="chgObs" />
                 <button type="button" wire:click="ajouterCharge"
-                    style="background:var(--th-ink,#191B20); color:#fff; border:0; border-radius:8px; padding:9px 16px; font-weight:700; font-size:13.5px; cursor:pointer; white-space:nowrap;">
+                    class="bouton bouton-sombre">
                     + Ajouter
                 </button>
             </div>

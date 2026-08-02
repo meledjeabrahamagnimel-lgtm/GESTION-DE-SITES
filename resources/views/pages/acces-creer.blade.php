@@ -96,7 +96,7 @@ $creer = function (CreerAcces $action) {
 ?>
 
 <div>
-    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:24px; margin-bottom:16px;">
+    <div class="carte">
         <h1 style="font-size:18px; font-weight:800; margin:0 0 4px;">Ajouter un accès</h1>
         <p style="color:#6B6E76; font-size:15px; margin:0 0 18px;">Créez un compte pour un membre de votre équipe. Le mot de passe devra être changé à la première connexion.</p>
 
@@ -176,29 +176,29 @@ $creer = function (CreerAcces $action) {
             @endif
 
             <button type="submit" wire:loading.attr="disabled"
-                style="background:var(--th-accent,#C8102E); color:#fff; border:0; border-radius:8px; padding:10px 20px; font-weight:700; font-size:15.5px; cursor:pointer; margin-top:18px;">
+                class="bouton">
                 + Ajouter
             </button>
         </form>
     </div>
 
-    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+    <div class="carte">
         <h3 style="font-size:15px; font-weight:700; margin:0 0 12px;">Derniers accès créés</h3>
-        <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
+        <div class="tableau-conteneur">
+            <table class="tableau">
                 <thead>
-                    <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                        <th style="padding:6px 10px;">Nom</th>
-                        <th style="padding:6px 10px;">E-mail</th>
-                        <th style="padding:6px 10px;">Statut</th>
+                    <tr>
+                        <th>Nom</th>
+                        <th>E-mail</th>
+                        <th>Statut</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach ($this->derniersAcces as $utilisateur)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                            <td style="padding:6px 10px; font-weight:600;">{{ $utilisateur->name }}</td>
-                            <td style="padding:6px 10px; color:#6B6E76;">{{ $utilisateur->email }}</td>
-                            <td style="padding:6px 10px;">
+                            <td style="font-weight:600;">{{ $utilisateur->name }}</td>
+                            <td style="color:#6B6E76;">{{ $utilisateur->email }}</td>
+                            <td>
                                 @if ($utilisateur->est_actif)
                                     <span style="color:#0E9F6E; font-weight:600;">Actif</span>
                                 @else
