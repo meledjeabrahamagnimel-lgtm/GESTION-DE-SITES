@@ -109,13 +109,14 @@ $detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('da
                     <tr>
                         <th>Date</th>
                         <th>Type d'opération</th>
-                        <th>Libellé</th>
-                        <th>Moyen</th>
+                        <th>Libellé d'opération</th>
+                        <th>Moyens</th>
                         <th>Tiers</th>
                         @if ($this->estGerant && ! $siteFiltre)
                             <th>Site</th>
                         @endif
                         <th>Montant</th>
+                        <th>Observations</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -130,9 +131,10 @@ $detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('da
                                 <td>{{ $ligne->site->nom }}</td>
                             @endif
                             <td style="font-variant-numeric:tabular-nums; font-weight:700;">{{ ae($ligne->montant) }}</td>
+                            <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 7 : 6" texte="Aucune charge enregistrée sur cette période." />
+                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 8 : 7" texte="Aucune charge enregistrée sur cette période." />
                     @endforelse
                 </tbody>
             </table>

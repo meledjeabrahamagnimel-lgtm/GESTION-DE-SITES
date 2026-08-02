@@ -118,9 +118,11 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
                     <thead>
                         <tr>
                             <th>Date</th>
-                            <th>Type</th>
-                            <th>Moyen</th>
+                            <th>Type d'encaissement</th>
+                            <th>Moyens</th>
                             <th>Montant</th>
+                            <th>Clients</th>
+                            <th>Autres tiers</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -130,9 +132,11 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
                                 <td>{{ $ligne->type }}</td>
                                 <td>{{ $ligne->moyen }}</td>
                                 <td style="font-variant-numeric:tabular-nums; font-weight:700; color:#0E9F6E;">{{ ae($ligne->montant) }}</td>
+                                <td>{{ $ligne->client ?? '—' }}</td>
+                                <td style="color:#6B6E76;">{{ $ligne->autres_tiers ?? '—' }}</td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="4" texte="Aucun encaissement sur cette période." />
+                            <x-table-vide :colspan="6" texte="Aucun encaissement sur cette période." />
                         @endforelse
                     </tbody>
                 </table>
@@ -146,21 +150,25 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
                     <thead>
                         <tr>
                             <th>Date</th>
-                            <th>Libellé</th>
-                            <th>Moyen</th>
+                            <th>Type d'opération</th>
+                            <th>Libellé d'opération</th>
+                            <th>Moyens</th>
                             <th>Montant</th>
+                            <th>Tiers</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->detailDecaissements as $ligne)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td>{{ $ligne->date->format('d/m/Y') }}</td>
+                                <td>{{ $ligne->type_operation }}</td>
                                 <td>{{ $ligne->libelle }}</td>
                                 <td>{{ $ligne->moyen }}</td>
                                 <td style="font-variant-numeric:tabular-nums; font-weight:700; color:#C8102E;">{{ ae($ligne->montant) }}</td>
+                                <td style="color:#6B6E76;">{{ $ligne->tiers ?? '—' }}</td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="4" texte="Aucun décaissement sur cette période." />
+                            <x-table-vide :colspan="6" texte="Aucun décaissement sur cette période." />
                         @endforelse
                     </tbody>
                 </table>

@@ -35,6 +35,7 @@ $synthese = computed(function () {
         $encaisse = (int) Encaissement::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('montant');
         $decaisse = (int) Charge::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('montant');
         $devisAttente = Devis::where('site_id', $site->id)->where('statut', 'En attente')->whereBetween('date_emission', [$debut, $fin])->count();
+        $sansFacture = (int) SaisieJournaliere::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('vehicules_sans_facture');
 
         return [
             'site' => $site,
@@ -44,6 +45,7 @@ $synthese = computed(function () {
             'encaisse' => $encaisse,
             'treso' => $encaisse - $decaisse,
             'devisAttente' => $devisAttente,
+            'sansFacture' => $sansFacture,
         ];
     });
 });
@@ -153,6 +155,7 @@ $graphiqueFlux = computed(function () {
                         <th>Encaissé</th>
                         <th>Trésorerie nette</th>
                         <th>Devis en attente</th>
+                        <th>Sans facture</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -168,9 +171,10 @@ $graphiqueFlux = computed(function () {
                             <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['encaisse']) }}</td>
                             <td style="font-variant-numeric:tabular-nums; color:{{ $ligne['treso'] >= 0 ? 'inherit' : '#C8102E' }};">{{ ae($ligne['treso']) }}</td>
                             <td>{{ $ligne['devisAttente'] }}</td>
+                            <td style="font-weight:700; color:{{ $ligne['sansFacture'] > 0 ? '#C8102E' : 'inherit' }};">{{ $ligne['sansFacture'] }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="7" texte="Aucun site à afficher." />
+                        <x-table-vide :colspan="8" texte="Aucun site à afficher." />
                     @endforelse
                 </tbody>
             </table>

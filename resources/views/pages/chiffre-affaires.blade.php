@@ -157,13 +157,15 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                         <th>N°</th>
                         <th>Date</th>
                         <th>Commercial</th>
-                        <th>Client</th>
+                        <th>Clients</th>
                         <th>Type</th>
+                        <th>N° de facture</th>
                         <th>Activité</th>
                         @if ($this->estGerant && ! $siteFiltre)
                             <th>Site</th>
                         @endif
                         <th>Montant</th>
+                        <th>Observations</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -174,14 +176,16 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                             <td>{{ $ligne->commercial->nom }}</td>
                             <td>{{ $ligne->client }}</td>
                             <td>{{ $ligne->type }}</td>
+                            <td>{{ $ligne->n_facture }}</td>
                             <td>{{ $ligne->activite }}</td>
                             @if ($this->estGerant && ! $siteFiltre)
                                 <td>{{ $ligne->site->nom }}</td>
                             @endif
                             <td style="font-variant-numeric:tabular-nums; font-weight:700;">{{ ae($ligne->montant) }}</td>
+                            <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 8 : 7" texte="Aucune facture enregistrée sur cette période." />
+                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 10 : 9" texte="Aucune facture enregistrée sur cette période." />
                     @endforelse
                 </tbody>
             </table>
