@@ -25,7 +25,7 @@ $repartition = computed(function () {
 
 <x-a-venir titre="{{ $this->entreprise->nom }}" description="Répartition des personnes par catégorie et par site.">
         <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:13px;">
+            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
                 <thead>
                     <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
                         <th style="padding:8px 10px;">Site</th>
