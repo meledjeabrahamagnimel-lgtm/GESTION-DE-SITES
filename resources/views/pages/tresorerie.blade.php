@@ -1,2 +1,162 @@
-    <x-a-venir titre="Trésorerie"
-        description="Encaissements, décaissements, trésorerie nette, facturé non encaissé et détail des deux tableaux." />
+<?php
+
+use App\Domain\Operations\Models\Charge;
+use App\Domain\Operations\Models\Encaissement;
+use App\Domain\Operations\Models\Facture;
+use App\Domain\Shared\Services\PeriodeCalculateur;
+use App\Domain\Tenants\Models\Site;
+use function Livewire\Volt\{state, computed};
+
+state([
+    'periode' => 'semaine',
+    'dateDebut' => null,
+    'dateFin' => null,
+    'siteFiltre' => '',
+]);
+
+$estGerant = computed(fn () => auth()->user()->hasRole('gerant'));
+$monSite = computed(fn () => $this->estGerant ? null : Site::where('responsable_id', auth()->id())->first());
+$plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
+$sites = computed(fn () => $this->estGerant ? Site::where('entreprise_id', auth()->user()->entreprise_id)->orderBy('nom')->get() : null);
+
+$encaissementsQ = computed(function () {
+    [$debut, $fin] = $this->plage;
+    $q = Encaissement::whereBetween('date', [$debut, $fin]);
+
+    return $this->estGerant
+        ? ($this->siteFiltre ? $q->where('site_id', $this->siteFiltre) : $q)
+        : $q->where('site_id', $this->monSite?->id ?? 0);
+});
+
+$chargesQ = computed(function () {
+    [$debut, $fin] = $this->plage;
+    $q = Charge::whereBetween('date', [$debut, $fin]);
+
+    return $this->estGerant
+        ? ($this->siteFiltre ? $q->where('site_id', $this->siteFiltre) : $q)
+        : $q->where('site_id', $this->monSite?->id ?? 0);
+});
+
+$facturesQ = computed(function () {
+    [$debut, $fin] = $this->plage;
+    $q = Facture::whereBetween('date', [$debut, $fin]);
+
+    return $this->estGerant
+        ? ($this->siteFiltre ? $q->where('site_id', $this->siteFiltre) : $q)
+        : $q->where('site_id', $this->monSite?->id ?? 0);
+});
+
+$kpis = computed(function () {
+    $encaisse = (int) (clone $this->encaissementsQ)->sum('montant');
+    $decaisse = (int) (clone $this->chargesQ)->sum('montant');
+    $facture = (int) (clone $this->facturesQ)->sum('montant');
+
+    return [
+        'encaisse' => $encaisse,
+        'decaisse' => $decaisse,
+        'net' => $encaisse - $decaisse,
+        'nonEncaisse' => max(0, $facture - $encaisse),
+    ];
+});
+
+$graphique = computed(function () {
+    [$debut, $fin] = $this->plage;
+    $points = PeriodeCalculateur::pointsHebdomadaires($debut, $fin);
+
+    $labels = [];
+    $entrees = [];
+    $sorties = [];
+
+    foreach ($points as $point) {
+        $labels[] = $point['label'];
+        $entrees[] = (int) (clone $this->encaissementsQ)->whereBetween('date', [$point['debut'], $point['fin']])->sum('montant');
+        $sorties[] = (int) (clone $this->chargesQ)->whereBetween('date', [$point['debut'], $point['fin']])->sum('montant');
+    }
+
+    return [
+        'labels' => $labels,
+        'datasets' => [
+            ['label' => 'Entrées', 'data' => $entrees, 'color' => '#0E9F6E'],
+            ['label' => 'Sorties', 'data' => $sorties, 'color' => '#C8102E'],
+        ],
+    ];
+});
+
+$detailEncaissements = computed(fn () => (clone $this->encaissementsQ)->with('site')->latest('date')->limit(30)->get());
+$detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->latest('date')->limit(30)->get());
+
+?>
+
+<div>
+    <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
+
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px;">
+        <x-kpi-card label="Encaissements" :value="ae($this->kpis['encaisse'])" couleur="#0E9F6E" />
+        <x-kpi-card label="Décaissements" :value="ae($this->kpis['decaisse'])" couleur="#C8102E" />
+        <x-kpi-card label="Trésorerie nette" :value="ae($this->kpis['net'])" :accent="$this->kpis['net'] < 0" :couleur="$this->kpis['net'] >= 0 ? '#0E9F6E' : '#C8102E'" />
+        <x-kpi-card label="Facturé non encaissé" :value="ae($this->kpis['nonEncaisse'])" sub="Créances clients" />
+    </div>
+
+    <div style="margin-bottom:20px;">
+        <x-chart-card titre="Entrées et sorties" id="treso-hebdo"
+            :labels="$this->graphique['labels']" :datasets="$this->graphique['datasets']" />
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+        <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+            <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Encaissements ({{ $this->detailEncaissements->count() }})</h3>
+            <div style="overflow-x:auto;">
+                <table style="border-collapse:collapse; width:100%; font-size:14px;">
+                    <thead>
+                        <tr style="text-align:left; border-bottom:2px solid var(--th-ink,#191B20);">
+                            <th style="padding:8px 10px;">Date</th>
+                            <th style="padding:8px 10px;">Type</th>
+                            <th style="padding:8px 10px;">Moyen</th>
+                            <th style="padding:8px 10px;">Montant</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($this->detailEncaissements as $ligne)
+                            <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                                <td style="padding:8px 10px;">{{ $ligne->date->format('d/m/Y') }}</td>
+                                <td style="padding:8px 10px;">{{ $ligne->type }}</td>
+                                <td style="padding:8px 10px;">{{ $ligne->moyen }}</td>
+                                <td style="padding:8px 10px; font-variant-numeric:tabular-nums; font-weight:700; color:#0E9F6E;">{{ ae($ligne->montant) }}</td>
+                            </tr>
+                        @empty
+                            <x-table-vide :colspan="4" texte="Aucun encaissement sur cette période." />
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+            <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Décaissements ({{ $this->detailDecaissements->count() }})</h3>
+            <div style="overflow-x:auto;">
+                <table style="border-collapse:collapse; width:100%; font-size:14px;">
+                    <thead>
+                        <tr style="text-align:left; border-bottom:2px solid var(--th-ink,#191B20);">
+                            <th style="padding:8px 10px;">Date</th>
+                            <th style="padding:8px 10px;">Libellé</th>
+                            <th style="padding:8px 10px;">Moyen</th>
+                            <th style="padding:8px 10px;">Montant</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($this->detailDecaissements as $ligne)
+                            <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                                <td style="padding:8px 10px;">{{ $ligne->date->format('d/m/Y') }}</td>
+                                <td style="padding:8px 10px;">{{ $ligne->libelle }}</td>
+                                <td style="padding:8px 10px;">{{ $ligne->moyen }}</td>
+                                <td style="padding:8px 10px; font-variant-numeric:tabular-nums; font-weight:700; color:#C8102E;">{{ ae($ligne->montant) }}</td>
+                            </tr>
+                        @empty
+                            <x-table-vide :colspan="4" texte="Aucun décaissement sur cette période." />
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

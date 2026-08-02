@@ -8,7 +8,7 @@ $activites = computed(fn () => \Spatie\Activitylog\Models\Activity::with('causer
 
 <x-a-venir titre="Journal d'audit" description="Connexions, créations et révocations d'accès, changements sensibles.">
         <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:13px;">
+            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
                 <thead>
                     <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
                         <th style="padding:8px 10px;">Date</th>

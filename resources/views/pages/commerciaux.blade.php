@@ -1,35 +1,128 @@
 <?php
 
-use function Livewire\Volt\{computed};
+use App\Domain\Operations\Models\Commercial;
+use App\Domain\Operations\Models\Facture;
+use App\Domain\Shared\Services\PeriodeCalculateur;
+use App\Domain\Tenants\Models\Site;
+use function Livewire\Volt\{state, computed};
 
-$commerciaux = computed(fn () => \App\Domain\Operations\Models\Commercial::actifs()->with('site')->get());
+state([
+    'periode' => 'semaine',
+    'dateDebut' => null,
+    'dateFin' => null,
+    'siteFiltre' => '',
+]);
+
+$estGerant = computed(fn () => auth()->user()->hasRole('gerant'));
+$monSite = computed(fn () => $this->estGerant ? null : Site::where('responsable_id', auth()->id())->first());
+$plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
+$sites = computed(fn () => $this->estGerant ? Site::where('entreprise_id', auth()->user()->entreprise_id)->orderBy('nom')->get() : null);
+
+$classement = computed(function () {
+    [$debut, $fin] = $this->plage;
+    $joursPeriode = max(1, $debut->diffInDays($fin) + 1);
+
+    $q = Commercial::actifs()->where('est_spontane', false)->with('site');
+
+    if ($this->estGerant) {
+        if ($this->siteFiltre) {
+            $q->where('site_id', $this->siteFiltre);
+        }
+    } else {
+        $q->where('site_id', $this->monSite?->id ?? 0);
+    }
+
+    return $q->get()->map(function ($commercial) use ($debut, $fin, $joursPeriode) {
+        $realisation = (int) Facture::where('commercial_id', $commercial->id)->whereBetween('date', [$debut, $fin])->sum('montant');
+        $objectifProrata = (int) round($commercial->objectif_mensuel / 30 * $joursPeriode);
+        $ecart = $realisation - $objectifProrata;
+
+        return [
+            'commercial' => $commercial,
+            'objectif' => $objectifProrata,
+            'realisation' => $realisation,
+            'ecart' => $ecart,
+            'taux' => $objectifProrata > 0 ? $realisation / $objectifProrata : null,
+        ];
+    })->sortByDesc(fn ($l) => $l['taux'] ?? -1)->values();
+});
+
+$kpis = computed(function () {
+    $objectifTotal = $this->classement->sum('objectif');
+    $realisationTotal = $this->classement->sum('realisation');
+
+    return [
+        'nombre' => $this->classement->count(),
+        'objectif' => $objectifTotal,
+        'realisation' => $realisationTotal,
+        'ecart' => $realisationTotal - $objectifTotal,
+        'taux' => $objectifTotal > 0 ? $realisationTotal / $objectifTotal : null,
+    ];
+});
+
+$graphique = computed(fn () => [
+    'labels' => $this->classement->pluck('commercial.nom')->all(),
+    'datasets' => [
+        ['label' => 'Objectif (prorata)', 'data' => $this->classement->pluck('objectif')->all(), 'color' => '#191B20'],
+        ['label' => 'Réalisation', 'data' => $this->classement->pluck('realisation')->all(), 'color' => '#C8102E'],
+    ],
+]);
 
 ?>
 
-<x-a-venir titre="Commerciaux"
-        description="Statistique globale (objectif vs réalisation, classement) et performance individuelle par commercial.">
+<div>
+    <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
+
+    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px;">
+        <x-kpi-card label="Commerciaux" :value="$this->kpis['nombre']" />
+        <x-kpi-card label="Objectif de la période" :value="ae($this->kpis['objectif'])" />
+        <x-kpi-card label="Réalisation totale" :value="ae($this->kpis['realisation'])" />
+        <x-kpi-card label="Écart global" :value="ae($this->kpis['ecart'])" :couleur="$this->kpis['ecart'] >= 0 ? '#0E9F6E' : '#C8102E'" />
+        <x-kpi-card label="Taux d'atteinte global" :value="an($this->kpis['taux'])" />
+    </div>
+
+    <div style="margin-bottom:20px;">
+        <x-chart-card titre="Objectif vs réalisation par commercial" id="commerciaux-objectif"
+            :labels="$this->graphique['labels']" :datasets="$this->graphique['datasets']" />
+    </div>
+
+    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:20px;">
+        <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Classement des commerciaux par performance</h3>
         <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:13px;">
+            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
                 <thead>
-                    <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
-                        <th style="padding:8px 10px;">N°</th>
-                        <th style="padding:8px 10px;">Commercial</th>
-                        <th style="padding:8px 10px;">Site</th>
-                        <th style="padding:8px 10px;">Activité</th>
-                        <th style="padding:8px 10px;">Objectif mensuel</th>
+                    <tr style="text-align:left; border-bottom:2px solid var(--th-ink,#191B20);">
+                        <th style="padding:9px 12px;">Rang</th>
+                        <th style="padding:9px 12px;">Commercial</th>
+                        @if ($this->estGerant && ! $siteFiltre)
+                            <th style="padding:9px 12px;">Site</th>
+                        @endif
+                        <th style="padding:9px 12px;">Activité</th>
+                        <th style="padding:9px 12px;">Objectif</th>
+                        <th style="padding:9px 12px;">Réalisation</th>
+                        <th style="padding:9px 12px;">Écart</th>
+                        <th style="padding:9px 12px;">Taux d'atteinte</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach ($this->commerciaux as $commercial)
-                        <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                            <td style="padding:8px 10px; font-weight:600;">{{ $commercial->numero }}</td>
-                            <td style="padding:8px 10px;">{{ $commercial->nom }}</td>
-                            <td style="padding:8px 10px;">{{ $commercial->site->nom }}</td>
-                            <td style="padding:8px 10px;">{{ $commercial->activite ?? '—' }}</td>
-                            <td style="padding:8px 10px; font-variant-numeric:tabular-nums;">{{ number_format($commercial->objectif_mensuel, 0, ',', ' ') }} F</td>
+                    @forelse ($this->classement as $i => $ligne)
+                        <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); {{ $i === 0 ? 'background:#FFFBEA;' : '' }}">
+                            <td style="padding:9px 12px; font-weight:800;">{{ $i + 1 }}</td>
+                            <td style="padding:9px 12px; font-weight:700;">{{ $ligne['commercial']->nom }}</td>
+                            @if ($this->estGerant && ! $siteFiltre)
+                                <td style="padding:9px 12px;">{{ $ligne['commercial']->site->nom }}</td>
+                            @endif
+                            <td style="padding:9px 12px;">{{ $ligne['commercial']->activite }}</td>
+                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums;">{{ ae($ligne['objectif']) }}</td>
+                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums;">{{ ae($ligne['realisation']) }}</td>
+                            <td style="padding:9px 12px; font-variant-numeric:tabular-nums; color:{{ $ligne['ecart'] >= 0 ? '#0E9F6E' : '#C8102E' }};">{{ ae($ligne['ecart']) }}</td>
+                            <td style="padding:9px 12px; font-weight:700; color:{{ ($ligne['taux'] ?? 0) >= 1 ? '#0E9F6E' : '#D97706' }};">{{ an($ligne['taux']) }}</td>
                         </tr>
-                    @endforeach
+                    @empty
+                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 8 : 7" texte="Aucun commercial actif pour ce filtre." />
+                    @endforelse
                 </tbody>
             </table>
         </div>
-    </x-a-venir>
+    </div>
+</div>

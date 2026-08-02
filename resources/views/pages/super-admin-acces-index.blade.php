@@ -11,11 +11,11 @@ $roles = computed(fn () => \App\Models\User::nomsRolesParUtilisateur($this->util
 <x-a-venir titre="Gestion des accès"
         description="Créer, révoquer et forcer la réinitialisation des accès de toute personne, toutes entreprises confondues.">
         <a href="{{ route('super-admin.acces.creer') }}" wire:navigate
-           style="display:inline-block; background:#C8102E; color:#fff; border-radius:8px; padding:9px 16px; font-weight:700; font-size:13px; text-decoration:none; margin-bottom:16px;">
+           style="display:inline-block; background:#C8102E; color:#fff; border-radius:8px; padding:9px 16px; font-weight:700; font-size:14.5px; text-decoration:none; margin-bottom:16px;">
             + Créer un accès
         </a>
         <div style="overflow-x:auto;">
-            <table style="border-collapse:collapse; width:100%; font-size:13px;">
+            <table style="border-collapse:collapse; width:100%; font-size:14.5px;">
                 <thead>
                     <tr style="text-align:left; border-bottom:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76;">
                         <th style="padding:8px 10px;">Utilisateur</th>
@@ -29,7 +29,7 @@ $roles = computed(fn () => \App\Models\User::nomsRolesParUtilisateur($this->util
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td style="padding:8px 10px;">
                                 <div style="font-weight:600;">{{ $utilisateur->name }}</div>
-                                <div style="color:#6B6E76; font-size:12px;">{{ $utilisateur->email }}</div>
+                                <div style="color:#6B6E76; font-size:13.5px;">{{ $utilisateur->email }}</div>
                             </td>
                             <td style="padding:8px 10px;">{{ $utilisateur->entreprise?->nom ?? '— Plateforme —' }}</td>
                             <td style="padding:8px 10px;">{{ $this->roles[$utilisateur->id] ?? '—' }}</td>
