@@ -25,10 +25,9 @@ class SuperAdminSeeder extends Seeder
             'entreprise_id' => self::EQUIPE_PLATEFORME,
         ]);
 
-        $superAdmin = User::create([
+        $superAdmin = User::firstOrCreate(['email' => 'superadmin@plateforme.local'], [
             'entreprise_id' => null,
             'name' => 'Super Admin',
-            'email' => 'superadmin@plateforme.local',
             'password' => 'password',
             'email_verified_at' => now(),
         ]);
