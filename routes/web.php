@@ -20,6 +20,8 @@ Route::middleware(['guest'])->group(function () {
 Route::middleware(['auth'])->group(function () {
     Route::get('/redirection', RedirectionController::class)->name('redirection');
 
+    Volt::route('/mon-compte/mot-de-passe', 'mot-de-passe')->name('mot-de-passe.modifier');
+
     // Espace entreprise (Gérant, Responsable de site, Commercial).
     Route::middleware(['role:gerant'])->group(function () {
         Volt::route('/tableau-de-bord', 'tableau-de-bord')->name('tableau-de-bord');
