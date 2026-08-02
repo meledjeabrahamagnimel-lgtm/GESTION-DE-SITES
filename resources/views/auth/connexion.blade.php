@@ -80,12 +80,13 @@
                        autocomplete="username" placeholder="vous@entreprise.ci" class="champ" style="margin-bottom:16px;">
 
                 <label for="password" class="champ-libelle">Mot de passe</label>
-                <div style="position:relative;">
+                <div class="champ-mot-de-passe">
                     <input id="password" name="password" type="password" required
-                           autocomplete="current-password" placeholder="••••••••" class="champ" style="padding-right:44px;">
-                    <button type="button" aria-label="Afficher le mot de passe"
-                            onclick="const c=document.getElementById('password'); c.type = c.type === 'password' ? 'text' : 'password'; this.textContent = c.type === 'password' ? '👁' : '🙈';"
-                            style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:transparent; border:0; cursor:pointer; color:var(--th-gris,#6B6E76); font-size:15px; padding:4px; line-height:1;">👁</button>
+                           autocomplete="current-password" placeholder="••••••••" class="champ">
+                    <button type="button" tabindex="-1" aria-label="Afficher ou masquer le mot de passe"
+                            onclick="const i=this.previousElementSibling; const v=i.type==='password'; i.type=v?'text':'password'; this.firstElementChild.textContent=v?'🙈':'👁';">
+                        <span>👁</span>
+                    </button>
                 </div>
 
                 <div style="display:flex; align-items:center; justify-content:space-between; margin:16px 0 20px; font-size:13.5px; gap:10px; flex-wrap:wrap;">

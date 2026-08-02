@@ -45,18 +45,33 @@ $modifier = function () {
 
         <form wire:submit="modifier">
             <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin-bottom:6px;">Mot de passe actuel</label>
-            <input type="password" wire:model="motDePasseActuel"
-                style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px; margin-bottom:4px;">
+            <div class="champ-mot-de-passe">
+                <input type="password" wire:model="motDePasseActuel" class="champ">
+                <button type="button" tabindex="-1" aria-label="Afficher ou masquer le mot de passe"
+                    onclick="const i=this.previousElementSibling; const v=i.type==='password'; i.type=v?'text':'password'; this.firstElementChild.textContent=v?'🙈':'👁';">
+                    <span>👁</span>
+                </button>
+            </div>
             @error('motDePasseActuel') <div style="color:#C8102E; font-size:13.5px; margin-bottom:8px;">{{ $message }}</div> @enderror
 
             <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Nouveau mot de passe</label>
-            <input type="password" wire:model="nouveauMotDePasse"
-                style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px; margin-bottom:4px;">
+            <div class="champ-mot-de-passe">
+                <input type="password" wire:model="nouveauMotDePasse" class="champ">
+                <button type="button" tabindex="-1" aria-label="Afficher ou masquer le mot de passe"
+                    onclick="const i=this.previousElementSibling; const v=i.type==='password'; i.type=v?'text':'password'; this.firstElementChild.textContent=v?'🙈':'👁';">
+                    <span>👁</span>
+                </button>
+            </div>
             @error('nouveauMotDePasse') <div style="color:#C8102E; font-size:13.5px; margin-bottom:8px;">{{ $message }}</div> @enderror
 
             <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Confirmer le nouveau mot de passe</label>
-            <input type="password" wire:model="nouveauMotDePasse_confirmation"
-                style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
+            <div class="champ-mot-de-passe">
+                <input type="password" wire:model="nouveauMotDePasse_confirmation" class="champ">
+                <button type="button" tabindex="-1" aria-label="Afficher ou masquer le mot de passe"
+                    onclick="const i=this.previousElementSibling; const v=i.type==='password'; i.type=v?'text':'password'; this.firstElementChild.textContent=v?'🙈':'👁';">
+                    <span>👁</span>
+                </button>
+            </div>
 
             <button type="submit" wire:loading.attr="disabled"
                 class="bouton">
