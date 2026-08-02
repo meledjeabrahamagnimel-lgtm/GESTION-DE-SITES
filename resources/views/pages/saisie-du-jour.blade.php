@@ -9,6 +9,7 @@ use App\Domain\Operations\Models\Prospection;
 use App\Domain\Operations\Models\SaisieJournaliere;
 use App\Domain\Operations\Services\GenerateurNumero;
 use App\Domain\Tenants\Models\Site;
+use Illuminate\Validation\Rule;
 use function Livewire\Volt\{state, computed, mount};
 
 state([
@@ -193,17 +194,17 @@ $basculerEditionCommercial = function (int $id) {
     }
 
     $this->editionCommercialId = $id;
-    $this->editionNom = Commercial::findOrFail($id)->nom;
+    $this->editionNom = Commercial::where('site_id', $this->site->id)->findOrFail($id)->nom;
 };
 
 $enregistrerEditionCommercial = function (int $id) {
     $donnees = $this->validate(['editionNom' => ['required', 'string', 'max:255']], [], ['editionNom' => 'nom et prénoms']);
-    Commercial::where('id', $id)->update(['nom' => $donnees['editionNom']]);
+    Commercial::where('site_id', $this->site->id)->where('id', $id)->update(['nom' => $donnees['editionNom']]);
     $this->editionCommercialId = null;
 };
 
 $basculerStatutCommercial = function (int $id) {
-    $commercial = Commercial::findOrFail($id);
+    $commercial = Commercial::where('site_id', $this->site->id)->findOrFail($id);
     $commercial->update(['statut' => $commercial->statut === 'Actif' ? 'Inactif' : 'Actif']);
 };
 
@@ -214,7 +215,7 @@ $ajouterProspection = function () {
         'prosClient' => ['required', 'string', 'max:255'],
         'prosLocalisation' => ['nullable', 'string', 'max:255'],
         'prosMoyen' => ['required', 'in:RDV,Téléphone,Mail'],
-        'prosCommercialId' => ['required', 'exists:commerciaux,id'],
+        'prosCommercialId' => ['required', Rule::exists('commerciaux', 'id')->where('site_id', $this->site->id)],
         'prosActivite' => ['required', 'in:Mécanique,Carrosserie'],
         'prosObs' => ['nullable', 'string'],
     ], [], ['prosClient' => 'clients visités', 'prosCommercialId' => 'commercial', 'prosActivite' => 'activité']);
@@ -248,7 +249,7 @@ $genererBrouillonsDevis = function () {
         return;
     }
 
-    $this->devisBrouillon = Prospection::whereIn('id', $ids)->get()->map(fn ($p) => [
+    $this->devisBrouillon = Prospection::where('site_id', $this->site->id)->whereIn('id', $ids)->get()->map(fn ($p) => [
         'prospection_id' => $p->id,
         'date_reception' => now()->toDateString(),
         'n_fiche_reception' => '',
@@ -270,8 +271,17 @@ $annulerBrouillonsDevis = function () {
 };
 
 $validerDevis = function () {
+    // Défense en profondeur : le brouillon est un tableau lié côté client, on revérifie
+    // que chaque commercial/prospection référencé appartient bien au site du Responsable.
+    $commerciauxDuSite = Commercial::where('site_id', $this->site->id)->pluck('id');
+    $prospectionsDuSite = Prospection::where('site_id', $this->site->id)->pluck('id');
+
     foreach ($this->devisBrouillon as $ligne) {
         if (empty($ligne['montant_devis']) || ! is_numeric($ligne['montant_devis'])) {
+            continue;
+        }
+
+        if (! $commerciauxDuSite->contains($ligne['commercial_id']) || ! $prospectionsDuSite->contains($ligne['prospection_id'])) {
             continue;
         }
 
@@ -302,7 +312,7 @@ $changerStatutDevis = function (int $id, string $statut) {
         return;
     }
 
-    $devis = Devis::findOrFail($id);
+    $devis = Devis::where('site_id', $this->site->id)->findOrFail($id);
     $devis->update([
         'statut' => $statut,
         'montant_valide' => $statut === 'Validé' ? $devis->montant_valide : null,
@@ -310,7 +320,7 @@ $changerStatutDevis = function (int $id, string $statut) {
 };
 
 $changerMontantValide = function (int $id, $valeur) {
-    $devis = Devis::findOrFail($id);
+    $devis = Devis::where('site_id', $this->site->id)->findOrFail($id);
     if ($devis->statut !== 'Validé') {
         return;
     }
@@ -326,7 +336,7 @@ $genererBrouillonsFactures = function () {
         return;
     }
 
-    $this->factureBrouillon = Devis::whereIn('id', $ids)->get()->map(fn ($d) => [
+    $this->factureBrouillon = Devis::where('site_id', $this->site->id)->whereIn('id', $ids)->get()->map(fn ($d) => [
         'devis_id' => $d->id,
         'commercial_id' => $d->commercial_id,
         'client' => $d->client,
@@ -345,8 +355,17 @@ $annulerBrouillonsFactures = function () {
 };
 
 $validerFactures = function () {
+    // Défense en profondeur : le brouillon est un tableau lié côté client, on revérifie
+    // que chaque commercial/devis référencé appartient bien au site du Responsable.
+    $commerciauxDuSite = Commercial::where('site_id', $this->site->id)->pluck('id');
+    $devisDuSite = Devis::where('site_id', $this->site->id)->pluck('id');
+
     foreach ($this->factureBrouillon as $ligne) {
         if (empty($ligne['n_facture']) || empty($ligne['montant']) || ! is_numeric($ligne['montant'])) {
+            continue;
+        }
+
+        if (! $commerciauxDuSite->contains($ligne['commercial_id']) || ! $devisDuSite->contains($ligne['devis_id'])) {
             continue;
         }
 
