@@ -19,6 +19,13 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
 {
     public function run(): void
     {
+        // Réexécution sur une base déjà peuplée : on ne recrée rien.
+        if (Entreprise::where('slug', 'artisan-automobile')->exists()) {
+            $this->command?->warn("L'entreprise pilote existe déjà — étape ignorée.");
+
+            return;
+        }
+
         // Logo servi depuis public/logos : versionné, donc disponible en production
         // sans dépendre du lien symbolique public/storage.
         $cheminLogo = 'public:logos/artisan-automobile.png';

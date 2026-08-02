@@ -50,6 +50,14 @@ class DonneesOperationnellesSeeder extends Seeder
             return;
         }
 
+        // Les écritures sont générées une seule fois : sans ce garde-fou, une seconde
+        // exécution doublerait tous les montants et fausserait les indicateurs.
+        if (Prospection::where('entreprise_id', $entreprise->id)->exists()) {
+            $this->command?->warn('Des écritures existent déjà — génération ignorée.');
+
+            return;
+        }
+
         $debut = Carbon::now()->subDays(self::JOURS_HISTORIQUE);
         $sites = Site::where('entreprise_id', $entreprise->id)->get();
 
