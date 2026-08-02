@@ -3,9 +3,12 @@
 use App\Domain\Tenants\Actions\CreerAcces;
 use App\Domain\Tenants\Models\Entreprise;
 use App\Domain\Tenants\Models\Site;
+use App\Domain\Tenants\Services\EnregistreurLogo;
 use App\Models\User;
 use Illuminate\Validation\Rule;
-use function Livewire\Volt\{state, computed, mount};
+use function Livewire\Volt\{state, computed, mount, usesFileUploads};
+
+usesFileUploads();
 
 state([
     'onglet' => 'entreprise',
@@ -17,6 +20,7 @@ state([
     'ncc' => '', 'regimeImposition' => '', 'centreImpots' => '', 'compteContribuable' => '',
     'idu' => '', 'commune' => '', 'quartier' => '', 'referenceCadastrale' => '', 'proprietaireLocal' => '',
     'codeEntreprise' => '',
+    'logo' => null,
 
     // Mon compte
     'monNom' => '', 'monEmail' => '', 'monTelephone' => '',
@@ -70,7 +74,7 @@ mount(function () {
     $this->persSiteId = $this->sites->first()->id ?? '';
 });
 
-$enregistrerEntreprise = function () {
+$enregistrerEntreprise = function (EnregistreurLogo $enregistreurLogo) {
     $donnees = $this->validate([
         'nom' => ['required', 'string', 'max:255'],
         'gerantNom' => ['nullable', 'string', 'max:255'],
@@ -90,6 +94,7 @@ $enregistrerEntreprise = function () {
         'quartier' => ['nullable', 'string', 'max:255'],
         'referenceCadastrale' => ['nullable', 'string', 'max:255'],
         'proprietaireLocal' => ['nullable', 'string', 'max:255'],
+        'logo' => EnregistreurLogo::REGLES,
     ]);
 
     $this->entreprise->update([
@@ -112,6 +117,13 @@ $enregistrerEntreprise = function () {
         'reference_cadastrale' => $donnees['referenceCadastrale'],
         'proprietaire_local' => $donnees['proprietaireLocal'],
     ]);
+
+    if ($this->logo) {
+        $this->entreprise->update([
+            'logo_chemin' => $enregistreurLogo->enregistrer($this->logo, $this->entreprise),
+        ]);
+        $this->reset('logo');
+    }
 
     unset($this->entreprise);
     $this->message = 'Fiche entreprise enregistrée.';
@@ -245,6 +257,27 @@ $ajouterPersonnel = function (CreerAcces $action) {
                     <x-champ label="Téléphone" model="telephone" />
                     <x-champ label="E-mail" model="email" type="email" />
                     <x-champ label="RCCM" model="rccm" />
+                </div>
+
+                <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--th-ligne,#E2E0D8);">
+                    <label class="champ-libelle">Logo principal de l'entreprise</label>
+                    <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+                        @if ($this->entreprise?->logoUrl())
+                            <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; padding:8px 14px;">
+                                <img src="{{ $this->entreprise->logoUrl() }}" alt="Logo actuel" style="height:46px; display:block;">
+                            </div>
+                            <span style="font-size:12.5px; color:var(--th-gris,#6B6E76);">Logo actuel</span>
+                        @endif
+                        <input type="file" wire:model="logo" accept="image/png,image/jpeg,image/webp" class="champ" style="max-width:320px;">
+                        <div wire:loading wire:target="logo" style="font-size:13px; color:var(--th-gris,#6B6E76);">Chargement…</div>
+                        @if ($logo)
+                            <div style="background:#fff; border:1px solid var(--th-accent,#C8102E); border-radius:8px; padding:8px 14px;">
+                                <img src="{{ $logo->temporaryUrl() }}" alt="Nouveau logo" style="height:46px; display:block;">
+                            </div>
+                            <span style="font-size:12.5px; color:var(--th-accent,#C8102E); font-weight:600;">Nouveau — enregistrez pour appliquer</span>
+                        @endif
+                    </div>
+                    @error('logo') <span class="champ-erreur">{{ $message }}</span> @enderror
                 </div>
             </x-carte-section>
 
