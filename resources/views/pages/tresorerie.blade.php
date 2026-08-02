@@ -98,7 +98,7 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
 <div>
     <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
 
-    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="Encaissements" :value="ae($this->kpis['encaisse'])" couleur="#0E9F6E" />
         <x-kpi-card label="Décaissements" :value="ae($this->kpis['decaisse'])" couleur="#C8102E" />
         <x-kpi-card label="Trésorerie nette" :value="ae($this->kpis['net'])" :accent="$this->kpis['net'] < 0" :couleur="$this->kpis['net'] >= 0 ? '#0E9F6E' : '#C8102E'" />

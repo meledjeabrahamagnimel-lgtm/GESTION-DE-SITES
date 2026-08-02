@@ -24,6 +24,7 @@ class MenuNavigation
         if ($utilisateur->hasRole('commercial')) {
             return self::construire([
                 ['label' => 'Ma performance individuelle', 'route' => 'ma-performance'],
+                ['label' => 'Mes prospections', 'route' => 'mes-prospections'],
             ]);
         }
 

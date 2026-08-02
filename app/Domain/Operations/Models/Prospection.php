@@ -15,7 +15,7 @@ use Spatie\Activitylog\Traits\LogsActivity;
 #[Fillable([
     'entreprise_id', 'site_id', 'commercial_id', 'numero', 'date', 'client',
     'localisation', 'moyen', 'activite', 'passage', 'devis_apres_passage',
-    'observations', 'cree_par',
+    'observations', 'cree_par', 'statut_validation', 'motif_refus', 'transmise_le',
 ])]
 class Prospection extends Model
 {
@@ -27,6 +27,7 @@ class Prospection extends Model
             'date' => 'date',
             'passage' => 'boolean',
             'devis_apres_passage' => 'boolean',
+            'transmise_le' => 'datetime',
         ];
     }
 
@@ -43,6 +44,18 @@ class Prospection extends Model
     public function devis(): HasOne
     {
         return $this->hasOne(Devis::class);
+    }
+
+    /** Prospections visibles dans les consultations : les brouillons en sont exclus. */
+    public function scopeVisibles($query)
+    {
+        return $query->whereIn('statut_validation', ['Transmise', 'Validée']);
+    }
+
+    /** En attente de l'arbitrage du responsable de site. */
+    public function scopeATraiter($query)
+    {
+        return $query->where('statut_validation', 'Transmise');
     }
 
     public function getActivitylogOptions(): LogOptions

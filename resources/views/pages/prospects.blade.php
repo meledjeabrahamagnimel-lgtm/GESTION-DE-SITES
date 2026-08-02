@@ -25,7 +25,7 @@ $sites = computed(fn () => $this->estGerant ? Site::where('entreprise_id', auth(
 
 $requeteBase = computed(function () {
     [$debut, $fin] = $this->plage;
-    $q = Prospection::query()->whereBetween('date', [$debut, $fin]);
+    $q = Prospection::query()->visibles()->whereBetween('date', [$debut, $fin]);
 
     if ($this->estGerant) {
         if ($this->siteFiltre) {
@@ -102,7 +102,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
 <div>
     <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
 
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="Clients visités" :value="$this->kpis['clients']" />
         <x-kpi-card label="Passages sur site" :value="$this->kpis['passages']" />
         <x-kpi-card label="Devis après passage" :value="$this->kpis['devisApres']" />

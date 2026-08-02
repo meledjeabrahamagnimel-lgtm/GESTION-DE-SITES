@@ -85,7 +85,7 @@ $graphique = computed(fn () => [
 <div>
     <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
 
-    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="Commerciaux" :value="$this->kpis['nombre']" />
         <x-kpi-card label="Objectif de la période" :value="ae($this->kpis['objectif'])" />
         <x-kpi-card label="Réalisation totale" :value="ae($this->kpis['realisation'])" />
