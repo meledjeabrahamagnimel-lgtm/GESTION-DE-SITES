@@ -8,9 +8,13 @@ use App\Domain\Operations\Models\Facture;
 use App\Domain\Operations\Models\Prospection;
 use App\Domain\Operations\Models\SaisieJournaliere;
 use App\Domain\Operations\Services\GenerateurNumero;
+use App\Domain\Shared\Concerns\GereLesDonneesLibres;
+use App\Domain\Shared\Models\Referentiel;
 use App\Domain\Tenants\Models\Site;
 use Illuminate\Validation\Rule;
-use function Livewire\Volt\{state, computed, mount};
+use function Livewire\Volt\{state, computed, mount, uses};
+
+uses([GereLesDonneesLibres::class]);
 
 state([
     'date' => null,
@@ -126,7 +130,7 @@ $dateLabel = computed(function () {
     return $jours[$d->dayOfWeek].' '.$d->format('d').' '.$mois[$d->month - 1].' '.$d->format('Y');
 });
 
-$commerciaux = computed(fn () => Commercial::where('site_id', $this->site?->id ?? 0)->orderBy('numero')->get());
+$commerciaux = computed(fn () => Commercial::where('site_id', $this->site?->id ?? 0)->with('donneesLibres')->orderBy('numero')->get());
 
 $commerciauxSelectables = computed(fn () => Commercial::where('site_id', $this->site?->id ?? 0)->where('statut', 'Actif')->orderBy('numero')->pluck('nom', 'id'));
 
@@ -151,7 +155,7 @@ $validerToutesProspections = function () {
     unset($this->prospectionsATraiter, $this->prospectionsDuJour);
 };
 
-$prospectionsDuJour = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->visibles()->where('date', $this->date)->with('commercial')->orderByDesc('id')->get());
+$prospectionsDuJour = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->visibles()->where('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
 
 $prospectionsAttenteDevis = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->where('statut_validation', 'Validée')->where('devis_apres_passage', true)->doesntHave('devis')->with('commercial')->orderBy('date')->limit(12)->get());
 
@@ -161,11 +165,11 @@ $devisEnAttente = computed(fn () => Devis::where('site_id', $this->site?->id ?? 
 
 $devisValidesNonFactures = computed(fn () => Devis::where('site_id', $this->site?->id ?? 0)->where('statut', 'Validé')->doesntHave('facture')->with('commercial')->orderBy('date_emission')->limit(12)->get());
 
-$facturesDuJour = computed(fn () => Facture::where('site_id', $this->site?->id ?? 0)->where('date', $this->date)->with('commercial')->orderByDesc('id')->get());
+$facturesDuJour = computed(fn () => Facture::where('site_id', $this->site?->id ?? 0)->where('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
 
-$encaissementsDuJour = computed(fn () => Encaissement::where('site_id', $this->site?->id ?? 0)->where('date', $this->date)->orderByDesc('id')->get());
+$encaissementsDuJour = computed(fn () => Encaissement::where('site_id', $this->site?->id ?? 0)->where('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
 
-$chargesDuJour = computed(fn () => Charge::where('site_id', $this->site?->id ?? 0)->where('date', $this->date)->orderByDesc('id')->get());
+$chargesDuJour = computed(fn () => Charge::where('site_id', $this->site?->id ?? 0)->where('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
 
 $statistiquesCommerciaux = computed(fn () => Commercial::where('site_id', $this->site?->id ?? 0)->where('est_spontane', false)->with('site')->orderBy('numero')->get());
 
@@ -175,11 +179,22 @@ $clientsConnus = computed(function () {
         ->unique()->values()->take(40);
 });
 
+$optionsActivite = computed(fn () => Referentiel::options(Referentiel::ACTIVITE));
+
+$optionsMoyenProspection = computed(fn () => Referentiel::options(Referentiel::MOYEN_PROSPECTION));
+
+$optionsMoyenPaiement = computed(fn () => Referentiel::options(Referentiel::MOYEN_PAIEMENT));
+
+$optionsTypeEncaissement = computed(fn () => Referentiel::options(Referentiel::TYPE_ENCAISSEMENT));
+
 $libellesOperation = computed(function () {
-    $charges = ['Achats pièces', 'Salaires & personnel', 'Fonctionnement', 'Autres décaissements'];
+    // Les libellés de charge sont enrichissables par l'entreprise ; les deux libellés de
+    // décaissement restent figés car ils pilotent le calcul du résultat.
     $decaissements = ['Transfert de trésorerie vers un autre site', 'Décaissements DG'];
 
-    return $this->chgTypeOp === 'Charges' ? $charges : $decaissements;
+    return $this->chgTypeOp === 'Charges'
+        ? array_values(Referentiel::options(Referentiel::LIBELLE_CHARGE))
+        : $decaissements;
 });
 
 $updatedChgTypeOp = function () {
@@ -191,7 +206,7 @@ $updatedChgTypeOp = function () {
 $ajouterCommercial = function () {
     $donnees = $this->validate([
         'comNom' => ['required', 'string', 'max:255'],
-        'comActivite' => ['required', 'in:Mécanique,Carrosserie'],
+        'comActivite' => ['required', Rule::in(array_keys($this->optionsActivite))],
         'comObjectif' => ['nullable', 'numeric', 'min:0'],
     ], [], ['comNom' => 'nom et prénoms', 'comActivite' => 'activité', 'comObjectif' => 'objectif mensuel']);
 
@@ -237,9 +252,9 @@ $ajouterProspection = function () {
     $donnees = $this->validate([
         'prosClient' => ['required', 'string', 'max:255'],
         'prosLocalisation' => ['nullable', 'string', 'max:255'],
-        'prosMoyen' => ['required', 'in:RDV,Téléphone,Mail'],
+        'prosMoyen' => ['required', Rule::in(array_keys($this->optionsMoyenProspection))],
         'prosCommercialId' => ['required', Rule::exists('commerciaux', 'id')->where('site_id', $this->site->id)],
-        'prosActivite' => ['required', 'in:Mécanique,Carrosserie'],
+        'prosActivite' => ['required', Rule::in(array_keys($this->optionsActivite))],
         'prosObs' => ['nullable', 'string'],
     ], [], ['prosClient' => 'clients visités', 'prosCommercialId' => 'commercial', 'prosActivite' => 'activité']);
 
@@ -416,8 +431,8 @@ $validerFactures = function () {
 
 $ajouterEncaissement = function () {
     $donnees = $this->validate([
-        'encType' => ['required', 'in:Client,Appro,Autres'],
-        'encMoyen' => ['required', 'in:Espèces,Mobile Money,Chèque,Virement,Autres'],
+        'encType' => ['required', Rule::in(array_keys($this->optionsTypeEncaissement))],
+        'encMoyen' => ['required', Rule::in(array_keys($this->optionsMoyenPaiement))],
         'encMontant' => ['required', 'numeric', 'min:1'],
         'encClient' => ['nullable', 'string', 'max:255'],
         'encTiers' => ['nullable', 'string', 'max:255'],
@@ -447,7 +462,7 @@ $ajouterCharge = function () {
         'chgDate' => ['required', 'date'],
         'chgTypeOp' => ['required', 'in:Charges,Décaissements'],
         'chgLibelle' => ['required', 'string'],
-        'chgMoyen' => ['required', 'in:Espèces,Mobile Money,Chèque,Virement,Autres'],
+        'chgMoyen' => ['required', Rule::in(array_keys($this->optionsMoyenPaiement))],
         'chgMontant' => ['required', 'numeric', 'min:1'],
         'chgTiers' => ['nullable', 'string', 'max:255'],
         'chgObs' => ['nullable', 'string'],
@@ -490,14 +505,13 @@ $ajouterCharge = function () {
                 <p style="color:#6B6E76; font-size:14px; margin:0;">Chaque ligne est enregistrée immédiatement à l'ajout et alimente les tableaux de bord en temps réel.</p>
             </div>
             <div style="display:flex; flex-direction:column; gap:4px;">
-                <label style="font-size:12.5px; font-weight:600; color:#4B4E55;">Date de la journée (calendrier)</label>
-                <input type="date" wire:model.live="date"
-                    style="padding:8px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14.5px;">
-                <span style="font-size:12.5px; color:#6B6E76;">Rattachement automatique : <b>{{ $this->dateLabel }}</b></span>
+                <label class="champ-libelle">Date de la journée (calendrier)</label>
+                <input type="date" wire:model.live="date" class="champ" style="width:158px;">
+                <span style="font-size:11.5px; color:var(--th-gris,#6B6E76);">Rattachement : <b>{{ $this->dateLabel }}</b></span>
             </div>
         </div>
 
-        <x-carte-section titre="Flux commercial">
+        <x-carte-section titre="Flux commercial" icone="commercial" couleur="var(--th-ink,#191B20)">
             <x-sous-titre n="1" t="Liste des commerciaux" />
             <div class="tableau-conteneur">
                 <table class="tableau">
@@ -508,6 +522,7 @@ $ajouterCharge = function () {
                             <th>Activité</th>
                             <th>Objectif mensuel</th>
                             <th>Statut</th>
+                            <th>Informations libres</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -534,6 +549,10 @@ $ajouterCharge = function () {
                                         </button>
                                     @endif
                                 </td>
+                                <td style="white-space:normal; min-width:220px;">
+                                    <x-saisie-libre :sujet="$commercial"
+                                        :ouvert="$libreSujetId === $commercial->id && $libreSujetType === get_class($commercial)" />
+                                </td>
                                 <td style="text-align:right;">
                                     @unless ($commercial->est_spontane)
                                         @if ($editionCommercialId === $commercial->id)
@@ -547,7 +566,7 @@ $ajouterCharge = function () {
                                 </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="6" texte="Aucun commercial rattaché à ce site." />
+                            <x-table-vide :colspan="7" texte="Aucun commercial rattaché à ce site." />
                         @endforelse
                     </tbody>
                 </table>
@@ -555,7 +574,7 @@ $ajouterCharge = function () {
 
             <div class="bloc-saisie">
                 <x-champ label="Nom et prénoms" model="comNom" />
-                <x-champ label="Activité" model="comActivite" type="select" :options="['Mécanique' => 'Mécanique', 'Carrosserie' => 'Carrosserie']" width="150" />
+                <x-champ label="Activité" model="comActivite" type="select" :options="$this->optionsActivite" width="150" />
                 <x-champ label="Objectif mensuel (FCFA)" model="comObjectif" type="number" width="150" />
                 <button type="button" wire:click="ajouterCommercial"
                     class="bouton bouton-sombre">
@@ -625,6 +644,7 @@ $ajouterCharge = function () {
                             <th>Passage</th>
                             <th>Devis après passage</th>
                             <th>Observations</th>
+                            <th>Informations libres</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -639,9 +659,13 @@ $ajouterCharge = function () {
                                 <td>{{ $p->passage ? '☑' : '☐' }}</td>
                                 <td>{{ $p->devis_apres_passage ? '☑' : '☐' }}</td>
                                 <td style="color:#6B6E76;">{{ $p->observations ?? '—' }}</td>
+                                <td style="white-space:normal; min-width:220px;">
+                                    <x-saisie-libre :sujet="$p"
+                                        :ouvert="$libreSujetId === $p->id && $libreSujetType === get_class($p)" />
+                                </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="9" texte="Aucune prospection saisie pour cette journée." />
+                            <x-table-vide :colspan="10" texte="Aucune prospection saisie pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>
@@ -650,9 +674,9 @@ $ajouterCharge = function () {
             <div class="bloc-saisie">
                 <x-champ label="Clients visités" model="prosClient" />
                 <x-champ label="Localisation" model="prosLocalisation" width="130" />
-                <x-champ label="Moyens" model="prosMoyen" type="select" :options="['RDV' => 'RDV', 'Téléphone' => 'Téléphone', 'Mail' => 'Mail']" width="130" />
+                <x-champ label="Moyens" model="prosMoyen" type="select" :options="$this->optionsMoyenProspection" width="130" />
                 <x-champ label="Commercial" model="prosCommercialId" type="select" :options="$this->commerciauxSelectables" width="170" />
-                <x-champ label="Activité" model="prosActivite" type="select" :options="['Mécanique' => 'Mécanique', 'Carrosserie' => 'Carrosserie']" width="140" />
+                <x-champ label="Activité" model="prosActivite" type="select" :options="$this->optionsActivite" width="140" />
                 <x-champ label="Passage" model="prosPassage" type="checkbox" />
                 <x-champ label="Devis après passage" model="prosDevisApres" type="checkbox" />
                 <x-champ label="Observations" model="prosObs" />
@@ -868,7 +892,7 @@ $ajouterCharge = function () {
             </div>
         </x-carte-section>
 
-        <x-carte-section titre="Chiffre d'affaires facturé">
+        <x-carte-section titre="Chiffre d'affaires facturé" icone="facture" couleur="var(--th-vert,#0E9F6E)">
             @if ($this->devisValidesNonFactures->isNotEmpty())
                 <div style="width:100%;">
                     <p style="font-size:12.5px; font-weight:700; color:#D97706; margin:0 0 6px;">
@@ -946,6 +970,7 @@ $ajouterCharge = function () {
                             <th>Activité</th>
                             <th>Montant de la facture</th>
                             <th>Observations</th>
+                            <th>Informations libres</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -959,9 +984,13 @@ $ajouterCharge = function () {
                                 <td>{{ $f->activite }}</td>
                                 <td style="font-weight:700;">{{ ae($f->montant) }}</td>
                                 <td style="color:#6B6E76;">{{ $f->observations ?? '—' }}</td>
+                                <td style="white-space:normal; min-width:220px;">
+                                    <x-saisie-libre :sujet="$f"
+                                        :ouvert="$libreSujetId === $f->id && $libreSujetType === get_class($f)" />
+                                </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="8" texte="Aucune facture émise pour cette journée." />
+                            <x-table-vide :colspan="9" texte="Aucune facture émise pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>
@@ -975,7 +1004,7 @@ $ajouterCharge = function () {
             </div>
         </x-carte-section>
 
-        <x-carte-section titre="Encaissements du jour">
+        <x-carte-section titre="Encaissements du jour" icone="encaissement" couleur="var(--th-bleu,#2563EB)">
             <div class="tableau-conteneur">
                 <table class="tableau">
                     <thead>
@@ -985,6 +1014,7 @@ $ajouterCharge = function () {
                             <th>Montant</th>
                             <th>Clients</th>
                             <th>Autres tiers</th>
+                            <th>Informations libres</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -995,17 +1025,21 @@ $ajouterCharge = function () {
                                 <td style="font-weight:700; color:#0E9F6E;">{{ ae($e->montant) }}</td>
                                 <td>{{ $e->client ?? '—' }}</td>
                                 <td>{{ $e->autres_tiers ?? '—' }}</td>
+                                <td style="white-space:normal; min-width:220px;">
+                                    <x-saisie-libre :sujet="$e"
+                                        :ouvert="$libreSujetId === $e->id && $libreSujetType === get_class($e)" />
+                                </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="5" texte="Aucun encaissement saisi pour cette journée." />
+                            <x-table-vide :colspan="6" texte="Aucun encaissement saisi pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>
             </div>
 
             <div class="bloc-saisie">
-                <x-champ label="Type d'encaissement" model="encType" type="select" :options="['Client' => 'Client', 'Appro' => 'Appro', 'Autres' => 'Autres']" width="140" />
-                <x-champ label="Moyens" model="encMoyen" type="select" :options="['Espèces' => 'Espèces', 'Mobile Money' => 'Mobile Money', 'Chèque' => 'Chèque', 'Virement' => 'Virement', 'Autres' => 'Autres']" width="150" />
+                <x-champ label="Type d'encaissement" model="encType" type="select" :options="$this->optionsTypeEncaissement" width="140" />
+                <x-champ label="Moyens" model="encMoyen" type="select" :options="$this->optionsMoyenPaiement" width="150" />
                 <x-champ label="Montant (FCFA)" model="encMontant" type="number" width="140" />
                 <div style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:160px;">
                     <label style="font-size:12.5px; font-weight:600; color:#4B4E55;">Clients</label>
@@ -1032,7 +1066,7 @@ $ajouterCharge = function () {
             </div>
         </x-carte-section>
 
-        <x-carte-section titre="Charges & décaissements du jour">
+        <x-carte-section titre="Charges &amp; décaissements du jour" icone="charge" couleur="var(--th-accent,#C8102E)">
             <div class="tableau-conteneur">
                 <table class="tableau">
                     <thead>
@@ -1044,6 +1078,7 @@ $ajouterCharge = function () {
                             <th>Montant</th>
                             <th>Tiers</th>
                             <th>Observations</th>
+                            <th>Informations libres</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1056,9 +1091,13 @@ $ajouterCharge = function () {
                                 <td style="font-weight:700; color:#C8102E;">{{ ae($c->montant) }}</td>
                                 <td>{{ $c->tiers ?? '—' }}</td>
                                 <td style="color:#6B6E76;">{{ $c->observations ?? '—' }}</td>
+                                <td style="white-space:normal; min-width:220px;">
+                                    <x-saisie-libre :sujet="$c"
+                                        :ouvert="$libreSujetId === $c->id && $libreSujetType === get_class($c)" />
+                                </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="7" texte="Aucune charge ni décaissement saisi pour cette journée." />
+                            <x-table-vide :colspan="8" texte="Aucune charge ni décaissement saisi pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>
@@ -1068,7 +1107,7 @@ $ajouterCharge = function () {
                 <x-champ label="Date" model="chgDate" type="date" width="140" />
                 <x-champ label="Type d'opération" model="chgTypeOp" type="select" :options="['Charges' => 'Charges', 'Décaissements' => 'Décaissements']" width="150" live="true" />
                 <x-champ label="Libellé d'opération" model="chgLibelle" type="select" :options="array_combine($this->libellesOperation, $this->libellesOperation)" width="220" />
-                <x-champ label="Moyens" model="chgMoyen" type="select" :options="['Espèces' => 'Espèces', 'Mobile Money' => 'Mobile Money', 'Chèque' => 'Chèque', 'Virement' => 'Virement', 'Autres' => 'Autres']" width="150" />
+                <x-champ label="Moyens" model="chgMoyen" type="select" :options="$this->optionsMoyenPaiement" width="150" />
                 <x-champ label="Montant (FCFA)" model="chgMontant" type="number" width="140" />
                 <x-champ label="Tiers" model="chgTiers" width="160" />
                 <x-champ label="Observations" model="chgObs" />
@@ -1086,7 +1125,7 @@ $ajouterCharge = function () {
             </div>
         </x-carte-section>
 
-        <x-carte-section titre="Atelier">
+        <x-carte-section titre="Atelier" icone="atelier" couleur="var(--th-ambre,#D97706)">
             <x-champ label="Véhicules restitués SANS facture (nb)" model="vehiculesSansFacture" type="number" width="260" live="true" />
             @if ((int) $vehiculesSansFacture > 0)
                 <div style="margin-top:10px; background:#FDF2F4; border:1px solid #C8102E; color:#C8102E; border-radius:8px; padding:10px 14px; font-size:13.5px; display:flex; gap:8px; align-items:center;">
