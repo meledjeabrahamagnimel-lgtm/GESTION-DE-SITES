@@ -349,3 +349,53 @@ input[type="password"].champ, input[type="date"].champ, select.champ, textarea.c
     display: inline-block;
     opacity: .45;
 }
+
+/* ------------------------------------------------------------- Responsive */
+
+/*
+ * Règle de fond : rien ne déborde horizontalement. Les tableaux larges défilent
+ * dans leur propre conteneur, jamais la page entière.
+ */
+html, body { max-width: 100%; overflow-x: hidden; }
+img, canvas, svg, video { max-width: 100%; height: auto; }
+
+@media (max-width: 1024px) {
+    .bloc-saisie > * { min-width: 160px; }
+}
+
+@media (max-width: 768px) {
+    body { font-size: 15px; }
+
+    .carte { padding: 13px; border-radius: 9px; }
+    .titre-section { font-size: 15.5px; }
+    .kpi-valeur { font-size: 23px; }
+    .kpi-libelle { font-size: 10.5px; }
+
+    /* Les blocs de saisie passent en colonne : plus de champs écrasés. */
+    .bloc-saisie { flex-direction: column; align-items: stretch; gap: 8px; }
+    .bloc-saisie > * { min-width: 0 !important; width: 100% !important; flex: 1 1 auto !important; }
+    .bloc-saisie button { width: 100%; justify-content: center; }
+
+    /* Les onglets et boutons deviennent tactiles et ne se chevauchent plus. */
+    .onglet { padding: 8px 12px; font-size: 12.5px; }
+    .bouton { padding: 10px 14px; font-size: 13.5px; }
+
+    .tableau { font-size: 12.5px; }
+    .tableau thead th { padding: 6px 8px; font-size: 11.5px; }
+    .tableau tbody td { padding: 6px 8px; }
+
+    .etat-vide { min-height: 150px; background-size: 64px 64px; }
+}
+
+@media (max-width: 560px) {
+    /* Les grilles d'indicateurs et de graphiques repassent sur une colonne. */
+    [style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+}
+
+/* Indication de défilement sur un tableau plus large que l'écran. */
+.tableau-conteneur { -webkit-overflow-scrolling: touch; }
+.tableau-conteneur::-webkit-scrollbar { height: 8px; }
+.tableau-conteneur::-webkit-scrollbar-thumb { background: var(--th-ligne); border-radius: 99px; }
+
+/* Pagination Laravel : lisible et compacte. */
+.tableau-conteneur + div nav, nav[role="navigation"] { font-size: 13px; }

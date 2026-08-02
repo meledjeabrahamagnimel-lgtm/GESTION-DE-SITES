@@ -25,6 +25,7 @@ class MenuNavigation
             return self::construire([
                 ['label' => 'Ma performance individuelle', 'route' => 'ma-performance'],
                 ['label' => 'Mes prospections', 'route' => 'mes-prospections'],
+                ['label' => 'Paramètres', 'route' => 'mon-espace'],
             ]);
         }
 
@@ -39,6 +40,7 @@ class MenuNavigation
 
         if ($utilisateur->hasRole('responsable_site')) {
             $onglets[] = ['label' => 'Saisie du jour', 'route' => 'saisie-du-jour'];
+            $suffixe[] = ['label' => 'Paramètres', 'route' => 'mon-espace'];
         }
 
         return self::construire([

@@ -253,8 +253,8 @@ $ajouterProspection = function () {
         'localisation' => $donnees['prosLocalisation'] ?: null,
         'moyen' => $donnees['prosMoyen'],
         'activite' => $donnees['prosActivite'],
-        'passage' => $this->prosPassage,
-        'devis_apres_passage' => $this->prosDevisApres,
+        'passage' => (bool) $this->prosPassage,
+        'devis_apres_passage' => (bool) $this->prosDevisApres,
         'observations' => $donnees['prosObs'] ?: null,
         'cree_par' => auth()->id(),
     ]);

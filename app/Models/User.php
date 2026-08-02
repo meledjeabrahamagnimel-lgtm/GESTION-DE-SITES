@@ -11,11 +11,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password', 'entreprise_id', 'telephone', 'est_actif', 'doit_changer_mot_de_passe', 'email_verified_at'])]
+#[Fillable(['name', 'email', 'password', 'entreprise_id', 'telephone', 'est_actif', 'doit_changer_mot_de_passe', 'email_verified_at', 'photo_chemin'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -31,6 +32,25 @@ class User extends Authenticatable
             'est_actif' => 'boolean',
             'doit_changer_mot_de_passe' => 'boolean',
         ];
+    }
+
+    /** URL de la photo de profil, ou null si aucune photo servable. */
+    public function photoUrl(): ?string
+    {
+        if (! $this->photo_chemin || ! Storage::disk('public')->exists($this->photo_chemin)) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($this->photo_chemin);
+    }
+
+    /** Initiales affichées à défaut de photo. */
+    public function initiales(): string
+    {
+        return collect(explode(' ', trim($this->name)))
+            ->filter()->take(2)
+            ->map(fn ($m) => mb_strtoupper(mb_substr($m, 0, 1)))
+            ->implode('');
     }
 
     public function entreprise(): BelongsTo

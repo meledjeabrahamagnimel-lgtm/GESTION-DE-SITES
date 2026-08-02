@@ -24,6 +24,11 @@ Route::middleware(['auth'])->group(function () {
 
     Volt::route('/mon-compte/mot-de-passe', 'mot-de-passe')->name('mot-de-passe.modifier');
 
+    // Espace personnel : profil, photo, rattachement, listes déroulantes.
+    Route::middleware(['role:responsable_site|commercial'])->group(function () {
+        Volt::route('/mon-espace', 'mon-espace')->name('mon-espace');
+    });
+
     // Espace entreprise (Gérant, Responsable de site, Commercial).
     Route::middleware(['role:gerant'])->group(function () {
         Volt::route('/tableau-de-bord', 'tableau-de-bord')->name('tableau-de-bord');
