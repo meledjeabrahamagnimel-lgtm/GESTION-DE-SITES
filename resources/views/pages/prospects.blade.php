@@ -69,7 +69,7 @@ $kpis = computed(function () {
 
 $graphique = computed(function () {
     [$debut, $fin] = $this->plage;
-    $points = PeriodeCalculateur::pointsHebdomadaires($debut, $fin);
+    $points = PeriodeCalculateur::points($debut, $fin);
 
     $labels = [];
     $visites = [];
@@ -102,11 +102,12 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
 <div>
     <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
 
-    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:20px;">
         <x-kpi-card label="Clients visités" :value="$this->kpis['clients']" />
         <x-kpi-card label="Passages sur site" :value="$this->kpis['passages']" />
-        <x-kpi-card label="Devis après passage" :value="$this->kpis['devisApres']"
-            :sub="$this->kpis['passages'] > 0 ? 'Taux : '.an($this->kpis['devisApres'] / $this->kpis['passages']) : null" />
+        <x-kpi-card label="Devis après passage" :value="$this->kpis['devisApres']" />
+        <x-kpi-card label="Taux devis / passage"
+            :value="an($this->kpis['passages'] > 0 ? $this->kpis['devisApres'] / $this->kpis['passages'] : null)" />
     </div>
 
     <div style="margin-bottom:20px;">

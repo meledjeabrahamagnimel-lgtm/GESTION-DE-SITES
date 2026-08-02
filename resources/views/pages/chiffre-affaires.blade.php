@@ -84,17 +84,27 @@ $kpis = computed(function () {
 
 $graphique = computed(function () {
     [$debut, $fin] = $this->plage;
-    $points = PeriodeCalculateur::pointsHebdomadaires($debut, $fin);
+    $points = PeriodeCalculateur::points($debut, $fin);
 
     $labels = [];
     $mecanique = [];
     $carrosserie = [];
+    $resultat = [];
 
     foreach ($points as $point) {
         $lignes = (clone $this->requeteBase)->whereBetween('date', [$point['debut'], $point['fin']])->get();
+        $ca = (int) $lignes->sum('montant');
+        $charges = (int) \App\Domain\Operations\Models\Charge::query()
+            ->where('type_operation', 'Charges')
+            ->whereBetween('date', [$point['debut'], $point['fin']])
+            ->when(! $this->estGerant, fn ($q) => $q->where('site_id', $this->monSite?->id ?? 0))
+            ->when($this->estGerant && $this->siteFiltre, fn ($q) => $q->where('site_id', $this->siteFiltre))
+            ->sum('montant');
+
         $labels[] = $point['label'];
         $mecanique[] = (int) $lignes->where('activite', 'Mécanique')->sum('montant');
         $carrosserie[] = (int) $lignes->where('activite', 'Carrosserie')->sum('montant');
+        $resultat[] = $ca - $charges;
     }
 
     return [
@@ -102,6 +112,7 @@ $graphique = computed(function () {
         'datasets' => [
             ['label' => 'Mécanique', 'data' => $mecanique, 'color' => '#191B20'],
             ['label' => 'Carrosserie', 'data' => $carrosserie, 'color' => '#C8102E'],
+            ['label' => 'Résultat net', 'data' => $resultat, 'color' => '#0E9F6E', 'type' => 'line'],
         ],
     ];
 });
@@ -117,7 +128,9 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
         <x-kpi-card label="CA total facturé" :value="ae($this->kpis['total'])" :sub="$this->detail->count().' facture(s)'" />
         <x-kpi-card label="CA Mécanique" :value="ae($this->kpis['mecanique'])" />
         <x-kpi-card label="CA Carrosserie" :value="ae($this->kpis['carrosserie'])" />
-        <x-kpi-card label="Résultat net" :value="ae($this->kpis['resultat'])" :couleur="$this->kpis['resultat'] >= 0 ? '#0E9F6E' : '#C8102E'" sub="CA facturé − charges" />
+        <x-kpi-card label="Charges" :value="ae($this->chargesPeriode)" />
+        <x-kpi-card label="Résultat net (CA − charges)" :value="ae($this->kpis['resultat'])"
+            :bon="$this->kpis['resultat'] >= 0" :accent="$this->kpis['resultat'] < 0" />
     </div>
 
     <div style="margin-bottom:20px;">

@@ -62,7 +62,7 @@ $kpis = computed(function () {
 
 $graphique = computed(function () {
     [$debut, $fin] = $this->plage;
-    $points = PeriodeCalculateur::pointsHebdomadaires($debut, $fin);
+    $points = PeriodeCalculateur::points($debut, $fin);
     $natures = ['Achats pièces' => '#191B20', 'Salaires & personnel' => '#2563EB', 'Fonctionnement' => '#D97706', 'Autres décaissements' => '#9A9DA5'];
 
     $labels = [];

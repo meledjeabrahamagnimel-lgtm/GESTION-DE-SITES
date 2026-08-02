@@ -57,11 +57,14 @@ $kpis = computed(function () {
 
         <x-filtre-periode :periode="$periode" />
 
-        <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:14px; margin-bottom:20px;">
+            <x-kpi-card label="Objectif mensuel" :value="ae($this->commercial->objectif_mensuel)" />
             <x-kpi-card label="Objectif de la période" :value="ae($this->kpis['objectif'])" />
             <x-kpi-card label="Réalisation" :value="ae($this->kpis['realisation'])" />
-            <x-kpi-card label="Écart" :value="ae($this->kpis['ecart'])" :couleur="$this->kpis['ecart'] >= 0 ? '#0E9F6E' : '#C8102E'" />
-            <x-kpi-card label="Taux d'atteinte" :value="an($this->kpis['taux'])" :accent="($this->kpis['taux'] ?? 0) >= 1" />
+            <x-kpi-card label="Écart" :value="ae($this->kpis['ecart'])"
+                :bon="$this->kpis['ecart'] >= 0" :accent="$this->kpis['ecart'] < 0" />
+            <x-kpi-card label="Taux d'atteinte" :value="an($this->kpis['taux'])"
+                :bon="($this->kpis['taux'] ?? 0) >= 1" :accent="($this->kpis['taux'] ?? 0) < 1" />
             <x-kpi-card label="Contribution au CA du site" :value="an($this->kpis['contribution'])" />
         </div>
 

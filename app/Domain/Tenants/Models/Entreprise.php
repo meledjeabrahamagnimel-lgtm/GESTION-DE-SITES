@@ -79,7 +79,16 @@ class Entreprise extends Model
      */
     public function logoUrl(): ?string
     {
-        if (! $this->logo_chemin || ! Storage::disk('public')->exists($this->logo_chemin)) {
+        if (! $this->logo_chemin) {
+            return null;
+        }
+
+        // Préfixe « public: » : fichier livré avec le dépôt, servi directement.
+        if (str_starts_with($this->logo_chemin, 'public:')) {
+            return asset(substr($this->logo_chemin, 7));
+        }
+
+        if (! Storage::disk('public')->exists($this->logo_chemin)) {
             return null;
         }
 

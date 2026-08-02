@@ -9,7 +9,6 @@ use App\Domain\Tenants\Models\Site;
 use App\Domain\Tenants\Services\ProvisionneurEntreprise;
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -20,11 +19,9 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
 {
     public function run(): void
     {
-        $cheminLogo = 'logos/artisan-automobile.png';
-        Storage::disk('public')->put(
-            $cheminLogo,
-            file_get_contents(__DIR__.'/assets/artisan-automobile-logo.png')
-        );
+        // Logo servi depuis public/logos : versionné, donc disponible en production
+        // sans dépendre du lien symbolique public/storage.
+        $cheminLogo = 'public:logos/artisan-automobile.png';
 
         $entreprise = Entreprise::create([
             'nom' => "L'Artisan Automobile",

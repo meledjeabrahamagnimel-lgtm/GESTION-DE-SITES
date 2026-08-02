@@ -69,22 +69,44 @@ $kpis = computed(function () {
         'refuses' => $refuses,
         'attente' => $attente,
         'tauxTransfo' => $emis > 0 ? $valides->count() / $emis : null,
+        // Écart moyen entre le montant proposé et le montant réellement validé.
+        'differenciation' => $valides->count() > 0
+            ? (int) round($valides->sum('montant_devis') - $valides->sum('montant_valide')) / $valides->count()
+            : null,
+        // Délai moyen, en jours, entre la réception du véhicule et l'émission du devis.
+        'delaiEnvoi' => $this->delaiMoyenEnvoi($lignes),
     ];
 });
 
+/** Délai moyen réception → émission, en jours (null si aucune date de réception connue). */
+$delaiMoyenEnvoi = function ($lignes) {
+    $avecReception = $lignes->filter(fn ($d) => $d->date_reception && $d->date_emission);
+
+    if ($avecReception->isEmpty()) {
+        return null;
+    }
+
+    return round($avecReception->sum(fn ($d) => $d->date_reception->diffInDays($d->date_emission)) / $avecReception->count(), 1);
+};
+
 $graphique = computed(function () {
     [$debut, $fin] = $this->plage;
-    $points = PeriodeCalculateur::pointsHebdomadaires($debut, $fin);
+    $points = PeriodeCalculateur::points($debut, $fin);
 
     $labels = [];
     $emis = [];
     $valides = [];
+    $taux = [];
 
     foreach ($points as $point) {
         $lignes = (clone $this->requeteBase)->whereBetween('date_emission', [$point['debut'], $point['fin']])->get();
+        $nbEmis = $lignes->count();
+        $nbValides = $lignes->where('statut', 'Validé')->count();
+
         $labels[] = $point['label'];
-        $emis[] = $lignes->count();
-        $valides[] = $lignes->where('statut', 'Validé')->count();
+        $emis[] = $nbEmis;
+        $valides[] = $nbValides;
+        $taux[] = $nbEmis > 0 ? round($nbValides / $nbEmis * 100, 1) : 0;
     }
 
     return [
@@ -92,6 +114,7 @@ $graphique = computed(function () {
         'datasets' => [
             ['label' => 'Émis', 'data' => $emis, 'color' => '#191B20'],
             ['label' => 'Validés', 'data' => $valides, 'color' => '#0E9F6E'],
+            ['label' => 'Taux transfo (%)', 'data' => $taux, 'color' => '#D97706', 'type' => 'line', 'axe' => 'y1'],
         ],
     ];
 });
@@ -108,7 +131,12 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
         <x-kpi-card label="Validés" :value="$this->kpis['valides']" :sub="ae($this->kpis['montantValide'])" couleur="#0E9F6E" />
         <x-kpi-card label="Refusés" :value="$this->kpis['refuses']" couleur="#C8102E" />
         <x-kpi-card label="En attente" :value="$this->kpis['attente']" :accent="$this->kpis['attente'] > 0" />
-        <x-kpi-card label="Taux transfo" :value="an($this->kpis['tauxTransfo'])" />
+        <x-kpi-card label="Taux transfo (nb)" :value="an($this->kpis['tauxTransfo'])" />
+        <x-kpi-card label="Différenciation moyenne" :value="ae($this->kpis['differenciation'] !== null ? (int) $this->kpis['differenciation'] : null)"
+            sub="Écart moyen devis → validé" />
+        <x-kpi-card label="Délai moyen d'envoi"
+            :value="$this->kpis['delaiEnvoi'] !== null ? str_replace('.', ',', (string) $this->kpis['delaiEnvoi']).' j' : '—'"
+            sub="Réception → émission" />
     </div>
 
     <div style="margin-bottom:20px;">
