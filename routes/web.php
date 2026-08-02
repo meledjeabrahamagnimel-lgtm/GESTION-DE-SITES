@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\RedirectionController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
@@ -8,6 +9,13 @@ Route::redirect('/', '/connexion');
 
 // Alias francophone de la route de connexion générée par Fortify (name: login).
 Route::get('/connexion', fn () => redirect()->route('login'))->name('connexion');
+
+Route::get('/auth/google', [GoogleAuthController::class, 'rediriger'])->name('auth.google');
+Route::get('/auth/callback', [GoogleAuthController::class, 'callback'])->name('auth.callback');
+
+Route::middleware(['guest'])->group(function () {
+    Volt::route('/inscription', 'inscription')->name('inscription');
+});
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/redirection', RedirectionController::class)->name('redirection');
@@ -30,6 +38,10 @@ Route::middleware(['auth'])->group(function () {
         Volt::route('/commerciaux', 'commerciaux')->name('commerciaux');
     });
 
+    Route::middleware(['role:gerant|responsable_site'])->group(function () {
+        Volt::route('/acces/creer', 'acces-creer')->name('acces.creer');
+    });
+
     Route::middleware(['role:commercial'])->group(function () {
         Volt::route('/ma-performance', 'ma-performance')->name('ma-performance');
     });
@@ -40,6 +52,7 @@ Route::middleware(['auth'])->group(function () {
         Volt::route('/entreprises', 'super-admin-entreprises-index')->name('entreprises.index');
         Volt::route('/entreprises/{entreprise}', 'super-admin-entreprises-detail')->name('entreprises.show');
         Volt::route('/acces', 'super-admin-acces-index')->name('acces.index');
+        Volt::route('/acces/creer', 'super-admin-acces-creer')->name('acces.creer');
         Volt::route('/journal', 'super-admin-journal-index')->name('journal.index');
     });
 });

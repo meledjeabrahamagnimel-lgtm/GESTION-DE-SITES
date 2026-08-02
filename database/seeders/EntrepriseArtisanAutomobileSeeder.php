@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Domain\Operations\Models\Commercial;
+use App\Domain\Operations\Models\CompteurDocument;
 use App\Domain\Tenants\Models\Entreprise;
 use App\Domain\Tenants\Models\Site;
 use App\Domain\Tenants\Services\ProvisionneurEntreprise;
@@ -138,5 +139,13 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
                 'est_spontane' => true,
             ]);
         }
+
+        // Aligne le compteur de numérotation des commerciaux sur ceux déjà seedés manuellement,
+        // pour que les prochains comptes créés via l'application n'entrent pas en collision.
+        CompteurDocument::create([
+            'entreprise_id' => $entreprise->id,
+            'type' => 'com',
+            'dernier_numero' => $numeroCommercial,
+        ]);
     }
 }

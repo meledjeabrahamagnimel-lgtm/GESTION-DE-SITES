@@ -10,6 +10,10 @@ $roles = computed(fn () => \App\Models\User::nomsRolesParUtilisateur($this->util
 
 <x-a-venir titre="Gestion des accès"
         description="Créer, révoquer et forcer la réinitialisation des accès de toute personne, toutes entreprises confondues.">
+        <a href="{{ route('super-admin.acces.creer') }}" wire:navigate
+           style="display:inline-block; background:#C8102E; color:#fff; border-radius:8px; padding:9px 16px; font-weight:700; font-size:13px; text-decoration:none; margin-bottom:16px;">
+            + Créer un accès
+        </a>
         <div style="overflow-x:auto;">
             <table style="border-collapse:collapse; width:100%; font-size:13px;">
                 <thead>

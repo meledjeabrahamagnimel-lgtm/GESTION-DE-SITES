@@ -13,7 +13,7 @@ return new class extends Migration
             $table->foreignId('entreprise_id')->constrained('entreprises')->cascadeOnDelete();
             $table->foreignId('site_id')->constrained('sites')->cascadeOnDelete();
             $table->foreignId('commercial_id')->constrained('commerciaux')->cascadeOnDelete();
-            $table->string('numero', 20)->unique();
+            $table->string('numero', 20);
             $table->date('date');
             $table->string('client');
             $table->string('localisation')->nullable();
@@ -26,6 +26,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['entreprise_id', 'site_id', 'date']);
+            $table->unique(['entreprise_id', 'numero']);
         });
     }
 

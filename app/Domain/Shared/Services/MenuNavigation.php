@@ -15,7 +15,7 @@ class MenuNavigation
             return self::construire([
                 ['label' => 'Tableau de bord', 'route' => 'super-admin.dashboard'],
                 ['label' => 'Entreprises', 'route' => 'super-admin.entreprises.index'],
-                ['label' => 'Accès', 'route' => 'super-admin.acces.index'],
+                ['label' => 'Accès', 'route' => 'super-admin.acces.index', 'actifPattern' => 'super-admin.acces.*'],
                 ['label' => 'Journal', 'route' => 'super-admin.journal.index'],
             ]);
         }
@@ -44,6 +44,7 @@ class MenuNavigation
             ['label' => 'Charges', 'route' => 'charges'],
             ['label' => 'Trésorerie', 'route' => 'tresorerie'],
             ['label' => 'Commerciaux', 'route' => 'commerciaux'],
+            ['label' => 'Ajouter un accès', 'route' => 'acces.creer'],
         ]);
     }
 
@@ -52,7 +53,7 @@ class MenuNavigation
         return array_map(fn ($onglet) => [
             'label' => $onglet['label'],
             'route' => route($onglet['route']),
-            'actif' => request()->routeIs($onglet['route'].'*'),
+            'actif' => request()->routeIs(($onglet['actifPattern'] ?? $onglet['route']).'*'),
         ], $onglets);
     }
 }

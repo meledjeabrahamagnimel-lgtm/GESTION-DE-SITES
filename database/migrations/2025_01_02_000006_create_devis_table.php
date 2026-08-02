@@ -14,7 +14,7 @@ return new class extends Migration
             $table->foreignId('site_id')->constrained('sites')->cascadeOnDelete();
             $table->foreignId('commercial_id')->constrained('commerciaux')->cascadeOnDelete();
             $table->foreignId('prospection_id')->nullable()->constrained('prospections')->nullOnDelete();
-            $table->string('numero', 20)->unique();
+            $table->string('numero', 20);
             $table->string('n_fiche_reception')->nullable();
             $table->date('date_reception')->nullable();
             $table->date('date_emission');
@@ -28,6 +28,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['entreprise_id', 'site_id', 'statut', 'date_emission']);
+            $table->unique(['entreprise_id', 'numero']);
         });
     }
 

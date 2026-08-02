@@ -13,7 +13,7 @@ return new class extends Migration
             $table->foreignId('entreprise_id')->constrained('entreprises')->cascadeOnDelete();
             $table->foreignId('site_id')->constrained('sites')->cascadeOnDelete();
             $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->string('numero', 20)->unique();
+            $table->string('numero', 20);
             $table->string('nom');
             $table->enum('activite', ['Mécanique', 'Carrosserie'])->nullable();
             $table->unsignedBigInteger('objectif_mensuel')->default(0);
@@ -22,6 +22,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['entreprise_id', 'site_id', 'statut']);
+            $table->unique(['entreprise_id', 'numero']);
         });
     }
 

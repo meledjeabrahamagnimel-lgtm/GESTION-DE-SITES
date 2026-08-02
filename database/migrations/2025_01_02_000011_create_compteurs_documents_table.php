@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('compteurs_documents', function (Blueprint $table) {
             $table->id();
             $table->foreignId('entreprise_id')->constrained('entreprises')->cascadeOnDelete();
-            $table->enum('type', ['pro', 'dev', 'fac']);
+            $table->enum('type', ['pro', 'dev', 'fac', 'com']);
             $table->unsignedInteger('dernier_numero')->default(0);
             $table->timestamps();
 
