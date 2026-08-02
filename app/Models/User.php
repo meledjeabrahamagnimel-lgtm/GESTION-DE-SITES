@@ -2,31 +2,72 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Domain\Tenants\Models\Entreprise;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
+use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'password', 'entreprise_id', 'telephone', 'est_actif'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, HasRoles, LogsActivity, Notifiable;
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
+            'derniere_connexion_le' => 'datetime',
             'password' => 'hashed',
+            'est_actif' => 'boolean',
+            'doit_changer_mot_de_passe' => 'boolean',
         ];
+    }
+
+    public function entreprise(): BelongsTo
+    {
+        return $this->belongsTo(Entreprise::class);
+    }
+
+    /** Un utilisateur sans entreprise est un membre de l'équipe plateforme (Super Admin). */
+    public function estSuperAdmin(): bool
+    {
+        return $this->hasRole('super_admin');
+    }
+
+    /**
+     * Noms des rôles d'un ensemble d'utilisateurs, sans filtrage par équipe courante.
+     * Utile pour les écrans Super Admin qui listent des utilisateurs de plusieurs entreprises à la fois.
+     *
+     * @return array<int, string> nom_role_1, nom_role_2 indexé par user_id
+     */
+    public static function nomsRolesParUtilisateur(iterable $userIds): array
+    {
+        return DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_type', self::class)
+            ->whereIn('model_has_roles.model_id', collect($userIds)->all())
+            ->select('model_has_roles.model_id as user_id', 'roles.name')
+            ->get()
+            ->groupBy('user_id')
+            ->map(fn ($lignes) => $lignes->pluck('name')->implode(', '))
+            ->all();
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['name', 'email', 'est_actif', 'entreprise_id'])
+            ->logOnlyDirty()
+            ->dontLogEmptyChanges();
     }
 }
