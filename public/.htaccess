@@ -5,6 +5,24 @@
 
     RewriteEngine On
 
+    # ------------------------------------------------------------------------
+    # Forcer le HTTPS sur un hébergement mutualisé (LWS, cPanel, OVH…)
+    #
+    # Retirez les # des trois lignes suivantes pour l'activer.
+    #
+    # N'utilisez SURTOUT PAS « RewriteCond %{HTTPS} off » ici : quand le
+    # certificat est porté par un serveur frontal qui transmet ensuite la requête
+    # en clair, %{HTTPS} vaut toujours « off », y compris pour un visiteur déjà
+    # en https. La règle redirige alors indéfiniment — c'est l'erreur
+    # « cette page vous a redirigé un trop grand nombre de fois ».
+    # L'en-tête X-Forwarded-Proto, lui, indique le schéma réellement vu par le
+    # visiteur et ne boucle pas.
+    #
+    # RewriteCond %{HTTP:X-Forwarded-Proto} !https
+    # RewriteCond %{HTTPS} off
+    # RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+    # ------------------------------------------------------------------------
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

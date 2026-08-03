@@ -69,6 +69,10 @@ class Diagnostic extends Command
         );
 
         $this->newLine();
+        $this->info('=== Redirections et session (hébergement mutualisé) ===');
+        $this->controlerRedirections();
+
+        $this->newLine();
         $this->info('=== Caches ===');
         foreach ([
             'Cache de configuration' => 'bootstrap/cache/config.php',
@@ -113,6 +117,82 @@ class Diagnostic extends Command
         $this->newLine();
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Cherche les causes connues de « cette page vous a redirigé un trop grand nombre
+     * de fois ». Elles tiennent presque toujours à un désaccord entre l'adresse réelle
+     * du site et ce que Laravel croit être son adresse, ou à un cookie de session
+     * que le navigateur refuse d'enregistrer.
+     */
+    private function controlerRedirections(): void
+    {
+        $appUrl = (string) config('app.url');
+        $schemaApp = parse_url($appUrl, PHP_URL_SCHEME);
+        $hoteApp = parse_url($appUrl, PHP_URL_HOST);
+
+        $this->ligne('APP_URL', $appUrl ?: '(vide)');
+
+        $this->verifier(
+            'APP_URL renseignée',
+            filled($appUrl) && $hoteApp !== null,
+            "Renseignez APP_URL dans .env avec l'adresse exacte du site, https:// compris.",
+        );
+
+        $this->verifier(
+            'Proxys de confiance déclarés (HTTPS derrière un frontal)',
+            ! empty(env('PROXYS_DE_CONFIANCE', '*')),
+            "Laissez PROXYS_DE_CONFIANCE vide n'est pas conseillé sur un hébergement mutualisé.",
+        );
+
+        // Un cookie « secure » n'est jamais renvoyé par le navigateur sur une page en http :
+        // la session se perd à chaque page, l'utilisateur est renvoyé sans fin vers la connexion.
+        $cookieSecurise = filter_var(env('SESSION_SECURE_COOKIE'), FILTER_VALIDATE_BOOL);
+
+        if ($cookieSecurise && $schemaApp !== 'https') {
+            $this->toutVaBien = false;
+            $this->line('  <fg=red>✗</> SESSION_SECURE_COOKIE=true alors que APP_URL est en '.($schemaApp ?: 'http'));
+            $this->line('      → Cause classique de boucle : le cookie de session n’est jamais enregistré.');
+            $this->line('      → Passez APP_URL en https:// ou retirez SESSION_SECURE_COOKIE.');
+        } else {
+            $this->line('  <fg=green>✓</> Cohérence entre SESSION_SECURE_COOKIE et le schéma de APP_URL');
+        }
+
+        // Un domaine de cookie qui ne correspond pas au site produit le même effet.
+        $domaineSession = env('SESSION_DOMAIN');
+
+        if ($domaineSession && $hoteApp && ! str_ends_with($hoteApp, ltrim((string) $domaineSession, '.'))) {
+            $this->toutVaBien = false;
+            $this->line("  <fg=red>✗</> SESSION_DOMAIN ($domaineSession) ne correspond pas à l’hôte de APP_URL ($hoteApp)");
+            $this->line('      → Le navigateur rejette le cookie : videz SESSION_DOMAIN ou corrigez-le.');
+        } else {
+            $this->line('  <fg=green>✓</> SESSION_DOMAIN compatible avec APP_URL'.($domaineSession ? " ($domaineSession)" : ' (non défini)'));
+        }
+
+        $pilote = (string) config('session.driver');
+        $this->ligne('Pilote de session', $pilote);
+
+        if ($pilote === 'database') {
+            $this->verifier(
+                'Table sessions présente',
+                Schema::hasTable('sessions'),
+                'Lancez : php artisan migrate',
+            );
+        }
+
+        if ($pilote === 'file') {
+            $this->verifier(
+                'Dossier storage/framework/sessions accessible en écriture',
+                is_writable(storage_path('framework/sessions')),
+                'Donnez les droits d’écriture : chmod -R 775 storage bootstrap/cache',
+            );
+        }
+
+        $this->verifier(
+            'Dossier storage accessible en écriture',
+            is_writable(storage_path('logs')) && is_writable(storage_path('framework/views')),
+            'Donnez les droits d’écriture : chmod -R 775 storage bootstrap/cache',
+        );
     }
 
     private function verifier(string $intitule, bool $present, string $remede): void

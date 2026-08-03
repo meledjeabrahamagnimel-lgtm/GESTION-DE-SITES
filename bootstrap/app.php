@@ -19,6 +19,25 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        /*
+         * Hébergement mutualisé (LWS, cPanel, OVH…) : le certificat HTTPS est porté par
+         * un serveur frontal qui transmet ensuite la requête à Apache en clair. Sans cette
+         * déclaration, Laravel croit être en http, fabrique des liens et des redirections
+         * en http, que le frontal renvoie en https — d'où la boucle « cette page vous a
+         * redirigé un trop grand nombre de fois ».
+         *
+         * L'en-tête X-Forwarded-Host est volontairement exclu : c'est celui qui permettrait
+         * à un visiteur de forger l'adresse d'un lien de réinitialisation de mot de passe.
+         * Le nom de domaine reste donc celui de APP_URL, quoi qu'annonce le frontal.
+         */
+        $middleware->trustProxies(
+            at: env('PROXYS_DE_CONFIANCE', '*'),
+            headers: Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_PORT
+                | Request::HEADER_X_FORWARDED_PROTO
+                | Request::HEADER_X_FORWARDED_PREFIX,
+        );
+
         $middleware->appendToGroup('web', [
             DefinirEquipePermissions::class,
             VerifierCompteActif::class,
