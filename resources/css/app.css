@@ -645,3 +645,17 @@ img, canvas, svg, video { max-width: 100%; height: auto; }
 
 .cloche-appareil-actif { display: block; font-size: 12px; font-weight: 700; color: var(--th-vert); }
 .cloche-appareil-refus { display: block; font-size: 11.5px; color: var(--th-ambre); margin-top: 6px; }
+
+/* Lien vers la page de réglage des notifications, en pied du panneau de la cloche. */
+.cloche-reglages {
+    display: block;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--th-ligne);
+    background: #FAF9F5;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--th-bleu);
+    text-decoration: none;
+}
+
+.cloche-reglages:hover { background: #EFF4FE; }

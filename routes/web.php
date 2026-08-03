@@ -28,6 +28,9 @@ Route::middleware(['auth'])->group(function () {
     // filtrés par AnnuaireMessagerie selon le rôle et l'entreprise.
     Volt::route('/messages', 'messages')->name('messages');
 
+    // Activation et diagnostic des notifications poussées, ouverts à tous les rôles.
+    Volt::route('/mes-notifications', 'mes-notifications')->name('mes-notifications');
+
     // Espace personnel : profil, photo, rattachement, listes déroulantes.
     Route::middleware(['role:responsable_site|commercial'])->group(function () {
         Volt::route('/mon-espace', 'mon-espace')->name('mon-espace');

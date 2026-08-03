@@ -249,6 +249,57 @@ class WebPushTest extends TestCase
         Bus::assertNotDispatchedAfterResponse(EnvoyerNotificationPush::class);
     }
 
+    public function test_la_page_de_reglage_liste_et_retire_les_appareils(): void
+    {
+        $serveur = CleEc::genererPaire();
+        config([
+            'webpush.cle_publique' => CleEc::base64UrlEncoder($serveur['publique']),
+            'webpush.cle_privee' => CleEc::base64UrlEncoder($serveur['privee']),
+        ]);
+
+        $utilisateur = User::create([
+            'name' => 'Testeur',
+            'email' => 'reglages@exemple.test',
+            'password' => 'mot-de-passe-de-test',
+            'est_actif' => true,
+        ]);
+
+        $this->actingAs($utilisateur);
+
+        $endpoint = 'https://fcm.googleapis.com/fcm/send/appareil-un';
+
+        $composant = \Livewire\Volt\Volt::test('mes-notifications')
+            ->call('enregistrerAbonnement', $endpoint, 'p256dh', 'auth', 'Chrome sur Android')
+            ->assertHasNoErrors()
+            ->assertSee('Chrome sur Android');
+
+        $abonnement = AbonnementPush::where('user_id', $utilisateur->id)->firstOrFail();
+
+        $composant->call('oublierAppareil', $abonnement->id)->assertDontSee('Chrome sur Android');
+
+        $this->assertDatabaseMissing('abonnements_push', ['id' => $abonnement->id]);
+    }
+
+    /** L'appareil d'un collègue ne doit pas pouvoir être retiré. */
+    public function test_on_ne_retire_que_ses_propres_appareils(): void
+    {
+        $moi = User::create(['name' => 'Moi', 'email' => 'moi@exemple.test', 'password' => 'mot-de-passe-de-test', 'est_actif' => true]);
+        $autre = User::create(['name' => 'Autre', 'email' => 'autre@exemple.test', 'password' => 'mot-de-passe-de-test', 'est_actif' => true]);
+
+        $sien = AbonnementPush::create([
+            'user_id' => $autre->id,
+            'endpoint' => 'https://fcm.googleapis.com/fcm/send/pas-a-moi',
+            'empreinte' => AbonnementPush::empreinteDe('https://fcm.googleapis.com/fcm/send/pas-a-moi'),
+            'cle_p256dh' => 'p', 'cle_auth' => 'a',
+        ]);
+
+        $this->actingAs($moi);
+
+        \Livewire\Volt\Volt::test('mes-notifications')->call('oublierAppareil', $sien->id);
+
+        $this->assertDatabaseHas('abonnements_push', ['id' => $sien->id]);
+    }
+
     /** Un abonnement révoqué par le navigateur doit être nettoyé, pas réessayé sans fin. */
     public function test_un_abonnement_expire_est_supprime(): void
     {

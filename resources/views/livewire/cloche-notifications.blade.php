@@ -158,6 +158,10 @@ $enregistrerAbonnement = function (string $endpoint, string $p256dh, string $aut
             </div>
         @endif
 
+        <a href="{{ route('mes-notifications') }}" wire:navigate class="cloche-reglages">
+            Réglages des notifications sur mes appareils →
+        </a>
+
         <div class="cloche-liste">
             @forelse ($this->notifications as $notif)
                 <a wire:key="notif-{{ $notif->id }}"

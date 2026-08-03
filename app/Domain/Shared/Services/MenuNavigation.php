@@ -21,6 +21,7 @@ class MenuNavigation
                 ['label' => 'Administrateurs', 'route' => 'super-admin.administrateurs', 'section' => 'acces'],
                 ['label' => 'Journal', 'route' => 'super-admin.journal.index', 'section' => 'journal'],
                 ['label' => 'Messages', 'route' => 'messages', 'section' => null],
+                ['label' => 'Notifications', 'route' => 'mes-notifications', 'section' => null],
                 ['label' => 'Maintenance', 'route' => 'super-admin.maintenance', 'section' => 'maintenance'],
             ];
 
@@ -36,6 +37,7 @@ class MenuNavigation
                 ['label' => 'Mes prospections', 'route' => 'mes-prospections'],
                 ['label' => 'Mes notes', 'route' => 'mes-notes'],
                 ['label' => 'Messages', 'route' => 'messages'],
+                ['label' => 'Notifications', 'route' => 'mes-notifications'],
                 ['label' => 'Paramètres', 'route' => 'mon-espace'],
             ]);
         }
@@ -64,6 +66,7 @@ class MenuNavigation
             ['label' => 'Commerciaux', 'route' => 'commerciaux'],
             ['label' => 'Ajouter un accès', 'route' => 'acces.creer'],
             ['label' => 'Messages', 'route' => 'messages'],
+            ['label' => 'Notifications', 'route' => 'mes-notifications'],
             ...$suffixe,
         ]);
     }
