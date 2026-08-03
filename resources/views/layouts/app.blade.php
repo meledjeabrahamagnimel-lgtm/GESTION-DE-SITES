@@ -37,6 +37,7 @@
                 </nav>
             </div>
             <div style="display:flex; align-items:center; gap:16px;">
+                <livewire:cloche-notifications />
                 <a href="{{ route('mot-de-passe.modifier') }}" wire:navigate
                    style="font-size:13.5px; color:#C7C9CF; text-decoration:none; display:flex; align-items:center; gap:8px;">
                     <x-avatar :utilisateur="auth()->user()" :taille="28" />

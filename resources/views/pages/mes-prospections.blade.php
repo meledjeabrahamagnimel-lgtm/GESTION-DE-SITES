@@ -4,7 +4,9 @@ use App\Domain\Operations\Models\Commercial;
 use App\Domain\Operations\Models\Prospection;
 use App\Domain\Operations\Services\GenerateurNumero;
 use App\Domain\Shared\Concerns\GereLesDonneesLibres;
+use App\Domain\Shared\Models\NotificationApp;
 use App\Domain\Shared\Models\Referentiel;
+use App\Domain\Shared\Services\Notificateur;
 use Livewire\WithPagination;
 use function Livewire\Volt\{state, computed, mount, uses, usesPagination};
 
@@ -162,6 +164,19 @@ $transmettreSelection = function () {
         ->where('statut_validation', 'Brouillon')
         ->whereIn('id', $ids)
         ->update(['statut_validation' => 'Transmise', 'transmise_le' => now()]);
+
+    // Le responsable est prévenu tout de suite : sans cela, une transmission peut
+    // dormir plusieurs jours avant d'être arbitrée.
+    if ($nombre > 0) {
+        Notificateur::pourPlusieurs(
+            destinataires: Notificateur::encadrementDuSite($this->commercial?->site_id, auth()->user()->entreprise_id),
+            titre: $nombre.' prospection(s) à valider',
+            corps: auth()->user()->name.' vient de transmettre '.$nombre.' prospection(s).',
+            canal: NotificationApp::CANAL_GESTION,
+            niveau: NotificationApp::NIVEAU_ALERTE,
+            lien: route('saisie-du-jour'),
+        );
+    }
 
     $this->selection = [];
     $this->message = $nombre > 0
