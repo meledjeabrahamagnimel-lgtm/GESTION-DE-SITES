@@ -23,6 +23,13 @@ class DonneesOperationnellesSeeder extends Seeder
 {
     private const JOURS_HISTORIQUE = 60;
 
+    /**
+     * Nombre de jours récents dont on garantit la complétude sur chaque site.
+     * Couvre la journée courante et la veille ouvrée : c'est ce que les écrans
+     * « du jour » affichent par défaut à l'ouverture de l'application.
+     */
+    private const JOURS_RECENTS_COMPLETS = 3;
+
     /** Poids visé des charges dans le chiffre d'affaires facturé. */
     private const PART_CHARGES = 0.65;
 
@@ -172,7 +179,237 @@ class DonneesOperationnellesSeeder extends Seeder
             }
         }
 
+        $this->completerJoursRecents($entreprise->id, $sites);
         $this->calibrerCharges($entreprise->id);
+    }
+
+    /**
+     * Garantit que les derniers jours ouvrés comportent, sur CHAQUE site, au moins une
+     * écriture de chaque nature.
+     *
+     * La génération principale procède par tirages successifs : une facture n'existe que
+     * si la prospection a donné un devis, que ce devis a été validé, et que sa date de
+     * facturation ne dépasse pas aujourd'hui. Sur une journée donnée et un site donné, la
+     * probabilité d'obtenir la chaîne complète est faible — d'où des écrans « du jour »
+     * vides sur certains sites alors que l'historique est fourni. Or c'est précisément
+     * l'écran qu'un responsable ouvre en premier.
+     */
+    private function completerJoursRecents(int $entrepriseId, $sites): void
+    {
+        foreach ($sites as $site) {
+            $commerciaux = Commercial::where('site_id', $site->id)->where('est_spontane', false)->get();
+
+            if ($commerciaux->isEmpty()) {
+                continue;
+            }
+
+            for ($recul = 0; $recul < self::JOURS_RECENTS_COMPLETS; $recul++) {
+                $date = Carbon::now()->subDays($recul);
+
+                if ($date->isSunday()) {
+                    continue;
+                }
+
+                $this->completerJournee($entrepriseId, $site, $commerciaux, $date);
+            }
+        }
+    }
+
+    private function completerJournee(int $entrepriseId, Site $site, $commerciaux, Carbon $date): void
+    {
+        $jour = $date->toDateString();
+
+        // Un devis de chaque statut, pour que la page Devis et l'arbitrage du responsable
+        // aient toujours matière à montrer.
+        foreach (['En attente', 'Refusé'] as $statut) {
+            $existe = Devis::withoutGlobalScopes()
+                ->where('site_id', $site->id)->where('statut', $statut)
+                ->whereDate('date_emission', $jour)->exists();
+
+            if (! $existe) {
+                $this->creerChaineComplete($entrepriseId, $site, $commerciaux->random(), $date, $statut);
+            }
+        }
+
+        // La facture se vérifie pour elle-même, et non à travers le devis : la génération
+        // principale produit des devis validés dont la facture, datée quelques jours plus
+        // tard, tombe après aujourd'hui et n'est donc jamais créée. Se fier au devis
+        // laisserait ces journées sans aucune facture ni encaissement.
+        $aUneFacture = Facture::withoutGlobalScopes()
+            ->where('site_id', $site->id)->whereDate('date', $jour)->exists();
+
+        if (! $aUneFacture) {
+            $this->creerChaineComplete($entrepriseId, $site, $commerciaux->random(), $date, 'Validé');
+        }
+
+        // Une facture n'est encaissée que dans 88 % des cas : l'encaissement se contrôle
+        // donc lui aussi pour lui-même, faute de quoi la trésorerie du jour reste vide.
+        $aUnEncaissement = Encaissement::withoutGlobalScopes()
+            ->where('site_id', $site->id)->whereDate('date', $jour)->exists();
+
+        if (! $aUnEncaissement) {
+            $this->creerEncaissementDuJour($entrepriseId, $site, $date);
+        }
+
+        // Chaque nature d'opération est contrôlée séparément : une charge tirée au hasard
+        // ne garantit ni la présence d'un transfert, ni celle d'un décaissement DG.
+        foreach (['Charges', 'Transfert', 'Décaissement DG'] as $typeOperation) {
+            $existe = Charge::withoutGlobalScopes()
+                ->where('site_id', $site->id)->where('type_operation', $typeOperation)
+                ->whereDate('date', $jour)->exists();
+
+            if (! $existe) {
+                $this->creerOperationTresorerie($entrepriseId, $site->id, $date, $typeOperation);
+            }
+        }
+    }
+
+    /** Encaisse une facture non réglée du jour, ou à défaut enregistre un appro de la Direction. */
+    private function creerEncaissementDuJour(int $entrepriseId, Site $site, Carbon $date): void
+    {
+        $jour = $date->toDateString();
+
+        $facture = Facture::withoutGlobalScopes()
+            ->where('site_id', $site->id)
+            ->whereDate('date', $jour)
+            ->whereDoesntHave('encaissements')
+            ->first();
+
+        if ($facture) {
+            Encaissement::create([
+                'entreprise_id' => $entrepriseId,
+                'site_id' => $site->id,
+                'facture_id' => $facture->id,
+                'date' => $jour,
+                'type' => 'Client',
+                'moyen' => ['Espèces', 'Mobile Money', 'Chèque', 'Virement'][random_int(0, 3)],
+                'montant' => $facture->montant,
+                'client' => $facture->client,
+            ]);
+
+            return;
+        }
+
+        // Toutes les factures du jour sont déjà réglées : on illustre alors l'autre nature
+        // d'encaissement prévue par l'application, l'approvisionnement reçu du siège.
+        Encaissement::create([
+            'entreprise_id' => $entrepriseId,
+            'site_id' => $site->id,
+            'facture_id' => null,
+            'date' => $jour,
+            'type' => 'Appro',
+            'moyen' => 'Virement',
+            'montant' => random_int(150, 600) * 1000,
+            'autres_tiers' => 'Direction Générale',
+        ]);
+    }
+
+    /** Une écriture de trésorerie d'un type d'opération donné, datée du jour demandé. */
+    private function creerOperationTresorerie(int $entrepriseId, int $siteId, Carbon $date, string $typeOperation): void
+    {
+        if ($typeOperation === 'Charges') {
+            $nature = array_rand(self::LIBELLES_CHARGES);
+            $libelles = self::LIBELLES_CHARGES[$nature];
+
+            Charge::create([
+                'entreprise_id' => $entrepriseId,
+                'site_id' => $siteId,
+                'date' => $date->toDateString(),
+                'type_operation' => 'Charges',
+                'libelle' => $nature,
+                'moyen' => ['Espèces', 'Virement'][random_int(0, 1)],
+                'montant' => random_int(30, 260) * 1000,
+                'tiers' => $nature === 'Salaires & personnel' ? 'Personnel' : $libelles[array_rand($libelles)],
+            ]);
+
+            return;
+        }
+
+        Charge::create([
+            'entreprise_id' => $entrepriseId,
+            'site_id' => $siteId,
+            'date' => $date->toDateString(),
+            'type_operation' => $typeOperation,
+            'libelle' => 'Autres décaissements',
+            'moyen' => 'Virement',
+            'montant' => random_int(20, 90) * 1000,
+            'tiers' => $typeOperation === 'Transfert' ? 'Transfert inter-sites' : 'Direction Générale',
+        ]);
+    }
+
+    /**
+     * Crée la chaîne prospection → devis → (facture → encaissement) d'une seule traite,
+     * en datant chaque étape du même jour pour qu'elle apparaisse dans la saisie du jour.
+     */
+    private function creerChaineComplete(int $entrepriseId, Site $site, Commercial $commercial, Carbon $date, string $statut): void
+    {
+        $client = self::CLIENTS_DEMO[array_rand(self::CLIENTS_DEMO)];
+        $activite = $commercial->activite ?? 'Mécanique';
+        $jour = $date->toDateString();
+
+        $prospection = Prospection::create([
+            'entreprise_id' => $entrepriseId,
+            'site_id' => $site->id,
+            'commercial_id' => $commercial->id,
+            'numero' => GenerateurNumero::suivant($entrepriseId, 'pro'),
+            'date' => $jour,
+            'client' => $client,
+            'localisation' => self::LOCALISATIONS[array_rand(self::LOCALISATIONS)],
+            'moyen' => ['RDV', 'Téléphone', 'Mail'][random_int(0, 2)],
+            'activite' => $activite,
+            'passage' => true,
+            'devis_apres_passage' => true,
+            'statut_validation' => 'Validée',
+        ]);
+
+        $montantDevis = random_int(45, 850) * 1000;
+        $montantValide = $statut === 'Validé' ? (int) round($montantDevis * (random_int(70, 98) / 100)) : null;
+
+        $devis = Devis::create([
+            'entreprise_id' => $entrepriseId,
+            'site_id' => $site->id,
+            'commercial_id' => $commercial->id,
+            'prospection_id' => $prospection->id,
+            'numero' => GenerateurNumero::suivant($entrepriseId, 'dev'),
+            'n_fiche_reception' => 'FR-'.$site->code.'-'.random_int(100, 999),
+            'date_reception' => $jour,
+            'date_emission' => $jour,
+            'client' => $client,
+            'activite' => $activite,
+            'statut' => $statut,
+            'montant_devis' => $montantDevis,
+            'montant_valide' => $montantValide,
+        ]);
+
+        // Seul un devis validé se transforme en facture, puis en encaissement.
+        if ($statut !== 'Validé') {
+            return;
+        }
+
+        $facture = Facture::create([
+            'entreprise_id' => $entrepriseId,
+            'site_id' => $site->id,
+            'devis_id' => $devis->id,
+            'commercial_id' => $commercial->id,
+            'numero' => GenerateurNumero::suivant($entrepriseId, 'fac'),
+            'n_facture' => 'FAC-'.$site->code.'-'.random_int(1000, 9999),
+            'date' => $jour,
+            'client' => $client,
+            'type' => random_int(0, 1) ? 'FNE' : 'HT',
+            'activite' => $activite,
+            'montant' => $montantValide,
+        ]);
+
+        Encaissement::create([
+            'entreprise_id' => $entrepriseId,
+            'site_id' => $site->id,
+            'facture_id' => $facture->id,
+            'date' => $jour,
+            'type' => 'Client',
+            'moyen' => ['Espèces', 'Mobile Money', 'Chèque', 'Virement'][random_int(0, 3)],
+            'montant' => $facture->montant,
+            'client' => $client,
+        ]);
     }
 
     /**
