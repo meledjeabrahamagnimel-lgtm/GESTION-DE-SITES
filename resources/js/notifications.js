@@ -59,6 +59,92 @@ function afficherBandeau(texte) {
     setTimeout(() => bandeau.remove(), 5600);
 }
 
+/* ------------------------------------------------ Notifications poussées */
+
+function versOctets(base64url) {
+    const base64 = (base64url + '='.repeat((4 - (base64url.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+    const binaire = atob(base64);
+
+    return Uint8Array.from(binaire, (c) => c.charCodeAt(0));
+}
+
+function versBase64Url(tampon) {
+    return btoa(String.fromCharCode(...new Uint8Array(tampon)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
+
+/** Le navigateur sait-il recevoir des notifications poussées ? */
+export function pushDisponible() {
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+/**
+ * Abonne cet appareil. Renvoie les trois valeurs à enregistrer côté serveur,
+ * ou null si l'utilisateur refuse ou si le navigateur ne sait pas faire.
+ */
+async function abonnerAppareil(clePublique) {
+    if (!pushDisponible() || !clePublique) return null;
+
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return null;
+
+    const enregistrement = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+
+    // Un abonnement existant est réutilisé : re-souscrire créerait un doublon.
+    // La souscription contacte le service de push du navigateur : sans réseau, la
+    // promesse peut ne jamais se résoudre. Le délai de garde évite un bouton figé.
+    const abonnement =
+        (await enregistrement.pushManager.getSubscription()) ||
+        (await Promise.race([
+            enregistrement.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: versOctets(clePublique),
+            }),
+            new Promise((_, rejeter) =>
+                setTimeout(() => rejeter(new Error('Le service de notification du navigateur est injoignable.')), 15000)
+            ),
+        ]));
+
+    return {
+        endpoint: abonnement.endpoint,
+        p256dh: versBase64Url(abonnement.getKey('p256dh')),
+        auth: versBase64Url(abonnement.getKey('auth')),
+    };
+}
+
+document.addEventListener('alpine:init', () => {
+    window.Alpine.data('abonnementPush', (clePublique) => ({
+        disponible: pushDisponible() && !!clePublique,
+        etat: typeof Notification !== 'undefined' ? Notification.permission : 'default',
+        occupe: false,
+        echec: null,
+
+        async activer() {
+            this.occupe = true;
+            this.echec = null;
+
+            try {
+                const abonnement = await abonnerAppareil(clePublique);
+
+                if (abonnement) {
+                    this.$wire.call('enregistrerAbonnement', abonnement.endpoint, abonnement.p256dh, abonnement.auth, navigator.userAgent);
+                    this.etat = 'granted';
+                } else {
+                    this.etat = Notification.permission;
+                }
+            } catch (e) {
+                this.echec = e.message || 'Activation impossible sur cet appareil.';
+                console.warn('Abonnement aux notifications impossible :', e);
+            } finally {
+                this.occupe = false;
+            }
+        },
+    }));
+});
+
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('cloche', (nonLuesInitiales) => ({
         ouvert: false,

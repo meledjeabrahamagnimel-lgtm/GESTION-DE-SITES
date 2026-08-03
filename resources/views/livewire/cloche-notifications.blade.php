@@ -1,6 +1,9 @@
 <?php
 
+use App\Domain\Shared\Models\AbonnementPush;
 use App\Domain\Shared\Models\NotificationApp;
+use App\Domain\Shared\Services\WebPush\EnvoyeurPush;
+use Illuminate\Support\Facades\Validator;
 use function Livewire\Volt\{computed, on};
 
 // Rafraîchi par wire:poll et par l'événement émis après lecture d'une conversation.
@@ -29,6 +32,38 @@ $toutMarquerLu = function () {
     unset($this->notifications, $this->nombreNonLues);
 };
 
+/** Les clés VAPID ne sont pas configurées : la section « appareil » reste masquée. */
+$pushConfigure = computed(fn () => EnvoyeurPush::estConfigure());
+
+$appareilAbonne = computed(fn () => $this->pushConfigure
+    && AbonnementPush::where('user_id', auth()->id())->exists());
+
+/** Enregistre l'abonnement obtenu par le navigateur pour cet appareil. */
+$enregistrerAbonnement = function (string $endpoint, string $p256dh, string $auth, ?string $appareil = null) {
+    // Ces valeurs viennent du navigateur, pas de propriétés du composant : on les
+    // valide explicitement avant de les écrire.
+    Validator::make(
+        ['endpoint' => $endpoint, 'p256dh' => $p256dh, 'auth' => $auth],
+        [
+            'endpoint' => ['required', 'url', 'max:2000'],
+            'p256dh' => ['required', 'string', 'max:255'],
+            'auth' => ['required', 'string', 'max:255'],
+        ],
+    )->validate();
+
+    AbonnementPush::updateOrCreate(
+        ['user_id' => auth()->id(), 'empreinte' => AbonnementPush::empreinteDe($endpoint)],
+        [
+            'endpoint' => $endpoint,
+            'cle_p256dh' => $p256dh,
+            'cle_auth' => $auth,
+            'appareil' => $appareil ? str($appareil)->limit(190)->value() : null,
+        ],
+    );
+
+    unset($this->appareilAbonne);
+};
+
 ?>
 
 <div wire:poll.20s x-data="cloche({{ $this->nombreNonLues }})" style="position:relative;">
@@ -51,6 +86,23 @@ $toutMarquerLu = function () {
                 <button type="button" wire:click="toutMarquerLu" class="cloche-lien">Tout marquer comme lu</button>
             @endif
         </div>
+
+        @if ($this->pushConfigure)
+            <div x-data="abonnementPush(@js(config('webpush.cle_publique')))" x-show="disponible" class="cloche-appareil">
+                @if ($this->appareilAbonne)
+                    <span class="cloche-appareil-actif">✓ Notifications activées sur cet appareil</span>
+                @else
+                    <button type="button" @click="activer()" :disabled="occupe" class="cloche-appareil-bouton">
+                        <span x-show="!occupe">Recevoir les alertes sur cet appareil</span>
+                        <span x-show="occupe" x-cloak>Activation…</span>
+                    </button>
+                    <span x-show="etat === 'denied'" x-cloak class="cloche-appareil-refus">
+                        Les notifications sont bloquées dans les réglages du navigateur.
+                    </span>
+                    <span x-show="echec" x-cloak x-text="echec" class="cloche-appareil-refus"></span>
+                @endif
+            </div>
+        @endif
 
         <div class="cloche-liste">
             @forelse ($this->notifications as $notif)

@@ -621,3 +621,27 @@ img, canvas, svg, video { max-width: 100%; height: auto; }
     .messagerie-liste { max-height: 260px; }
     .messagerie-bulle { max-width: 100%; }
 }
+
+/* Bandeau d'activation des notifications poussées, en tête du panneau de la cloche. */
+.cloche-appareil {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--th-ligne);
+    background: #FFFBEA;
+}
+
+.cloche-appareil-bouton {
+    width: 100%;
+    background: var(--th-accent);
+    color: #fff;
+    border: 0;
+    border-radius: 7px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.cloche-appareil-bouton:disabled { opacity: .6; cursor: progress; }
+
+.cloche-appareil-actif { display: block; font-size: 12px; font-weight: 700; color: var(--th-vert); }
+.cloche-appareil-refus { display: block; font-size: 11.5px; color: var(--th-ambre); margin-top: 6px; }

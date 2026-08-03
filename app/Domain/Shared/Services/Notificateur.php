@@ -3,6 +3,7 @@
 namespace App\Domain\Shared\Services;
 
 use App\Domain\Shared\Models\NotificationApp;
+use App\Domain\Shared\Services\WebPush\EnvoyeurPush;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -31,6 +32,8 @@ class Notificateur
             'corps' => $corps,
             'lien' => $lien,
         ]);
+
+        EnvoyeurPush::diffuser([$id], $titre, $corps, $lien);
     }
 
     /**
@@ -64,9 +67,15 @@ class Notificateur
             ])
             ->all();
 
-        if ($lignes !== []) {
-            DB::table('notifications_app')->insert($lignes);
+        if ($lignes === []) {
+            return;
         }
+
+        DB::table('notifications_app')->insert($lignes);
+
+        // Le même signal part vers les appareils abonnés, pour joindre la personne
+        // même quand l'application n'est pas ouverte.
+        EnvoyeurPush::diffuser(array_column($lignes, 'user_id'), $titre, $corps, $lien);
     }
 
     /**

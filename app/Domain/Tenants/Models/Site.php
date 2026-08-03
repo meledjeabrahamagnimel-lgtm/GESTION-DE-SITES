@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['entreprise_id', 'code', 'nom', 'ville', 'commune', 'telephone', 'adresse', 'couleur', 'responsable_id', 'est_actif'])]
 class Site extends Model
@@ -27,5 +28,10 @@ class Site extends Model
     public function responsable(): BelongsTo
     {
         return $this->belongsTo(User::class, 'responsable_id');
+    }
+
+    public function commerciaux(): HasMany
+    {
+        return $this->hasMany(\App\Domain\Operations\Models\Commercial::class);
     }
 }

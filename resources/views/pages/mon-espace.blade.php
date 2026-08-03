@@ -17,6 +17,10 @@ state([
     // Référentiels
     'refType' => Referentiel::ACTIVITE,
     'refValeur' => '',
+
+    // Sites (responsable de site uniquement)
+    'siteId' => null,
+    'siteNom' => '', 'siteVille' => '', 'siteCommune' => '', 'siteTelephone' => '', 'siteAdresse' => '',
 ]);
 
 mount(function () {
@@ -40,6 +44,93 @@ $monSite = computed(function () {
 });
 
 $maFicheCommerciale = computed(fn () => \App\Domain\Operations\Models\Commercial::where('user_id', auth()->id())->first());
+
+/**
+ * Le responsable de site tient les sites à jour depuis son poste, sans dépendre
+ * de la disponibilité du gérant. Le commercial, lui, n'y a pas accès.
+ */
+$estResponsable = computed(fn () => auth()->user()->hasRole('responsable_site'));
+
+$sites = computed(fn () => Site::where('entreprise_id', auth()->user()->entreprise_id)
+    ->withCount('commerciaux')->orderBy('code')->get());
+
+$viderFormulaireSite = function () {
+    $this->siteId = null;
+    $this->siteNom = '';
+    $this->siteVille = '';
+    $this->siteCommune = '';
+    $this->siteTelephone = '';
+    $this->siteAdresse = '';
+};
+
+$editerSite = function (int $id) {
+    abort_unless($this->estResponsable, 403);
+
+    $site = Site::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($id);
+
+    $this->siteId = $site->id;
+    $this->siteNom = $site->nom;
+    $this->siteVille = $site->ville ?? '';
+    $this->siteCommune = $site->commune ?? '';
+    $this->siteTelephone = $site->telephone ?? '';
+    $this->siteAdresse = $site->adresse ?? '';
+};
+
+$enregistrerSite = function () {
+    abort_unless($this->estResponsable, 403);
+
+    $donnees = $this->validate([
+        'siteNom' => ['required', 'string', 'max:255'],
+        'siteVille' => ['required', 'string', 'max:255'],
+        'siteCommune' => ['nullable', 'string', 'max:255'],
+        'siteTelephone' => ['nullable', 'string', 'max:40'],
+        'siteAdresse' => ['nullable', 'string', 'max:255'],
+    ], [], [
+        'siteNom' => 'nom du site', 'siteVille' => 'ville', 'siteCommune' => 'commune',
+        'siteTelephone' => 'téléphone', 'siteAdresse' => 'adresse',
+    ]);
+
+    $valeurs = [
+        'nom' => $donnees['siteNom'],
+        'ville' => $donnees['siteVille'],
+        'commune' => $donnees['siteCommune'] ?: null,
+        'telephone' => $donnees['siteTelephone'] ?: null,
+        'adresse' => $donnees['siteAdresse'] ?: null,
+    ];
+
+    if ($this->siteId) {
+        Site::where('entreprise_id', auth()->user()->entreprise_id)
+            ->findOrFail($this->siteId)->update($valeurs);
+
+        $this->message = 'Site mis à jour.';
+    } else {
+        // Le code sert de préfixe aux numéros de documents : il doit rester unique
+        // dans l'entreprise, y compris après la suppression d'un site.
+        $rang = Site::where('entreprise_id', auth()->user()->entreprise_id)->max('id') + 1;
+
+        Site::create([
+            ...$valeurs,
+            'entreprise_id' => auth()->user()->entreprise_id,
+            'code' => 'S'.str_pad((string) $rang, 2, '0', STR_PAD_LEFT),
+            'est_actif' => true,
+        ]);
+
+        $this->message = 'Site créé : il est désormais proposé dans les listes déroulantes.';
+    }
+
+    $this->viderFormulaireSite();
+    unset($this->sites, $this->monSite);
+};
+
+$basculerSite = function (int $id) {
+    abort_unless($this->estResponsable, 403);
+
+    $site = Site::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($id);
+    $site->update(['est_actif' => ! $site->est_actif]);
+
+    unset($this->sites);
+    $this->message = $site->est_actif ? 'Site réactivé.' : 'Site désactivé.';
+};
 
 $referentiels = computed(fn () => Referentiel::where('type', $this->refType)->orderBy('valeur')->get());
 
@@ -111,7 +202,14 @@ $supprimerReferentiel = function (int $id) {
 
 <div>
     <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
-        @foreach (['profil' => 'Mon profil', 'entreprise' => 'Mon entreprise', 'listes' => 'Listes déroulantes'] as $cle => $libelle)
+        @php
+            $onglets = ['profil' => 'Mon profil', 'entreprise' => 'Mon entreprise'];
+            if ($this->estResponsable) {
+                $onglets['sites'] = 'Sites';
+            }
+            $onglets['listes'] = 'Listes déroulantes';
+        @endphp
+        @foreach ($onglets as $cle => $libelle)
             <button type="button" wire:click="$set('onglet', '{{ $cle }}')"
                 class="onglet {{ $onglet === $cle ? 'est-actif' : '' }}">{{ $libelle }}</button>
         @endforeach
@@ -186,6 +284,79 @@ $supprimerReferentiel = function (int $id) {
                     {{ $this->entreprise?->code_entreprise ?? '— non généré —' }}
                 </div>
             </div>
+        </x-carte-section>
+    @endif
+
+    {{-- -------------------------------------------------------------- Sites --}}
+    @if ($onglet === 'sites' && $this->estResponsable)
+        <x-carte-section titre="{{ $siteId ? 'Modifier le site' : 'Nouveau site' }}" icone="atelier" couleur="#2563EB">
+            <p style="font-size:13px; color:var(--th-gris,#6B6E76); margin:0 0 14px;">
+                Les sites créés ici alimentent immédiatement les listes déroulantes de saisie
+                et le filtre du tableau de bord. Le code est attribué automatiquement.
+            </p>
+
+            <div class="bloc-saisie">
+                <x-champ label="Nom du site" model="siteNom" requis="true" placeholder="Ex : Abidjan — Site 2" />
+                <x-champ label="Ville" model="siteVille" requis="true" placeholder="Ex : Abidjan" />
+                <x-champ label="Commune" model="siteCommune" placeholder="Ex : Cocody" />
+            </div>
+
+            <div class="bloc-saisie" style="margin-top:10px;">
+                <x-champ label="Téléphone" model="siteTelephone" placeholder="+225 …" />
+                <x-champ label="Adresse" model="siteAdresse" placeholder="Ex : Boulevard Latrille" />
+            </div>
+
+            <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+                <button type="button" wire:click="enregistrerSite" class="bouton">
+                    {{ $siteId ? 'Enregistrer les modifications' : '+ Créer le site' }}
+                </button>
+                @if ($siteId)
+                    <button type="button" wire:click="viderFormulaireSite" class="bouton bouton-secondaire">Annuler</button>
+                @endif
+            </div>
+        </x-carte-section>
+
+        <x-carte-section titre="Sites de l'entreprise" icone="liste" couleur="#2A2E35">
+            <div class="tableau-conteneur">
+                <table class="tableau">
+                    <thead>
+                        <tr>
+                            <th>Code</th><th>Nom</th><th>Ville</th><th>Commune</th>
+                            <th>Téléphone</th><th>Responsable</th><th>Commerciaux</th><th>Statut</th>
+                            <th style="text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($this->sites as $s)
+                            <tr wire:key="site-{{ $s->id }}">
+                                <td style="font-weight:700;">{{ $s->code }}</td>
+                                <td style="font-weight:600;">{{ $s->nom }}</td>
+                                <td>{{ $s->ville ?? '—' }}</td>
+                                <td>{{ $s->commune ?? '—' }}</td>
+                                <td>{{ $s->telephone ?? '—' }}</td>
+                                <td>{{ $s->responsable?->name ?? '—' }}</td>
+                                <td>{{ $s->commerciaux_count }}</td>
+                                <td>
+                                    <span class="pastille {{ $s->est_actif ? 'pastille-vert' : 'pastille-ambre' }}">
+                                        {{ $s->est_actif ? 'Actif' : 'Inactif' }}
+                                    </span>
+                                </td>
+                                <td style="text-align:right; white-space:nowrap;">
+                                    <button type="button" wire:click="editerSite({{ $s->id }})"
+                                        class="bouton bouton-secondaire bouton-petit">Modifier</button>
+                                    <button type="button" wire:click="basculerSite({{ $s->id }})"
+                                        class="bouton bouton-secondaire bouton-petit">
+                                        {{ $s->est_actif ? 'Désactiver' : 'Réactiver' }}
+                                    </button>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+            @if ($this->sites->isEmpty())
+                <p class="legende-vide">Aucun site pour le moment.</p>
+            @endif
         </x-carte-section>
     @endif
 
