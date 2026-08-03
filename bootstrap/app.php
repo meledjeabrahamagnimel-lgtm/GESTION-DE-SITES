@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\DefinirEquipePermissions;
 use App\Http\Middleware\ForcerChangementMotDePasse;
+use App\Http\Middleware\VerifieHabilitation;
 use App\Http\Middleware\VerifierCompteActif;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -28,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
+            'habilitation' => VerifieHabilitation::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

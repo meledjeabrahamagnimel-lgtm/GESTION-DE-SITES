@@ -24,6 +24,10 @@ Route::middleware(['auth'])->group(function () {
 
     Volt::route('/mon-compte/mot-de-passe', 'mot-de-passe')->name('mot-de-passe.modifier');
 
+    // Messagerie interne : ouverte à tous les rôles, les destinataires étant
+    // filtrés par AnnuaireMessagerie selon le rôle et l'entreprise.
+    Volt::route('/messages', 'messages')->name('messages');
+
     // Espace personnel : profil, photo, rattachement, listes déroulantes.
     Route::middleware(['role:responsable_site|commercial'])->group(function () {
         Volt::route('/mon-espace', 'mon-espace')->name('mon-espace');
@@ -55,16 +59,18 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware(['role:commercial'])->group(function () {
         Volt::route('/ma-performance', 'ma-performance')->name('ma-performance');
         Volt::route('/mes-prospections', 'mes-prospections')->name('mes-prospections');
+        Volt::route('/mes-notes', 'mes-notes')->name('mes-notes');
     });
 
     // Super Admin — plateforme, hors périmètre d'une entreprise.
     Route::prefix('super-admin')->name('super-admin.')->middleware(['role:super_admin'])->group(function () {
-        Volt::route('/', 'super-admin-dashboard')->name('dashboard');
-        Volt::route('/entreprises', 'super-admin-entreprises-index')->name('entreprises.index');
-        Volt::route('/entreprises/{entreprise}', 'super-admin-entreprises-detail')->name('entreprises.show');
-        Volt::route('/acces', 'super-admin-acces-index')->name('acces.index');
-        Volt::route('/acces/creer', 'super-admin-acces-creer')->name('acces.creer');
-        Volt::route('/journal', 'super-admin-journal-index')->name('journal.index');
-        Volt::route('/maintenance', 'super-admin-maintenance')->name('maintenance');
+        Volt::route('/', 'super-admin-dashboard')->name('dashboard')->middleware('habilitation:dashboard');
+        Volt::route('/entreprises', 'super-admin-entreprises-index')->name('entreprises.index')->middleware('habilitation:entreprises');
+        Volt::route('/entreprises/{entreprise}', 'super-admin-entreprises-detail')->name('entreprises.show')->middleware('habilitation:entreprises');
+        Volt::route('/acces', 'super-admin-acces-index')->name('acces.index')->middleware('habilitation:acces');
+        Volt::route('/acces/creer', 'super-admin-acces-creer')->name('acces.creer')->middleware('habilitation:acces');
+        Volt::route('/administrateurs', 'super-admin-administrateurs')->name('administrateurs')->middleware('habilitation:acces');
+        Volt::route('/journal', 'super-admin-journal-index')->name('journal.index')->middleware('habilitation:journal');
+        Volt::route('/maintenance', 'super-admin-maintenance')->name('maintenance')->middleware('habilitation:maintenance');
     });
 });

@@ -9,7 +9,9 @@ use App\Domain\Operations\Models\Prospection;
 use App\Domain\Operations\Models\SaisieJournaliere;
 use App\Domain\Operations\Services\GenerateurNumero;
 use App\Domain\Shared\Concerns\GereLesDonneesLibres;
+use App\Domain\Shared\Models\NotificationApp;
 use App\Domain\Shared\Models\Referentiel;
+use App\Domain\Shared\Services\Notificateur;
 use App\Domain\Tenants\Models\Site;
 use Illuminate\Validation\Rule;
 use function Livewire\Volt\{state, computed, mount, uses};
@@ -137,19 +139,64 @@ $commerciauxSelectables = computed(fn () => Commercial::where('site_id', $this->
 $prospectionsATraiter = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)
     ->aTraiter()->with('commercial')->orderBy('date')->get());
 
+/**
+ * Prévient les commerciaux concernés du sort réservé à leurs transmissions.
+ * Appelé AVANT la mise à jour, tant que les lignes portent encore le statut « Transmise ».
+ *
+ * @param  array<int, int>  $ids
+ */
+$avertirDuRetour = function (array $ids, string $statut, ?string $motif = null) {
+    if ($ids === []) {
+        return;
+    }
+
+    $destinataires = Prospection::where('site_id', $this->site->id)
+        ->whereIn('id', $ids)
+        ->with('commercial:id,user_id')
+        ->get()
+        ->pluck('commercial.user_id')
+        ->filter()
+        ->unique();
+
+    if ($destinataires->isEmpty()) {
+        return;
+    }
+
+    $refusee = $statut === 'Refusée';
+
+    Notificateur::pourPlusieurs(
+        destinataires: $destinataires,
+        titre: $refusee ? 'Prospection refusée' : 'Prospection validée',
+        corps: $refusee
+            ? 'Votre responsable a refusé une prospection.'.($motif ? ' Motif : '.$motif : '')
+            : 'Votre responsable a validé '.count($ids).' prospection(s).',
+        canal: NotificationApp::CANAL_GESTION,
+        niveau: $refusee ? NotificationApp::NIVEAU_CRITIQUE : NotificationApp::NIVEAU_SUCCES,
+        lien: route('mes-prospections'),
+    );
+};
+
 $validerProspection = function (int $id) {
+    $this->avertirDuRetour([$id], 'Validée');
+
     Prospection::where('site_id', $this->site->id)->aTraiter()->where('id', $id)
         ->update(['statut_validation' => 'Validée', 'motif_refus' => null]);
     unset($this->prospectionsATraiter, $this->prospectionsDuJour);
 };
 
 $refuserProspection = function (int $id) {
+    $motif = $this->motifRefus[$id] ?? null;
+    $this->avertirDuRetour([$id], 'Refusée', $motif);
+
     Prospection::where('site_id', $this->site->id)->aTraiter()->where('id', $id)
-        ->update(['statut_validation' => 'Refusée', 'motif_refus' => $this->motifRefus[$id] ?? null]);
+        ->update(['statut_validation' => 'Refusée', 'motif_refus' => $motif]);
     unset($this->prospectionsATraiter, $this->prospectionsDuJour);
 };
 
 $validerToutesProspections = function () {
+    $ids = Prospection::where('site_id', $this->site->id)->aTraiter()->pluck('id')->all();
+    $this->avertirDuRetour($ids, 'Validée');
+
     Prospection::where('site_id', $this->site->id)->aTraiter()
         ->update(['statut_validation' => 'Validée', 'motif_refus' => null]);
     unset($this->prospectionsATraiter, $this->prospectionsDuJour);

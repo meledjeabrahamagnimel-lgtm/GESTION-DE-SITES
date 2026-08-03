@@ -16,7 +16,7 @@ use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password', 'entreprise_id', 'telephone', 'est_actif', 'doit_changer_mot_de_passe', 'email_verified_at', 'photo_chemin'])]
+#[Fillable(['name', 'email', 'password', 'entreprise_id', 'telephone', 'est_actif', 'doit_changer_mot_de_passe', 'email_verified_at', 'photo_chemin', 'cree_par_id', 'est_fondateur', 'habilitations'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -31,7 +31,68 @@ class User extends Authenticatable
             'password' => 'hashed',
             'est_actif' => 'boolean',
             'doit_changer_mot_de_passe' => 'boolean',
+            'est_fondateur' => 'boolean',
+            'habilitations' => 'array',
         ];
+    }
+
+    /**
+     * Sections de la plateforme ouvertes à ce Super Admin.
+     * Le fondateur les a toutes, sans exception ni possibilité de retrait.
+     *
+     * @return array<int, string>
+     */
+    public function sectionsAutorisees(): array
+    {
+        if (! $this->estSuperAdmin()) {
+            return [];
+        }
+
+        if ($this->est_fondateur) {
+            return array_keys(self::SECTIONS_PLATEFORME);
+        }
+
+        return array_values(array_intersect(
+            $this->habilitations ?? [],
+            array_keys(self::SECTIONS_PLATEFORME),
+        ));
+    }
+
+    /** Sections administrables de la plateforme, libellées pour l'interface. */
+    public const SECTIONS_PLATEFORME = [
+        'dashboard' => 'Tableau de bord',
+        'entreprises' => 'Entreprises',
+        'acces' => 'Accès et administrateurs',
+        'journal' => "Journal d'activité",
+        'maintenance' => 'Maintenance et purge',
+    ];
+
+    public function peutAccederA(string $section): bool
+    {
+        return in_array($section, $this->sectionsAutorisees(), true);
+    }
+
+    /**
+     * Vrai si cet utilisateur peut modifier ou supprimer le compte visé.
+     *
+     * Deux garde-fous : le fondateur n'est jamais modifiable par un tiers, et un
+     * secondaire ne gère que les comptes qu'il a lui-même créés.
+     */
+    public function peutGerer(self $cible): bool
+    {
+        if ($cible->est_fondateur) {
+            return false;
+        }
+
+        if ($this->id === $cible->id) {
+            return false;
+        }
+
+        if (! $this->estSuperAdmin()) {
+            return false;
+        }
+
+        return $this->est_fondateur || $cible->cree_par_id === $this->id;
     }
 
     /** URL de la photo de profil, ou null si aucune photo servable. */
@@ -56,6 +117,12 @@ class User extends Authenticatable
     public function entreprise(): BelongsTo
     {
         return $this->belongsTo(Entreprise::class);
+    }
+
+    /** Administrateur qui a créé ce compte, pour délimiter le périmètre des secondaires. */
+    public function createur(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'cree_par_id');
     }
 
     /** Un utilisateur sans entreprise est un membre de l'équipe plateforme (Super Admin). */

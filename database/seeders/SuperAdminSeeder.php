@@ -32,6 +32,11 @@ class SuperAdminSeeder extends Seeder
             'email_verified_at' => now(),
         ]);
 
+        // Compte fondateur : toutes les sections, et intouchable par les secondaires.
+        if (! $superAdmin->est_fondateur) {
+            $superAdmin->update(['est_fondateur' => true]);
+        }
+
         $superAdmin->assignRole('super_admin');
     }
 }

@@ -399,3 +399,249 @@ img, canvas, svg, video { max-width: 100%; height: auto; }
 
 /* Pagination Laravel : lisible et compacte. */
 .tableau-conteneur + div nav, nav[role="navigation"] { font-size: 13px; }
+
+/* ============================================================ MESSAGERIE */
+
+.messagerie {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    align-items: start;
+}
+
+.messagerie-liste { max-height: 74vh; overflow-y: auto; }
+
+.messagerie-fil {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--th-ligne);
+    padding: 10px 8px;
+    cursor: pointer;
+    border-radius: 7px;
+}
+
+.messagerie-fil:hover { background: #FAF9F5; }
+.messagerie-fil.est-actif { background: #FDF2F4; box-shadow: inset 3px 0 0 var(--th-accent); }
+
+.messagerie-panneau { min-height: 420px; display: flex; flex-direction: column; }
+
+/* Annuaire des destinataires : liste défilante, jamais de débordement horizontal. */
+.messagerie-annuaire {
+    max-height: 230px;
+    overflow-y: auto;
+    border: 1px solid var(--th-ligne);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #FFFDF6;
+}
+
+.messagerie-destinataire {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 2px;
+    font-size: 13.5px;
+    cursor: pointer;
+}
+
+.messagerie-destinataire input { accent-color: var(--th-accent); width: 15px; height: 15px; }
+
+.messagerie-flux {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 52vh;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 4px;
+}
+
+.messagerie-bulle {
+    border: 1px solid var(--th-ligne);
+    border-left: 3px solid var(--th-steel);
+    border-radius: 9px;
+    padding: 10px 12px;
+    background: #fff;
+    max-width: 88%;
+}
+
+.messagerie-bulle.est-moi {
+    align-self: flex-end;
+    background: #FFFBEA;
+    border-left: 0;
+    border-right: 3px solid var(--th-accent);
+}
+
+.messagerie-piece {
+    display: inline-block;
+    margin-top: 7px;
+    margin-right: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--th-bleu);
+    text-decoration: none;
+    border: 1px solid #2563EB44;
+    border-radius: 6px;
+    padding: 4px 9px;
+    background: #EFF4FE;
+}
+
+/* ==================================================== CLOCHE & BANDEAUX */
+
+.cloche-bouton {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid #4B4E55;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+}
+
+.cloche-bouton:hover { background: #ffffff1a; }
+
+.cloche-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    border-radius: 99px;
+    background: var(--th-accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 19px;
+    text-align: center;
+    box-shadow: 0 0 0 2px var(--th-ink);
+}
+
+.cloche-panneau {
+    position: absolute;
+    right: 0;
+    top: 44px;
+    width: 340px;
+    max-width: calc(100vw - 24px);
+    background: #fff;
+    color: var(--th-ink);
+    border: 1px solid var(--th-ligne);
+    border-radius: 10px;
+    box-shadow: 0 14px 40px #0000002e;
+    z-index: 60;
+    overflow: hidden;
+}
+
+.cloche-entete {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--th-ink);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+}
+
+.cloche-lien {
+    background: transparent;
+    border: 0;
+    color: #E8B4BC;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.cloche-liste { max-height: 380px; overflow-y: auto; }
+
+.cloche-item {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--th-ligne);
+    text-decoration: none;
+    color: inherit;
+}
+
+.cloche-item:hover { background: #FAF9F5; }
+.cloche-item.est-non-lu { background: #FFFBEA; }
+
+.cloche-puce { width: 8px; height: 8px; border-radius: 99px; margin-top: 5px; flex: 0 0 auto; }
+.cloche-titre { display: block; font-size: 13.5px; font-weight: 700; }
+.cloche-corps { display: block; font-size: 12.5px; color: var(--th-gris); margin-top: 2px; }
+.cloche-date { display: block; font-size: 11px; color: var(--th-gris); margin-top: 3px; }
+
+#pile-notifications {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: calc(100vw - 32px);
+}
+
+.notification-flottante {
+    background: var(--th-ink);
+    color: #fff;
+    border-left: 4px solid var(--th-accent);
+    border-radius: 9px;
+    padding: 11px 16px;
+    font-size: 13.5px;
+    font-weight: 600;
+    box-shadow: 0 10px 30px #00000045;
+    animation: notif-entree .28s ease-out;
+    max-width: 340px;
+}
+
+.notification-flottante.sort { opacity: 0; transform: translateY(8px); transition: all .5s ease-in; }
+
+@keyframes notif-entree {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+[x-cloak] { display: none !important; }
+
+@media (max-width: 900px) {
+    .messagerie { grid-template-columns: 1fr; }
+    .messagerie-liste { max-height: 260px; }
+    .messagerie-bulle { max-width: 100%; }
+}
+
+/* Bandeau d'activation des notifications poussées, en tête du panneau de la cloche. */
+.cloche-appareil {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--th-ligne);
+    background: #FFFBEA;
+}
+
+.cloche-appareil-bouton {
+    width: 100%;
+    background: var(--th-accent);
+    color: #fff;
+    border: 0;
+    border-radius: 7px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.cloche-appareil-bouton:disabled { opacity: .6; cursor: progress; }
+
+.cloche-appareil-actif { display: block; font-size: 12px; font-weight: 700; color: var(--th-vert); }
+.cloche-appareil-refus { display: block; font-size: 11.5px; color: var(--th-ambre); margin-top: 6px; }
