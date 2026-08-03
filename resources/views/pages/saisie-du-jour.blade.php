@@ -56,7 +56,7 @@ $chargerSaisieJournaliere = function () {
         return;
     }
 
-    $saisie = SaisieJournaliere::where('site_id', $this->site->id)->where('date', $this->date)->first();
+    $saisie = SaisieJournaliere::where('site_id', $this->site->id)->whereDate('date', $this->date)->first();
 
     $this->vehiculesSansFacture = $saisie?->vehicules_sans_facture ?? 0;
     $this->commentaireProspects = $saisie?->commentaire_prospects ?? '';
@@ -202,21 +202,21 @@ $validerToutesProspections = function () {
     unset($this->prospectionsATraiter, $this->prospectionsDuJour);
 };
 
-$prospectionsDuJour = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->visibles()->where('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
+$prospectionsDuJour = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->visibles()->whereDate('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
 
 $prospectionsAttenteDevis = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->where('statut_validation', 'Validée')->where('devis_apres_passage', true)->doesntHave('devis')->with('commercial')->orderBy('date')->limit(12)->get());
 
-$devisDuJour = computed(fn () => Devis::where('site_id', $this->site?->id ?? 0)->where('date_emission', $this->date)->with('commercial')->orderByDesc('id')->get());
+$devisDuJour = computed(fn () => Devis::where('site_id', $this->site?->id ?? 0)->whereDate('date_emission', $this->date)->with('commercial')->orderByDesc('id')->get());
 
 $devisEnAttente = computed(fn () => Devis::where('site_id', $this->site?->id ?? 0)->where('statut', 'En attente')->with('commercial')->orderBy('date_emission')->get());
 
 $devisValidesNonFactures = computed(fn () => Devis::where('site_id', $this->site?->id ?? 0)->where('statut', 'Validé')->doesntHave('facture')->with('commercial')->orderBy('date_emission')->limit(12)->get());
 
-$facturesDuJour = computed(fn () => Facture::where('site_id', $this->site?->id ?? 0)->where('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
+$facturesDuJour = computed(fn () => Facture::where('site_id', $this->site?->id ?? 0)->whereDate('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
 
-$encaissementsDuJour = computed(fn () => Encaissement::where('site_id', $this->site?->id ?? 0)->where('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
+$encaissementsDuJour = computed(fn () => Encaissement::where('site_id', $this->site?->id ?? 0)->whereDate('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
 
-$chargesDuJour = computed(fn () => Charge::where('site_id', $this->site?->id ?? 0)->where('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
+$chargesDuJour = computed(fn () => Charge::where('site_id', $this->site?->id ?? 0)->whereDate('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
 
 $statistiquesCommerciaux = computed(fn () => Commercial::where('site_id', $this->site?->id ?? 0)->where('est_spontane', false)->with('site')->orderBy('numero')->get());
 
