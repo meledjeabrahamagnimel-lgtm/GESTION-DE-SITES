@@ -139,11 +139,11 @@ class Diagnostic extends Command
             "Renseignez APP_URL dans .env avec l'adresse exacte du site, https:// compris.",
         );
 
-        $this->verifier(
-            'Proxys de confiance déclarés (HTTPS derrière un frontal)',
-            ! empty(env('PROXYS_DE_CONFIANCE', '*')),
-            "Laissez PROXYS_DE_CONFIANCE vide n'est pas conseillé sur un hébergement mutualisé.",
-        );
+        // La déclaration retombe sur « * » quand la variable est absente ou vide :
+        // elle est donc toujours active. On se contente d'afficher la valeur retenue.
+        $proxys = env('PROXYS_DE_CONFIANCE') ?: '*';
+        $this->line('  <fg=green>✓</> Proxys de confiance déclarés (HTTPS derrière un frontal)');
+        $this->ligne('Proxys retenus', $proxys === '*' ? '* (tous — usage courant en mutualisé)' : $proxys);
 
         // Un cookie « secure » n'est jamais renvoyé par le navigateur sur une page en http :
         // la session se perd à chaque page, l'utilisateur est renvoyé sans fin vers la connexion.
