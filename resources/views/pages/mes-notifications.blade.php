@@ -63,6 +63,9 @@ $envoyerUnEssai = function () {
 
 ?>
 
+{{-- Le x-data est porté par un élément INTERNE : Livewire reconstruit la racine de
+     ses composants, et Alpine y perdrait son contexte à chaque rafraîchissement. --}}
+<div>
 <div x-data="{
         secure: window.isSecureContext,
         sw: 'serviceWorker' in navigator,
@@ -234,4 +237,5 @@ $envoyerUnEssai = function () {
     </x-carte-section>
 
     @endif
+</div>
 </div>

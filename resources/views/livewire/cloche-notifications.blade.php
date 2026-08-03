@@ -3,11 +3,18 @@
 use App\Domain\Shared\Models\AbonnementPush;
 use App\Domain\Shared\Models\NotificationApp;
 use App\Domain\Shared\Services\WebPush\EnvoyeurPush;
-use Illuminate\Support\Facades\Validator;
 use function Livewire\Volt\{computed, mount, on, state};
 
-// Dernier nombre de non-lues connu du navigateur : sert à détecter une arrivée
-// entre deux sondages, pour ne sonner qu'à ce moment-là.
+/*
+ * Ce composant se rafraîchit tout seul par wire:poll. Livewire reconstruit alors
+ * son DOM, et Alpine perd le contexte des x-data qui s'y trouvent : les expressions
+ * échouent sur « ouvert is not defined ». L'ouverture du panneau est donc pilotée
+ * par une propriété Livewire, sans la moindre directive Alpine ici.
+ */
+state(['ouvert' => false]);
+
+// Dernier nombre de non-lues connu : sert à détecter une arrivée entre deux
+// sondages, pour ne sonner qu'à ce moment-là.
 state(['dernierCompte' => 0]);
 
 mount(function () {
@@ -20,11 +27,7 @@ on(['notifications-actualisees' => function () {
     $this->dernierCompte = $this->nombreNonLues;
 }]);
 
-/**
- * Appelé par wire:poll. C'est le serveur qui décide s'il faut sonner : le navigateur
- * n'a plus à surveiller le badge dans le DOM, ce qui supposait un composant Alpine
- * enregistré à temps.
- */
+/** Appelé par wire:poll : c'est le serveur qui décide s'il faut sonner. */
 $rafraichir = function () {
     unset($this->notifications, $this->nombreNonLues);
 
@@ -38,6 +41,14 @@ $rafraichir = function () {
     }
 
     $this->dernierCompte = $actuel;
+};
+
+$basculer = function () {
+    $this->ouvert = ! $this->ouvert;
+};
+
+$fermer = function () {
+    $this->ouvert = false;
 };
 
 $notifications = computed(fn () => NotificationApp::query()
@@ -63,45 +74,17 @@ $toutMarquerLu = function () {
     $this->dernierCompte = 0;
 };
 
-/** Les clés VAPID ne sont pas configurées : la section « appareil » reste masquée. */
-$pushConfigure = computed(fn () => EnvoyeurPush::estConfigure());
-
-$appareilAbonne = computed(fn () => $this->pushConfigure
-    && AbonnementPush::where('user_id', auth()->id())->exists());
-
-/** Enregistre l'abonnement obtenu par le navigateur pour cet appareil. */
-$enregistrerAbonnement = function (string $endpoint, string $p256dh, string $auth, ?string $appareil = null) {
-    // Ces valeurs viennent du navigateur, pas de propriétés du composant : on les
-    // valide explicitement avant de les écrire.
-    Validator::make(
-        ['endpoint' => $endpoint, 'p256dh' => $p256dh, 'auth' => $auth],
-        [
-            'endpoint' => ['required', 'url', 'max:2000'],
-            'p256dh' => ['required', 'string', 'max:255'],
-            'auth' => ['required', 'string', 'max:255'],
-        ],
-    )->validate();
-
-    AbonnementPush::updateOrCreate(
-        ['user_id' => auth()->id(), 'empreinte' => AbonnementPush::empreinteDe($endpoint)],
-        [
-            'endpoint' => $endpoint,
-            'cle_p256dh' => $p256dh,
-            'cle_auth' => $auth,
-            'appareil' => $appareil ? str($appareil)->limit(190)->value() : null,
-        ],
-    );
-
-    unset($this->appareilAbonne);
-};
+/** Rappel discret tant qu'aucun appareil n'est enregistré. */
+$doitProposerActivation = computed(fn () => EnvoyeurPush::estConfigure()
+    && ! AbonnementPush::where('user_id', auth()->id())->exists());
 
 ?>
 
 {{-- « .visible » suspend le sondage quand l'onglet est masqué : aucune requête inutile
      sur un poste laissé ouvert toute la journée. --}}
-<div wire:poll.30s.visible="rafraichir" x-data="{ ouvert: false }" style="position:relative;">
+<div wire:poll.30s.visible="rafraichir" style="position:relative;">
 
-    <button type="button" @click="ouvert = ! ouvert" class="cloche-bouton" aria-label="Notifications">
+    <button type="button" wire:click="basculer" class="cloche-bouton" aria-label="Notifications">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -112,75 +95,48 @@ $enregistrerAbonnement = function (string $endpoint, string $p256dh, string $aut
         @endif
     </button>
 
-    <div x-show="ouvert" x-cloak @click.outside="ouvert = false" x-transition.opacity class="cloche-panneau">
-        <div class="cloche-entete">
-            <span>Notifications</span>
-            @if ($this->nombreNonLues > 0)
-                <button type="button" wire:click="toutMarquerLu" class="cloche-lien">Tout marquer comme lu</button>
-            @endif
-        </div>
+    @if ($ouvert)
+        {{-- Voile transparent : un clic n'importe où ailleurs referme le panneau. --}}
+        <div wire:click="fermer" class="cloche-voile"></div>
 
-        @if ($this->pushConfigure)
-{{-- x-data en ligne, sans composant à enregistrer : la disponibilité se teste
-                 directement, et le module JavaScript n'est sollicité qu'au clic. --}}
-            <div class="cloche-appareil"
-                 x-data="{
-                     occupe: false,
-                     echec: null,
-                     etat: 'Notification' in window ? Notification.permission : 'default',
-                     disponible: 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window,
-                     async activer() {
-                         if (! window.activerPush) {
-                             this.echec = 'Rechargez la page : les scripts ne sont pas encore chargés.';
-                             return;
-                         }
-                         this.occupe = true;
-                         this.echec = null;
-                         const issue = await window.activerPush(@js(config('webpush.cle_publique')), $wire);
-                         if (issue.echec) this.echec = issue.echec;
-                         if (issue.etat) this.etat = issue.etat;
-                         this.occupe = false;
-                     },
-                 }"
-                 x-show="disponible">
-                @if ($this->appareilAbonne)
-                    <span class="cloche-appareil-actif">✓ Notifications activées sur cet appareil</span>
-                @else
-                    <button type="button" @click="activer()" :disabled="occupe" class="cloche-appareil-bouton">
-                        <span x-show="!occupe">Recevoir les alertes sur cet appareil</span>
-                        <span x-show="occupe" x-cloak>Activation…</span>
-                    </button>
-                    <span x-show="etat === 'denied'" x-cloak class="cloche-appareil-refus">
-                        Les notifications sont bloquées dans les réglages du navigateur.
-                    </span>
-                    <span x-show="echec" x-cloak x-text="echec" class="cloche-appareil-refus"></span>
+        <div class="cloche-panneau">
+            <div class="cloche-entete">
+                <span>Notifications</span>
+                @if ($this->nombreNonLues > 0)
+                    <button type="button" wire:click="toutMarquerLu" class="cloche-lien">Tout marquer comme lu</button>
                 @endif
             </div>
-        @endif
 
-        <a href="{{ route('mes-notifications') }}" wire:navigate class="cloche-reglages">
-            Réglages des notifications sur mes appareils →
-        </a>
-
-        <div class="cloche-liste">
-            @forelse ($this->notifications as $notif)
-                <a wire:key="notif-{{ $notif->id }}"
-                   href="{{ $notif->lien ?: '#' }}"
-                   @if ($notif->lien) wire:navigate @else @click.prevent="" @endif
-                   wire:click="marquerLue({{ $notif->id }})"
-                   class="cloche-item {{ $notif->lu_le ? '' : 'est-non-lu' }}">
-                    <span class="cloche-puce" style="background:{{ $notif->couleur() }};"></span>
-                    <span style="flex:1; min-width:0;">
-                        <span class="cloche-titre">{{ $notif->titre }}</span>
-                        @if ($notif->corps)
-                            <span class="cloche-corps">{{ $notif->corps }}</span>
-                        @endif
-                        <span class="cloche-date">{{ $notif->created_at->diffForHumans() }}</span>
-                    </span>
+            @if ($this->doitProposerActivation)
+                <a href="{{ route('mes-notifications') }}" wire:navigate class="cloche-appareil-rappel">
+                    Activer les alertes sur cet appareil →
                 </a>
-            @empty
-                <p class="legende-vide" style="padding:18px 14px;">Aucune notification.</p>
-            @endforelse
+            @endif
+
+            <a href="{{ route('mes-notifications') }}" wire:navigate class="cloche-reglages">
+                Réglages des notifications sur mes appareils →
+            </a>
+
+            <div class="cloche-liste">
+                @forelse ($this->notifications as $notif)
+                    <a wire:key="notif-{{ $notif->id }}"
+                       href="{{ $notif->lien ?: '#' }}"
+                       @if ($notif->lien) wire:navigate @endif
+                       wire:click="marquerLue({{ $notif->id }})"
+                       class="cloche-item {{ $notif->lu_le ? '' : 'est-non-lu' }}">
+                        <span class="cloche-puce" style="background:{{ $notif->couleur() }};"></span>
+                        <span style="flex:1; min-width:0;">
+                            <span class="cloche-titre">{{ $notif->titre }}</span>
+                            @if ($notif->corps)
+                                <span class="cloche-corps">{{ $notif->corps }}</span>
+                            @endif
+                            <span class="cloche-date">{{ $notif->created_at->diffForHumans() }}</span>
+                        </span>
+                    </a>
+                @empty
+                    <p class="legende-vide" style="padding:18px 14px;">Aucune notification.</p>
+                @endforelse
+            </div>
         </div>
-    </div>
+    @endif
 </div>

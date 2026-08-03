@@ -525,11 +525,13 @@ img, canvas, svg, video { max-width: 100%; height: auto; }
 }
 
 .cloche-panneau {
-    position: absolute;
-    right: 0;
-    top: 44px;
+    /* Position fixe et non absolue : l'en-tête ou l'un de ses parents peut rogner
+       son contenu, ce qui tronquait le panneau et le faisait chevaucher la page. */
+    position: fixed;
+    right: 14px;
+    top: 62px;
     width: 340px;
-    max-width: calc(100vw - 24px);
+    max-width: calc(100vw - 28px);
     background: #fff;
     color: var(--th-ink);
     border: 1px solid var(--th-ligne);
@@ -563,7 +565,54 @@ img, canvas, svg, video { max-width: 100%; height: auto; }
     text-decoration: underline;
 }
 
-.cloche-liste { max-height: 380px; overflow-y: auto; }
+.cloche-liste { max-height: min(380px, 60vh); overflow-y: auto; }
+
+/* Voile transparent : capte le clic à l'extérieur pour refermer le panneau. */
+.cloche-voile {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: transparent;
+}
+
+/* Rappel d'activation, en tête du panneau. */
+.cloche-appareil-rappel {
+    display: block;
+    padding: 10px 14px;
+    background: var(--th-accent);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.cloche-appareil-rappel:hover { background: #a60d26; }
+
+/* Bandeau de rappel en haut des pages, tant qu'aucun appareil n'est enregistré. */
+.rappel-notifications {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    background: #FFFBEA;
+    border: 1px solid #D9770655;
+    border-left: 4px solid var(--th-ambre);
+    border-radius: 9px;
+    padding: 11px 14px;
+    margin-bottom: 16px;
+    font-size: 13.5px;
+    color: var(--th-ink);
+}
+
+.rappel-fermer {
+    background: transparent;
+    border: 0;
+    font-size: 20px;
+    line-height: 1;
+    color: var(--th-gris);
+    cursor: pointer;
+    padding: 0 4px;
+}
 
 .cloche-item {
     display: flex;

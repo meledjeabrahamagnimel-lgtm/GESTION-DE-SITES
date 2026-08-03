@@ -201,7 +201,10 @@ class MessagerieTest extends TestCase
         app(PermissionRegistrar::class)->setPermissionsTeamId($this->alpha->id);
         $this->actingAs($responsable);
 
+        // Le contenu du panneau n'est rendu qu'une fois celui-ci ouvert.
         Volt::test('cloche-notifications')
+            ->assertSee('1')
+            ->call('basculer')
             ->assertSee('Message de Commercial Un')
             ->call('toutMarquerLu');
 
