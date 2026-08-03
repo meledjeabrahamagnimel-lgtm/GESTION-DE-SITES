@@ -29,9 +29,13 @@ return Application::configure(basePath: dirname(__DIR__))
          * L'en-tête X-Forwarded-Host est volontairement exclu : c'est celui qui permettrait
          * à un visiteur de forger l'adresse d'un lien de réinitialisation de mot de passe.
          * Le nom de domaine reste donc celui de APP_URL, quoi qu'annonce le frontal.
+         *
+         * Le « ?: » retombe sur « * » aussi bien quand la variable est absente que
+         * lorsqu'elle est présente mais vide : une ligne « PROXYS_DE_CONFIANCE= »
+         * oubliée dans un .env ne peut donc pas ramener la boucle de redirection.
          */
         $middleware->trustProxies(
-            at: env('PROXYS_DE_CONFIANCE', '*'),
+            at: env('PROXYS_DE_CONFIANCE') ?: '*',
             headers: Request::HEADER_X_FORWARDED_FOR
                 | Request::HEADER_X_FORWARDED_PORT
                 | Request::HEADER_X_FORWARDED_PROTO
