@@ -11,11 +11,13 @@ use function Livewire\Volt\{computed, mount, on, state};
  * échouent sur « ouvert is not defined ». L'ouverture du panneau est donc pilotée
  * par une propriété Livewire, sans la moindre directive Alpine ici.
  */
-state(['ouvert' => false]);
+state([
+    'ouvert' => false,
 
-// Dernier nombre de non-lues connu : sert à détecter une arrivée entre deux
-// sondages, pour ne sonner qu'à ce moment-là.
-state(['dernierCompte' => 0]);
+    // Dernier nombre de non-lues connu : sert à détecter une arrivée entre deux
+    // sondages, pour ne sonner qu'à ce moment-là.
+    'dernierCompte' => 0,
+]);
 
 mount(function () {
     $this->dernierCompte = $this->nombreNonLues;
