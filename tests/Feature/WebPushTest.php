@@ -7,8 +7,10 @@ use App\Domain\Shared\Services\Notificateur;
 use App\Domain\Shared\Services\WebPush\ChiffrementWebPush;
 use App\Domain\Shared\Services\WebPush\CleEc;
 use App\Domain\Shared\Services\WebPush\EnvoyeurPush;
+use App\Jobs\EnvoyerNotificationPush;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -153,7 +155,7 @@ class WebPushTest extends TestCase
 
         Http::fake(['fcm.googleapis.com/*' => Http::response('', 201)]);
 
-        Notificateur::pour($utilisateur, 'Nouveau message', 'Bonjour', lien: '/messages');
+        EnvoyeurPush::diffuser([$utilisateur->id], 'Nouveau message', 'Bonjour', '/messages');
 
         Http::assertSent(function ($requete) {
             $this->assertSame('aes128gcm', $requete->header('Content-Encoding')[0]);
@@ -197,6 +199,54 @@ class WebPushTest extends TestCase
 
         $this->assertSame(1, AbonnementPush::where('user_id', $utilisateur->id)->count());
         $this->assertSame('cle-p256dh-2', AbonnementPush::where('user_id', $utilisateur->id)->value('cle_p256dh'));
+    }
+
+    /**
+     * L'envoi ne doit jamais se faire pendant la requête : un message adressé à dix
+     * personnes déclencherait autant d'appels HTTP avant que la page ne s'affiche.
+     */
+    public function test_l_envoi_push_est_reporte_apres_la_reponse(): void
+    {
+        $serveur = CleEc::genererPaire();
+        config([
+            'webpush.cle_publique' => CleEc::base64UrlEncoder($serveur['publique']),
+            'webpush.cle_privee' => CleEc::base64UrlEncoder($serveur['privee']),
+        ]);
+
+        $utilisateur = User::create([
+            'name' => 'Testeur',
+            'email' => 'report@exemple.test',
+            'password' => 'mot-de-passe-de-test',
+            'est_actif' => true,
+        ]);
+
+        Bus::fake();
+        Http::fake();
+
+        Notificateur::pour($utilisateur, 'Nouveau message', 'Bonjour', lien: '/messages');
+
+        // La notification en base est immédiate, l'appel réseau est différé.
+        $this->assertDatabaseHas('notifications_app', ['user_id' => $utilisateur->id, 'titre' => 'Nouveau message']);
+        Http::assertNothingSent();
+        Bus::assertDispatchedAfterResponse(EnvoyerNotificationPush::class);
+    }
+
+    public function test_sans_cles_vapid_aucun_envoi_n_est_programme(): void
+    {
+        config(['webpush.cle_publique' => null, 'webpush.cle_privee' => null]);
+
+        $utilisateur = User::create([
+            'name' => 'Testeur',
+            'email' => 'sanscles@exemple.test',
+            'password' => 'mot-de-passe-de-test',
+            'est_actif' => true,
+        ]);
+
+        Bus::fake();
+
+        Notificateur::pour($utilisateur, 'Titre', 'Corps');
+
+        Bus::assertNotDispatchedAfterResponse(EnvoyerNotificationPush::class);
     }
 
     /** Un abonnement révoqué par le navigateur doit être nettoyé, pas réessayé sans fin. */

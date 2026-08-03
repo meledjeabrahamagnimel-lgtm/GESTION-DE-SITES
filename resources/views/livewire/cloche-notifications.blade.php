@@ -66,7 +66,9 @@ $enregistrerAbonnement = function (string $endpoint, string $p256dh, string $aut
 
 ?>
 
-<div wire:poll.20s x-data="cloche({{ $this->nombreNonLues }})" style="position:relative;">
+{{-- « .visible » suspend le sondage quand l'onglet est masqué : aucune requête inutile
+     sur un poste laissé ouvert toute la journée. --}}
+<div wire:poll.30s.visible x-data="cloche({{ $this->nombreNonLues }})" style="position:relative;">
 
     <button type="button" @click="ouvert = ! ouvert" class="cloche-bouton" aria-label="Notifications">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"

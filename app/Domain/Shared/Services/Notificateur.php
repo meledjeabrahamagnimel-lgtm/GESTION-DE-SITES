@@ -4,6 +4,7 @@ namespace App\Domain\Shared\Services;
 
 use App\Domain\Shared\Models\NotificationApp;
 use App\Domain\Shared\Services\WebPush\EnvoyeurPush;
+use App\Jobs\EnvoyerNotificationPush;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -33,7 +34,7 @@ class Notificateur
             'lien' => $lien,
         ]);
 
-        EnvoyeurPush::diffuser([$id], $titre, $corps, $lien);
+        self::pousser([$id], $titre, $corps, $lien);
     }
 
     /**
@@ -75,7 +76,23 @@ class Notificateur
 
         // Le même signal part vers les appareils abonnés, pour joindre la personne
         // même quand l'application n'est pas ouverte.
-        EnvoyeurPush::diffuser(array_column($lignes, 'user_id'), $titre, $corps, $lien);
+        self::pousser(array_column($lignes, 'user_id'), $titre, $corps, $lien);
+    }
+
+    /**
+     * Programme l'envoi push après la réponse : la page part immédiatement, les appels
+     * HTTP vers les services de notification se font ensuite. Rien n'est programmé si
+     * les clés VAPID ne sont pas configurées.
+     *
+     * @param  array<int, int>  $utilisateurIds
+     */
+    private static function pousser(array $utilisateurIds, string $titre, ?string $corps, ?string $lien): void
+    {
+        if (! EnvoyeurPush::estConfigure() || $utilisateurIds === []) {
+            return;
+        }
+
+        EnvoyerNotificationPush::dispatch($utilisateurIds, $titre, $corps, $lien)->afterResponse();
     }
 
     /**
