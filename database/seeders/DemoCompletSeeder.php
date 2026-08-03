@@ -68,7 +68,11 @@ class DemoCompletSeeder extends Seeder
         // 3. Saisies journalières : commentaires et véhicules restitués sans facture.
         $this->genererSaisiesJournalieres();
 
+        // 4. Messagerie, notifications, notes et Super Admin secondaire d'exemple.
+        $this->call(MessagerieEtNotesSeeder::class);
+
         $this->command?->info('Jeu de démonstration complet installé.');
+        $this->command?->info('Support (Super Admin secondaire) : support@plateforme.local / password');
         $this->command?->info('Gérant      : direction@artisan-automobile.ci / password');
         $this->command?->info('Responsable : david.k@artisan-automobile.ci / password');
         $this->command?->info('Commercial  : k-aya@artisan-automobile.ci / password');
