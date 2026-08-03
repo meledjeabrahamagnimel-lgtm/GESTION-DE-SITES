@@ -23,8 +23,10 @@ state([
     'fichiers' => [],
 ]);
 
-// L'adresse porte la conversation ouverte : le lien d'une notification arrive directement dessus.
-state(['conversation' => null])->url(as: 'conversation', except: '');
+// L'adresse porte la conversation ouverte : le lien d'une notification arrive directement
+// dessus. La valeur initiale est une chaîne vide, et non null, pour que « except » la
+// reconnaisse et retire le paramètre de l'adresse au lieu d'afficher « ?conversation= ».
+state(['conversation' => ''])->url(except: '');
 
 mount(function () {
     $this->conversationId = $this->conversation ? (int) $this->conversation : null;

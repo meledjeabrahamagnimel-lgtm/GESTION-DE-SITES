@@ -115,69 +115,49 @@ async function abonnerAppareil(clePublique) {
     };
 }
 
-document.addEventListener('alpine:init', () => {
-    window.Alpine.data('abonnementPush', (clePublique) => ({
-        disponible: pushDisponible() && !!clePublique,
-        etat: typeof Notification !== 'undefined' ? Notification.permission : 'default',
-        occupe: false,
-        echec: null,
+/*
+ * Ces fonctions sont exposées sur window plutôt qu'enregistrées via Alpine.data().
+ *
+ * Alpine est démarré par Livewire, dont le script est injecté en fin de page, alors
+ * que ce module est chargé depuis l'en-tête en « type=module » donc différé. Selon le
+ * navigateur et la mise en cache, Alpine peut démarrer AVANT ce module : l'évènement
+ * « alpine:init » est alors déjà passé, le composant n'est jamais enregistré, et la
+ * page échoue sur « ouvert is not defined ». Les vues utilisent donc un x-data en
+ * ligne, et n'appellent ces fonctions qu'au clic, longtemps après le chargement.
+ */
 
-        async activer() {
-            this.occupe = true;
-            this.echec = null;
+window.pushDisponible = pushDisponible;
 
-            try {
-                const abonnement = await abonnerAppareil(clePublique);
+/**
+ * Abonne l'appareil puis transmet les clés au composant Livewire.
+ * Renvoie toujours un objet décrivant l'issue, jamais une exception.
+ */
+window.activerPush = async function (clePublique, wire) {
+    try {
+        const abonnement = await abonnerAppareil(clePublique);
 
-                if (abonnement) {
-                    this.$wire.call('enregistrerAbonnement', abonnement.endpoint, abonnement.p256dh, abonnement.auth, navigator.userAgent);
-                    this.etat = 'granted';
-                } else {
-                    this.etat = Notification.permission;
-                }
-            } catch (e) {
-                this.echec = e.message || 'Activation impossible sur cet appareil.';
-                console.warn('Abonnement aux notifications impossible :', e);
-            } finally {
-                this.occupe = false;
-            }
-        },
-    }));
-});
+        if (!abonnement) {
+            return { etat: typeof Notification !== 'undefined' ? Notification.permission : 'default' };
+        }
 
-document.addEventListener('alpine:init', () => {
-    window.Alpine.data('cloche', (nonLuesInitiales) => ({
-        ouvert: false,
-        precedent: nonLuesInitiales,
+        await wire.call('enregistrerAbonnement', abonnement.endpoint, abonnement.p256dh, abonnement.auth, navigator.userAgent);
 
-        init() {
-            // $el est le composant Livewire : on observe la valeur rendue du badge.
-            this.$watch('ouvert', (valeur) => {
-                if (valeur) this.precedent = this.compteurActuel();
-            });
+        return { etat: 'granted' };
+    } catch (e) {
+        console.warn('Abonnement aux notifications impossible :', e);
 
-            Livewire.hook('morph.updated', ({ el }) => {
-                if (!this.$el.contains(el) && el !== this.$el) return;
+        return { echec: e.message || 'Activation impossible sur cet appareil.' };
+    }
+};
 
-                const actuel = this.compteurActuel();
+/*
+ * Le serveur signale lui-même l'arrivée d'une notification : plus besoin d'observer
+ * le badge dans le DOM, ce qui supposait un composant Alpine correctement enregistré.
+ */
+window.addEventListener('nouvelle-notification', (evenement) => {
+    const detail = evenement.detail;
+    const titre = detail?.titre || detail?.[0]?.titre || 'Nouvelle notification';
 
-                if (actuel > this.precedent) {
-                    jouerSignal();
-                    afficherBandeau(this.dernierTitre() || 'Nouvelle notification');
-                }
-
-                this.precedent = actuel;
-            });
-        },
-
-        compteurActuel() {
-            const badge = this.$el.querySelector('.cloche-badge');
-
-            return badge ? parseInt(badge.textContent.replace('+', ''), 10) || 0 : 0;
-        },
-
-        dernierTitre() {
-            return this.$el.querySelector('.cloche-item.est-non-lu .cloche-titre')?.textContent?.trim();
-        },
-    }));
+    jouerSignal();
+    afficherBandeau(titre);
 });

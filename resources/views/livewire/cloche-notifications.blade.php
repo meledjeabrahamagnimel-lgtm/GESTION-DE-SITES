@@ -4,12 +4,41 @@ use App\Domain\Shared\Models\AbonnementPush;
 use App\Domain\Shared\Models\NotificationApp;
 use App\Domain\Shared\Services\WebPush\EnvoyeurPush;
 use Illuminate\Support\Facades\Validator;
-use function Livewire\Volt\{computed, on};
+use function Livewire\Volt\{computed, mount, on, state};
 
-// Rafraîchi par wire:poll et par l'événement émis après lecture d'une conversation.
+// Dernier nombre de non-lues connu du navigateur : sert à détecter une arrivée
+// entre deux sondages, pour ne sonner qu'à ce moment-là.
+state(['dernierCompte' => 0]);
+
+mount(function () {
+    $this->dernierCompte = $this->nombreNonLues;
+});
+
+// Rafraîchi par l'événement émis après lecture d'une conversation.
 on(['notifications-actualisees' => function () {
     unset($this->notifications, $this->nombreNonLues);
+    $this->dernierCompte = $this->nombreNonLues;
 }]);
+
+/**
+ * Appelé par wire:poll. C'est le serveur qui décide s'il faut sonner : le navigateur
+ * n'a plus à surveiller le badge dans le DOM, ce qui supposait un composant Alpine
+ * enregistré à temps.
+ */
+$rafraichir = function () {
+    unset($this->notifications, $this->nombreNonLues);
+
+    $actuel = $this->nombreNonLues;
+
+    if ($actuel > $this->dernierCompte) {
+        $this->dispatch(
+            'nouvelle-notification',
+            titre: $this->notifications->first(fn ($n) => $n->lu_le === null)?->titre ?? 'Nouvelle notification',
+        );
+    }
+
+    $this->dernierCompte = $actuel;
+};
 
 $notifications = computed(fn () => NotificationApp::query()
     ->where('user_id', auth()->id())
@@ -25,11 +54,13 @@ $nombreNonLues = computed(fn () => NotificationApp::query()
 $marquerLue = function (int $id) {
     NotificationApp::where('user_id', auth()->id())->where('id', $id)->update(['lu_le' => now()]);
     unset($this->notifications, $this->nombreNonLues);
+    $this->dernierCompte = $this->nombreNonLues;
 };
 
 $toutMarquerLu = function () {
     NotificationApp::where('user_id', auth()->id())->whereNull('lu_le')->update(['lu_le' => now()]);
     unset($this->notifications, $this->nombreNonLues);
+    $this->dernierCompte = 0;
 };
 
 /** Les clés VAPID ne sont pas configurées : la section « appareil » reste masquée. */
@@ -68,7 +99,7 @@ $enregistrerAbonnement = function (string $endpoint, string $p256dh, string $aut
 
 {{-- « .visible » suspend le sondage quand l'onglet est masqué : aucune requête inutile
      sur un poste laissé ouvert toute la journée. --}}
-<div wire:poll.30s.visible x-data="cloche({{ $this->nombreNonLues }})" style="position:relative;">
+<div wire:poll.30s.visible="rafraichir" x-data="{ ouvert: false }" style="position:relative;">
 
     <button type="button" @click="ouvert = ! ouvert" class="cloche-bouton" aria-label="Notifications">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -90,7 +121,28 @@ $enregistrerAbonnement = function (string $endpoint, string $p256dh, string $aut
         </div>
 
         @if ($this->pushConfigure)
-            <div x-data="abonnementPush(@js(config('webpush.cle_publique')))" x-show="disponible" class="cloche-appareil">
+{{-- x-data en ligne, sans composant à enregistrer : la disponibilité se teste
+                 directement, et le module JavaScript n'est sollicité qu'au clic. --}}
+            <div class="cloche-appareil"
+                 x-data="{
+                     occupe: false,
+                     echec: null,
+                     etat: 'Notification' in window ? Notification.permission : 'default',
+                     disponible: 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window,
+                     async activer() {
+                         if (! window.activerPush) {
+                             this.echec = 'Rechargez la page : les scripts ne sont pas encore chargés.';
+                             return;
+                         }
+                         this.occupe = true;
+                         this.echec = null;
+                         const issue = await window.activerPush(@js(config('webpush.cle_publique')), $wire);
+                         if (issue.echec) this.echec = issue.echec;
+                         if (issue.etat) this.etat = issue.etat;
+                         this.occupe = false;
+                     },
+                 }"
+                 x-show="disponible">
                 @if ($this->appareilAbonne)
                     <span class="cloche-appareil-actif">✓ Notifications activées sur cet appareil</span>
                 @else
