@@ -5,23 +5,45 @@
 
     RewriteEngine On
 
-    # ------------------------------------------------------------------------
-    # Forcer le HTTPS sur un hébergement mutualisé (LWS, cPanel, OVH…)
+    # ========================================================================
+    # BLOC « FORCER LE HTTPS » — désactivé par défaut
+    # ========================================================================
     #
-    # Retirez les # des trois lignes suivantes pour l'activer.
+    # À n'activer qu'une fois le certificat HTTPS en service sur le domaine.
+    # Vérifiez d'abord que https://votre-domaine s'ouvre sans avertissement.
     #
-    # N'utilisez SURTOUT PAS « RewriteCond %{HTTPS} off » ici : quand le
-    # certificat est porté par un serveur frontal qui transmet ensuite la requête
-    # en clair, %{HTTPS} vaut toujours « off », y compris pour un visiteur déjà
-    # en https. La règle redirige alors indéfiniment — c'est l'erreur
-    # « cette page vous a redirigé un trop grand nombre de fois ».
-    # L'en-tête X-Forwarded-Proto, lui, indique le schéma réellement vu par le
-    # visiteur et ne boucle pas.
+    # POUR ACTIVER : retirez le « # » des DEUX RewriteCond et du RewriteRule
+    # ci-dessous (les 3 lignes encadrées). Ne touchez pas au reste du bloc.
     #
-    # RewriteCond %{HTTP:X-Forwarded-Proto} !https
-    # RewriteCond %{HTTPS} off
-    # RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-    # ------------------------------------------------------------------------
+    # ---- POURQUOI PAS LA FORMULE HABITUELLE -------------------------------
+    # N'écrivez JAMAIS « RewriteCond %{HTTPS} off » seule ici. Quand le
+    # certificat est porté par un serveur frontal qui transmet ensuite la
+    # requête à Apache en clair, %{HTTPS} vaut toujours « off », y compris
+    # pour un visiteur déjà en https. La règle redirige alors indéfiniment :
+    # c'est l'erreur « cette page vous a redirigé un trop grand nombre de
+    # fois ». L'en-tête X-Forwarded-Proto, lui, indique le schéma réellement
+    # vu par le visiteur. Les deux conditions se cumulent : la redirection
+    # n'a lieu que si NI l'en-tête NI Apache n'annoncent du https.
+    #
+    # ---- PRUDENCE ---------------------------------------------------------
+    # Le R=302 ci-dessous est une redirection TEMPORAIRE, volontairement :
+    # les navigateurs ne la mémorisent pas. Si l'activation tourne mal, il
+    # suffit de remettre les « # » et tout revient à la normale.
+    # Ne passez en R=301 (permanent, meilleur pour le référencement) qu'après
+    # plusieurs jours de fonctionnement vérifié : une 301 erronée reste en
+    # cache dans le navigateur de chaque utilisateur, même après correction.
+    #
+    # ---- EN CAS DE BOUCLE -------------------------------------------------
+    # Remettez les « # », videz le cache du navigateur, puis lancez
+    # « php artisan app:diagnostic » : il signale les autres causes connues.
+    #
+    #   ┌──────────────────────── à décommenter ────────────────────────┐
+    #   RewriteCond %{HTTP:X-Forwarded-Proto} !https
+    #   RewriteCond %{HTTPS} off
+    #   RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=302]
+    #   └───────────────────────────────────────────────────────────────┘
+    #
+    # ========================================================================
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
