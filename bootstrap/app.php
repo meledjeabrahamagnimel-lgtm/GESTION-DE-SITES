@@ -54,6 +54,16 @@ return Application::configure(basePath: dirname(__DIR__))
             'role_or_permission' => RoleOrPermissionMiddleware::class,
             'habilitation' => VerifieHabilitation::class,
         ]);
+
+        /*
+         * Le middleware "guest" natif de Laravel (utilisé par les routes de connexion
+         * de Fortify) ignore config('fortify.home') : celui-ci ne joue qu'après la
+         * soumission du formulaire. Sans ce réglage, un utilisateur déjà connecté qui
+         * rouvre /login dans un second onglet (session partagée) retombe sur le repli
+         * par défaut de Laravel — ici la racine "/", qui renvoie elle-même vers
+         * /connexion puis /login : boucle infinie (ERR_TOO_MANY_REDIRECTS).
+         */
+        $middleware->redirectUsersTo(fn () => route('redirection'));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
