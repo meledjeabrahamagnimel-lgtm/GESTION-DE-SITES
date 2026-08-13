@@ -3,15 +3,24 @@
 use App\Domain\Operations\Models\Commercial;
 use App\Domain\Operations\Models\Facture;
 use App\Domain\Shared\Services\PeriodeCalculateur;
-use function Livewire\Volt\{state, computed};
+use function Livewire\Volt\{state, computed, mount};
 
 state([
-    'periode' => 'mois',
+    'periode' => 'periode',
     'dateDebut' => null,
     'dateFin' => null,
+    'activiteFiltre' => '',
+    'pageFactures' => 1,
 ]);
 
-$commercial = computed(fn () => Commercial::where('user_id', auth()->id())->with('site')->first());
+mount(function () {
+    $this->dateDebut ??= now()->startOfYear()->toDateString();
+    $this->dateFin ??= now()->toDateString();
+});
+
+$commercial = computed(fn () => Commercial::where('user_id', auth()->id())->with('site.ville')->first());
+
+$villeUnique = computed(fn () => $this->commercial?->site?->ville);
 
 $plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
 
@@ -21,7 +30,14 @@ $factures = computed(function () {
     }
     [$debut, $fin] = $this->plage;
 
-    return Facture::with('site')->where('commercial_id', $this->commercial->id)->whereBetween('date', [$debut, $fin])->latest('date')->get();
+    $q = Facture::with('site')->withSum('encaissements', 'montant')
+        ->where('commercial_id', $this->commercial->id)->whereBetween('date', [$debut, $fin]);
+
+    if ($this->activiteFiltre) {
+        $q->where('activite', $this->activiteFiltre);
+    }
+
+    return $q->latest('date')->get();
 });
 
 $kpis = computed(function () {
@@ -31,16 +47,31 @@ $kpis = computed(function () {
     [$debut, $fin] = $this->plage;
     $joursPeriode = PeriodeCalculateur::nombreDeJours($debut, $fin);
     $realisation = (int) $this->factures->sum('montant');
-    $objectif = (int) round($this->commercial->objectif_mensuel / 30 * $joursPeriode);
+    $realisationMecanique = (int) $this->factures->where('activite', 'Mécanique')->sum('montant');
+    $realisationSinistre = (int) $this->factures->where('activite', 'Sinistre')->sum('montant');
+    $encaisse = (int) $this->factures->sum('encaissements_sum_montant');
+    $objectifMecanique = (int) round($this->commercial->objectif_mecanique / 30 * $joursPeriode);
+    $objectifSinistre = (int) round($this->commercial->objectif_sinistre / 30 * $joursPeriode);
+    $objectif = match ($this->activiteFiltre) {
+        'Mécanique' => $objectifMecanique,
+        'Sinistre' => $objectifSinistre,
+        default => (int) round($this->commercial->objectif_mensuel / 30 * $joursPeriode),
+    };
 
     $caSite = (int) Facture::where('site_id', $this->commercial->site_id)->whereBetween('date', [$debut, $fin])->sum('montant');
 
     return [
         'objectif' => $objectif,
+        'objectifMecanique' => $objectifMecanique,
+        'objectifSinistre' => $objectifSinistre,
         'realisation' => $realisation,
+        'realisationMecanique' => $realisationMecanique,
+        'realisationSinistre' => $realisationSinistre,
         'ecart' => $realisation - $objectif,
         'taux' => $objectif > 0 ? $realisation / $objectif : null,
         'contribution' => $caSite > 0 ? $realisation / $caSite : null,
+        'encaisse' => $encaisse,
+        'tauxRecouvrement' => $realisation > 0 ? $encaisse / $realisation : null,
     ];
 });
 
@@ -55,16 +86,22 @@ $kpis = computed(function () {
             <p style="color:#6B6E76; font-size:14.5px; margin:0;">{{ $this->commercial->site->nom }} · {{ $this->commercial->activite ?? '—' }}</p>
         </div>
 
-        <x-filtre-periode :periode="$periode" />
+        <x-filtre-periode :periode="$periode" :ville-unique="$this->villeUnique" :activite-filtre="$activiteFiltre" />
 
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
-            <x-kpi-card label="Objectif mensuel" :value="ae($this->commercial->objectif_mensuel)" />
-            <x-kpi-card label="Objectif de la période" :value="ae($this->kpis['objectif'])" />
-            <x-kpi-card label="Réalisation" :value="ae($this->kpis['realisation'])" />
+            <x-kpi-card label="Objectif mensuel" :value="ae($this->commercial->objectif_mensuel)"
+                :mecanique="$activiteFiltre ? null : ae($this->commercial->objectif_mecanique)" :sinistre="$activiteFiltre ? null : ae($this->commercial->objectif_sinistre)" />
+            <x-kpi-card label="Objectif de la période" :value="ae($this->kpis['objectif'])"
+                :mecanique="$activiteFiltre ? null : ae($this->kpis['objectifMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['objectifSinistre'])" />
+            <x-kpi-card label="Réalisation" :value="ae($this->kpis['realisation'])"
+                :mecanique="$activiteFiltre ? null : ae($this->kpis['realisationMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['realisationSinistre'])" />
             <x-kpi-card label="Écart" :value="ae($this->kpis['ecart'])"
                 :bon="$this->kpis['ecart'] >= 0" :accent="$this->kpis['ecart'] < 0" />
-            <x-kpi-card label="Taux d'atteinte" :value="an($this->kpis['taux'])"
+            <x-kpi-card label="Taux de Réalisation" :value="an($this->kpis['taux'])"
                 :bon="($this->kpis['taux'] ?? 0) >= 1" :accent="($this->kpis['taux'] ?? 0) < 1" />
+            <x-kpi-card label="Montant encaissé" :value="ae($this->kpis['encaisse'])" couleur="#0E9F6E" />
+            <x-kpi-card label="Taux de recouvrement" :value="an($this->kpis['tauxRecouvrement'])"
+                sub="Encaissé ÷ facturé" :bon="($this->kpis['tauxRecouvrement'] ?? 0) >= 1" />
             <x-kpi-card label="Contribution au CA du site" :value="an($this->kpis['contribution'])" />
         </div>
 
@@ -82,10 +119,11 @@ $kpis = computed(function () {
                             <th>Type</th>
                             <th>N° de facture</th>
                             <th>Montant facturé</th>
+                            <th>Montant encaissé</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->factures as $facture)
+                        @forelse ($this->factures->forPage($pageFactures, 10) as $facture)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td style="font-weight:700;">{{ $facture->numero }}</td>
                                 <td>{{ $facture->date->format('d/m/Y') }}</td>
@@ -95,13 +133,15 @@ $kpis = computed(function () {
                                 <td>{{ $facture->type }}</td>
                                 <td>{{ $facture->n_facture }}</td>
                                 <td style="font-variant-numeric:tabular-nums; font-weight:700;">{{ ae($facture->montant) }}</td>
+                                <td style="font-variant-numeric:tabular-nums; font-weight:700; color:#0E9F6E;">{{ ae($facture->encaissements_sum_montant ?? 0) }}</td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="8" texte="Aucune facture sur cette période." />
+                            <x-table-vide :colspan="9" texte="Aucune facture sur cette période." />
                         @endforelse
                     </tbody>
                 </table>
             </div>
+            <x-pagination :page="$pageFactures" :total="$this->factures->count()" prop="pageFactures" />
         </div>
     @endif
 </div>

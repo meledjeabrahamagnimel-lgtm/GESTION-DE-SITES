@@ -102,7 +102,7 @@ class DonneesOperationnellesSeeder extends Seeder
                         'client' => self::CLIENTS_DEMO[array_rand(self::CLIENTS_DEMO)],
                         'localisation' => self::LOCALISATIONS[array_rand(self::LOCALISATIONS)],
                         'moyen' => ['RDV', 'Téléphone', 'Mail'][array_rand(['RDV', 'Téléphone', 'Mail'])],
-                        'activite' => $commercial->activite ?? (random_int(0, 1) ? 'Mécanique' : 'Carrosserie'),
+                        'activite' => $this->activitePourTransaction($commercial),
                         'passage' => $passage,
                         'devis_apres_passage' => $devisApresPassage,
                         // Circuit de validation : l'essentiel est validé, mais les tout derniers
@@ -344,7 +344,7 @@ class DonneesOperationnellesSeeder extends Seeder
     private function creerChaineComplete(int $entrepriseId, Site $site, Commercial $commercial, Carbon $date, string $statut): void
     {
         $client = self::CLIENTS_DEMO[array_rand(self::CLIENTS_DEMO)];
-        $activite = $commercial->activite ?? 'Mécanique';
+        $activite = $this->activitePourTransaction($commercial);
         $jour = $date->toDateString();
 
         $prospection = Prospection::create([
@@ -434,6 +434,18 @@ class DonneesOperationnellesSeeder extends Seeder
             // ROUND() plutôt que CAST(... AS INTEGER) : ce type n'existe pas en MySQL,
             // qui attend SIGNED. ROUND est comprise à l'identique par MySQL et SQLite.
             ->update(['montant' => DB::raw('ROUND(montant * '.round($facteur, 4).')')]);
+    }
+
+    /**
+     * Une prospection/un devis/une facture porte toujours une seule activité, jamais
+     * « Mécanique/Sinistre » (réservée aux commerciaux polyvalents) : on tire au sort
+     * pour ces commerciaux-là, et on reprend l'activité déclarée pour les autres.
+     */
+    private function activitePourTransaction(Commercial $commercial): string
+    {
+        return in_array($commercial->activite, ['Mécanique', 'Sinistre'], true)
+            ? $commercial->activite
+            : (random_int(0, 1) ? 'Mécanique' : 'Sinistre');
     }
 
     private function genererCharges(int $entrepriseId, int $siteId, Carbon $date): void

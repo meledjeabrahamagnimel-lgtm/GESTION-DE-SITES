@@ -1,6 +1,8 @@
 <?php
 
-use function Livewire\Volt\{computed};
+use function Livewire\Volt\{computed, state};
+
+state(['pageEntreprises' => 1]);
 
 $entreprises = computed(fn () => \App\Domain\Tenants\Models\Entreprise::withCount(['sites', 'utilisateurs'])->get());
 
@@ -19,7 +21,7 @@ $entreprises = computed(fn () => \App\Domain\Tenants\Models\Entreprise::withCoun
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach ($this->entreprises as $entreprise)
+                    @foreach ($this->entreprises->forPage($pageEntreprises, 10) as $entreprise)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td style="font-weight:700;">
                                 <a href="{{ route('super-admin.entreprises.show', $entreprise) }}" wire:navigate style="color:inherit;">{{ $entreprise->nom }}</a>
@@ -39,4 +41,5 @@ $entreprises = computed(fn () => \App\Domain\Tenants\Models\Entreprise::withCoun
                 </tbody>
             </table>
         </div>
+        <x-pagination :page="$pageEntreprises" :total="$this->entreprises->count()" prop="pageEntreprises" />
     </x-a-venir>

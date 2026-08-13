@@ -3,36 +3,41 @@
 use App\Domain\Operations\Models\Commercial;
 use App\Domain\Operations\Models\Facture;
 use App\Domain\Shared\Services\PeriodeCalculateur;
-use App\Domain\Tenants\Models\Site;
-use function Livewire\Volt\{state, computed};
+use App\Domain\Tenants\Support\PerimetreSites;
+use function Livewire\Volt\{state, computed, mount};
 
 state([
-    'periode' => 'semaine',
+    'periode' => 'periode',
     'dateDebut' => null,
     'dateFin' => null,
-    'siteFiltre' => '',
+    'villeFiltre' => '',
+    'activiteFiltre' => '',
+    'commercialFiltre' => '',
+    'pageClassement' => 1,
 ]);
 
-$estGerant = computed(fn () => auth()->user()->hasRole('gerant'));
-$monSite = computed(fn () => $this->estGerant ? null : Site::where('responsable_id', auth()->id())->first());
+mount(function () {
+    $this->dateDebut ??= now()->startOfYear()->toDateString();
+    $this->dateFin ??= now()->toDateString();
+});
+
 $plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
-$sites = computed(fn () => $this->estGerant ? Site::where('entreprise_id', auth()->user()->entreprise_id)->orderBy('nom')->get() : null);
+$mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
+$villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
+$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+
+$optionsCommerciaux = computed(fn () => Commercial::actifs()->where('est_spontane', false)
+    ->whereIn('site_id', $this->idsSites)->orderBy('nom')->pluck('nom', 'id'));
 
 $classement = computed(function () {
     [$debut, $fin] = $this->plage;
     $joursPeriode = PeriodeCalculateur::nombreDeJours($debut, $fin);
 
-    $q = Commercial::actifs()->where('est_spontane', false)->with('site');
-
-    if ($this->estGerant) {
-        if ($this->siteFiltre) {
-            $q->where('site_id', $this->siteFiltre);
-        }
-    } else {
-        $q->where('site_id', $this->monSite?->id ?? 0);
-    }
-
-    $commerciaux = $q->get();
+    $commerciaux = Commercial::actifs()->where('est_spontane', false)->with('site')
+        ->whereIn('site_id', $this->idsSites)
+        ->when($this->commercialFiltre, fn ($q) => $q->where('id', $this->commercialFiltre))
+        ->get();
 
     // CA du site sur la période, pour exprimer la contribution de chaque commercial.
     $caParSite = Facture::whereIn('site_id', $commerciaux->pluck('site_id')->unique())
@@ -42,7 +47,8 @@ $classement = computed(function () {
         ->pluck('total', 'site_id');
 
     return $commerciaux->map(function ($commercial) use ($debut, $fin, $joursPeriode, $caParSite) {
-        $realisation = (int) Facture::where('commercial_id', $commercial->id)->whereBetween('date', [$debut, $fin])->sum('montant');
+        $lignesFactures = Facture::where('commercial_id', $commercial->id)->whereBetween('date', [$debut, $fin])->get(['montant', 'activite']);
+        $realisation = (int) $lignesFactures->sum('montant');
         $objectifProrata = (int) round($commercial->objectif_mensuel / 30 * $joursPeriode);
         $ecart = $realisation - $objectifProrata;
         $caSite = (int) ($caParSite[$commercial->site_id] ?? 0);
@@ -50,8 +56,12 @@ $classement = computed(function () {
         return [
             'commercial' => $commercial,
             'objectif' => $objectifProrata,
+            'objectifMecanique' => (int) round($commercial->objectif_mecanique / 30 * $joursPeriode),
+            'objectifSinistre' => (int) round($commercial->objectif_sinistre / 30 * $joursPeriode),
             'objectifJournalier' => (int) round($commercial->objectif_mensuel / 30),
             'realisation' => $realisation,
+            'realisationMecanique' => (int) $lignesFactures->where('activite', 'Mécanique')->sum('montant'),
+            'realisationSinistre' => (int) $lignesFactures->where('activite', 'Sinistre')->sum('montant'),
             'ecart' => $ecart,
             'taux' => $objectifProrata > 0 ? $realisation / $objectifProrata : null,
             'contribution' => $caSite > 0 ? $realisation / $caSite : null,
@@ -66,7 +76,11 @@ $kpis = computed(function () {
     return [
         'nombre' => $this->classement->count(),
         'objectif' => $objectifTotal,
+        'objectifMecanique' => $this->classement->sum('objectifMecanique'),
+        'objectifSinistre' => $this->classement->sum('objectifSinistre'),
         'realisation' => $realisationTotal,
+        'realisationMecanique' => $this->classement->sum('realisationMecanique'),
+        'realisationSinistre' => $this->classement->sum('realisationSinistre'),
         'ecart' => $realisationTotal - $objectifTotal,
         'taux' => $objectifTotal > 0 ? $realisationTotal / $objectifTotal : null,
     ];
@@ -83,14 +97,17 @@ $graphique = computed(fn () => [
 ?>
 
 <div>
-    <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
+    <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
+        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="Commerciaux" :value="$this->kpis['nombre']" />
-        <x-kpi-card label="Objectif de la période" :value="ae($this->kpis['objectif'])" />
-        <x-kpi-card label="Réalisation totale" :value="ae($this->kpis['realisation'])" />
+        <x-kpi-card label="Commerciaux — {{ $this->libellePerimetre }}" :value="$this->kpis['nombre']" />
+        <x-kpi-card label="Objectif de la période" :value="ae($this->kpis['objectif'])"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['objectifMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['objectifSinistre'])" />
+        <x-kpi-card label="Réalisation totale" :value="ae($this->kpis['realisation'])"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['realisationMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['realisationSinistre'])" />
         <x-kpi-card label="Écart global" :value="ae($this->kpis['ecart'])" :couleur="$this->kpis['ecart'] >= 0 ? '#0E9F6E' : '#C8102E'" />
-        <x-kpi-card label="Taux d'atteinte global" :value="an($this->kpis['taux'])" />
+        <x-kpi-card label="Taux de Réalisation" :value="an($this->kpis['taux'])" />
     </div>
 
     <div style="margin-bottom:20px;">
@@ -100,6 +117,14 @@ $graphique = computed(fn () => [
 
     <div class="carte">
         <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Classement des commerciaux par performance</h3>
+        <div style="margin-bottom:14px;">
+            <select wire:model.live="commercialFiltre" style="padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px;">
+                <option value="">Commercial : tous</option>
+                @foreach ($this->optionsCommerciaux as $id => $nom)
+                    <option value="{{ $id }}">{{ $nom }}</option>
+                @endforeach
+            </select>
+        </div>
         <div class="tableau-conteneur">
             <table class="tableau">
                 <thead>
@@ -107,7 +132,7 @@ $graphique = computed(fn () => [
                         <th>Rang</th>
                         <th>N°</th>
                         <th>Commercial</th>
-                        @if ($this->estGerant && ! $siteFiltre)
+                        @if (! $activiteFiltre && count($this->idsSites) > 1)
                             <th>Site</th>
                         @endif
                         <th>Activité</th>
@@ -116,12 +141,12 @@ $graphique = computed(fn () => [
                         <th>Objectif de la période</th>
                         <th>Réalisation</th>
                         <th>Écart</th>
-                        <th>Taux d'atteinte</th>
+                        <th>Taux de Réalisation</th>
                         <th>Contribution au CA du site</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($this->classement as $i => $ligne)
+                    @forelse ($this->classement->forPage($pageClassement, 10) as $i => $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); {{ $i === 0 ? 'background:#FFFBEA;' : '' }}">
                             <td>
                                 @php
@@ -138,7 +163,7 @@ $graphique = computed(fn () => [
                             </td>
                             <td style="font-weight:700;">{{ $ligne['commercial']->numero }}</td>
                             <td style="font-weight:700;">{{ $ligne['commercial']->nom }}</td>
-                            @if ($this->estGerant && ! $siteFiltre)
+                            @if (! $activiteFiltre && count($this->idsSites) > 1)
                                 <td>{{ $ligne['commercial']->site->nom }}</td>
                             @endif
                             <td>{{ $ligne['commercial']->activite }}</td>
@@ -151,10 +176,11 @@ $graphique = computed(fn () => [
                             <td style="font-variant-numeric:tabular-nums;">{{ an($ligne['contribution']) }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 11 : 10" texte="Aucun commercial actif pour ce filtre." />
+                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 11 : 10" texte="Aucun commercial actif pour ce filtre." />
                     @endforelse
                 </tbody>
             </table>
         </div>
+        <x-pagination :page="$pageClassement" :total="$this->classement->count()" prop="pageClassement" />
     </div>
 </div>

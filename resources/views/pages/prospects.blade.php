@@ -3,37 +3,38 @@
 use App\Domain\Operations\Models\Commercial;
 use App\Domain\Operations\Models\Prospection;
 use App\Domain\Shared\Services\PeriodeCalculateur;
-use App\Domain\Tenants\Models\Site;
+use App\Domain\Tenants\Support\PerimetreSites;
 use function Livewire\Volt\{state, computed, mount};
 
 state([
-    'periode' => 'semaine',
+    'periode' => 'periode',
     'dateDebut' => null,
     'dateFin' => null,
-    'siteFiltre' => '',
+    'villeFiltre' => '',
+    'activiteFiltre' => '',
     'recherche' => '',
     'commercialFiltre' => '',
+    'pageDetail' => 1,
 ]);
 
-$estGerant = computed(fn () => auth()->user()->hasRole('gerant'));
-
-$monSite = computed(fn () => $this->estGerant ? null : Site::where('responsable_id', auth()->id())->first());
+mount(function () {
+    $this->dateDebut ??= now()->startOfYear()->toDateString();
+    $this->dateFin ??= now()->toDateString();
+});
 
 $plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
 
-$sites = computed(fn () => $this->estGerant ? Site::where('entreprise_id', auth()->user()->entreprise_id)->orderBy('nom')->get() : null);
+$mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
+
+$villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
+
+$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
 
 $requeteBase = computed(function () {
     [$debut, $fin] = $this->plage;
-    $q = Prospection::query()->visibles()->whereBetween('date', [$debut, $fin]);
-
-    if ($this->estGerant) {
-        if ($this->siteFiltre) {
-            $q->where('site_id', $this->siteFiltre);
-        }
-    } else {
-        $q->where('site_id', $this->monSite?->id ?? 0);
-    }
+    $q = Prospection::query()->visibles()->whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin]);
 
     if ($this->recherche) {
         $q->where('client', 'like', '%'.$this->recherche.'%');
@@ -46,16 +47,8 @@ $requeteBase = computed(function () {
     return $q;
 });
 
-$commerciaux = computed(function () {
-    $q = Commercial::where('est_spontane', false);
-    if (! $this->estGerant) {
-        $q->where('site_id', $this->monSite?->id ?? 0);
-    } elseif ($this->siteFiltre) {
-        $q->where('site_id', $this->siteFiltre);
-    }
-
-    return $q->orderBy('nom')->get();
-});
+$commerciaux = computed(fn () => Commercial::where('est_spontane', false)
+    ->whereIn('site_id', $this->idsSites)->orderBy('nom')->get());
 
 $kpis = computed(function () {
     $lignes = (clone $this->requeteBase)->get();
@@ -95,15 +88,16 @@ $graphique = computed(function () {
     ];
 });
 
-$detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'site'])->latest('date')->limit(50)->get());
+$detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'site'])->latest('date')->get());
 
 ?>
 
 <div>
-    <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
+    <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
+        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="Clients visités" :value="$this->kpis['clients']" />
+        <x-kpi-card label="Clients visités — {{ $this->libellePerimetre }}" :value="$this->kpis['clients']" />
         <x-kpi-card label="Passages sur site" :value="$this->kpis['passages']" />
         <x-kpi-card label="Devis après passage" :value="$this->kpis['devisApres']" />
         <x-kpi-card label="Taux devis / passage"
@@ -137,7 +131,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                         <th>Moyens</th>
                         <th>Commercial</th>
                         <th>Activité</th>
-                        @if ($this->estGerant && ! $siteFiltre)
+                        @if (! $activiteFiltre && count($this->idsSites) > 1)
                             <th>Site</th>
                         @endif
                         <th>Passage</th>
@@ -146,7 +140,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($this->detail as $ligne)
+                    @forelse ($this->detail->forPage($pageDetail, 10) as $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td style="font-weight:700;">{{ $ligne->numero }}</td>
                             <td>{{ $ligne->client }}</td>
@@ -154,7 +148,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                             <td>{{ $ligne->moyen }}</td>
                             <td>{{ $ligne->commercial->nom }}</td>
                             <td>{{ $ligne->activite }}</td>
-                            @if ($this->estGerant && ! $siteFiltre)
+                            @if (! $activiteFiltre && count($this->idsSites) > 1)
                                 <td>{{ $ligne->site->nom }}</td>
                             @endif
                             <td>{{ $ligne->passage ? '✓' : '—' }}</td>
@@ -162,13 +156,11 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                             <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 10 : 9" texte="Aucune prospection enregistrée sur cette période." />
+                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 10 : 9" texte="Aucune prospection enregistrée sur cette période." />
                     @endforelse
                 </tbody>
             </table>
         </div>
-        @if ($this->detail->count() >= 50)
-            <p style="font-size:12.5px; color:#9A9DA5; margin-top:12px;">50 lignes affichées — affinez avec les filtres.</p>
-        @endif
+        <x-pagination :page="$pageDetail" :total="$this->detail->count()" prop="pageDetail" />
     </div>
 </div>

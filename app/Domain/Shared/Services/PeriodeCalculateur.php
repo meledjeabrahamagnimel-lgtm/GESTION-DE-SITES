@@ -38,8 +38,10 @@ class PeriodeCalculateur
 
     /**
      * Découpe la plage en points de graphique, avec une granularité adaptée à sa durée :
-     * une semaine se lit jour par jour, un mois semaine par semaine. Sans cela une
-     * période courte ne produit qu'une seule barre et le graphique perd tout intérêt.
+     * une semaine se lit jour par jour, un mois semaine par semaine, une période plus
+     * longue mois par mois. Sans cela une période courte ne produit qu'une seule barre
+     * et le graphique perd tout intérêt — et une longue période plafonnée aux 12
+     * premières semaines depuis son début manquerait toutes les données récentes.
      */
     public static function points(Carbon $debut, Carbon $fin): array
     {
@@ -53,7 +55,11 @@ class PeriodeCalculateur
             return self::pointsJournaliers($debut, $fin);
         }
 
-        return self::pointsHebdomadaires($debut, $fin);
+        if ($jours <= 120) {
+            return self::pointsHebdomadaires($debut, $fin);
+        }
+
+        return self::pointsMensuels($debut, $fin);
     }
 
     /** Un point par jour, en sautant un libellé sur deux au-delà de deux semaines. */
@@ -76,14 +82,14 @@ class PeriodeCalculateur
         return $points;
     }
 
-    /** Découpe la plage en points hebdomadaires pour les graphiques (max ~12 points). */
+    /** Découpe la plage en points hebdomadaires pour les graphiques, sur toute la période demandée. */
     public static function pointsHebdomadaires(Carbon $debut, Carbon $fin): array
     {
         $points = [];
         $curseur = $debut->copy()->startOfWeek();
         $i = 1;
 
-        while ($curseur->lessThanOrEqualTo($fin) && $i <= 12) {
+        while ($curseur->lessThanOrEqualTo($fin)) {
             $finSemaine = $curseur->copy()->endOfWeek();
             $points[] = [
                 'label' => 'S'.$i,
@@ -92,6 +98,25 @@ class PeriodeCalculateur
             ];
             $curseur->addWeek();
             $i++;
+        }
+
+        return $points;
+    }
+
+    /** Découpe la plage en points mensuels pour les graphiques, sur toute la période demandée. */
+    private static function pointsMensuels(Carbon $debut, Carbon $fin): array
+    {
+        $points = [];
+        $curseur = $debut->copy()->startOfMonth();
+
+        while ($curseur->lessThanOrEqualTo($fin)) {
+            $finMois = $curseur->copy()->endOfMonth();
+            $points[] = [
+                'label' => ucfirst($curseur->translatedFormat('M')).' '.$curseur->format('y'),
+                'debut' => $curseur->copy()->max($debut),
+                'fin' => $finMois->copy()->min($fin),
+            ];
+            $curseur->addMonthNoOverflow();
         }
 
         return $points;

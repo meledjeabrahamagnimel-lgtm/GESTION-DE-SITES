@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('client');
             $table->string('localisation')->nullable();
             $table->enum('moyen', ['RDV', 'Téléphone', 'Mail'])->default('RDV');
-            $table->enum('activite', ['Mécanique', 'Carrosserie']);
+            $table->enum('activite', ['Mécanique', 'Sinistre']);
             $table->boolean('passage')->default(false);
             $table->boolean('devis_apres_passage')->default(false);
             $table->text('observations')->nullable();

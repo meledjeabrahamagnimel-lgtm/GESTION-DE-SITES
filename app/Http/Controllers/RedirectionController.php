@@ -18,6 +18,7 @@ class RedirectionController extends Controller
             $utilisateur->hasRole('gerant') => redirect()->route('tableau-de-bord'),
             $utilisateur->hasRole('responsable_site') => redirect()->route('saisie-du-jour'),
             $utilisateur->hasRole('commercial') => redirect()->route('ma-performance'),
+            $utilisateur->hasRole('caissier') => redirect()->route('caissier.tableau-de-bord'),
             default => redirect()->route('connexion')->withErrors(['email' => "Aucun rôle n'est associé à ce compte."]),
         };
     }

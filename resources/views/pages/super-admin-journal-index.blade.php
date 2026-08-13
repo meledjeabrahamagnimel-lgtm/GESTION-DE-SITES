@@ -1,8 +1,10 @@
 <?php
 
-use function Livewire\Volt\{computed};
+use function Livewire\Volt\{computed, state};
 
-$activites = computed(fn () => \Spatie\Activitylog\Models\Activity::with('causer')->latest()->limit(50)->get());
+state(['pageActivites' => 1]);
+
+$activites = computed(fn () => \Spatie\Activitylog\Models\Activity::with('causer')->latest()->limit(500)->get());
 
 ?>
 
@@ -18,7 +20,7 @@ $activites = computed(fn () => \Spatie\Activitylog\Models\Activity::with('causer
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($this->activites as $activite)
+                    @forelse ($this->activites->forPage($pageActivites, 15) as $activite)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td>{{ $activite->created_at->format('d/m/Y H:i') }}</td>
                             <td>{{ $activite->causer?->name ?? 'Système' }}</td>
@@ -31,4 +33,5 @@ $activites = computed(fn () => \Spatie\Activitylog\Models\Activity::with('causer
                 </tbody>
             </table>
         </div>
+        <x-pagination :page="$pageActivites" :total="$this->activites->count()" prop="pageActivites" />
     </x-a-venir>

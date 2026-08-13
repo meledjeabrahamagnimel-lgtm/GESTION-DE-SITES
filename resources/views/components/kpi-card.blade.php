@@ -1,4 +1,4 @@
-@props(['label', 'value', 'sub' => null, 'accent' => false, 'couleur' => null, 'bon' => false])
+@props(['label', 'value', 'sub' => null, 'accent' => false, 'couleur' => null, 'bon' => false, 'mecanique' => null, 'sinistre' => null])
 
 <div class="carte carte-kpi {{ $accent ? 'est-alerte' : ($bon ? 'est-bon' : '') }}">
     <div class="kpi-libelle">{{ $label }}</div>
@@ -6,5 +6,21 @@
         @if ($couleur) style="color:{{ $couleur }};" @endif>{{ $value }}</div>
     @if ($sub)
         <div class="kpi-sous">{{ $sub }}</div>
+    @endif
+    @if ($mecanique !== null || $sinistre !== null)
+        <div style="margin-top:7px; padding-top:7px; border-top:1px solid var(--th-ligne,#E2E0D8); display:flex; flex-direction:column; gap:3px;">
+            @if ($mecanique !== null)
+                <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:#4B4E55;">
+                    <span style="display:inline-block; width:3px; height:11px; border-radius:2px; background:#2563EB;"></span>
+                    Mécanique&nbsp;<b style="font-variant-numeric:tabular-nums;">{{ $mecanique }}</b>
+                </div>
+            @endif
+            @if ($sinistre !== null)
+                <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:#4B4E55;">
+                    <span style="display:inline-block; width:3px; height:11px; border-radius:2px; background:#D97706;"></span>
+                    Sinistre&nbsp;<b style="font-variant-numeric:tabular-nums;">{{ $sinistre }}</b>
+                </div>
+            @endif
+        </div>
     @endif
 </div>

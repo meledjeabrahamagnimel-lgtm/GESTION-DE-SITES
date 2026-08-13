@@ -4,34 +4,34 @@ use App\Domain\Operations\Models\Charge;
 use App\Domain\Operations\Models\Commercial;
 use App\Domain\Operations\Models\Facture;
 use App\Domain\Shared\Services\PeriodeCalculateur;
-use App\Domain\Tenants\Models\Site;
-use function Livewire\Volt\{state, computed};
+use App\Domain\Tenants\Support\PerimetreSites;
+use function Livewire\Volt\{state, computed, mount};
 
 state([
-    'periode' => 'semaine',
+    'periode' => 'periode',
     'dateDebut' => null,
     'dateFin' => null,
-    'siteFiltre' => '',
+    'villeFiltre' => '',
+    'activiteFiltre' => '',
     'recherche' => '',
     'commercialFiltre' => '',
+    'pageDetail' => 1,
 ]);
 
-$estGerant = computed(fn () => auth()->user()->hasRole('gerant'));
-$monSite = computed(fn () => $this->estGerant ? null : Site::where('responsable_id', auth()->id())->first());
+mount(function () {
+    $this->dateDebut ??= now()->startOfYear()->toDateString();
+    $this->dateFin ??= now()->toDateString();
+});
+
 $plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
-$sites = computed(fn () => $this->estGerant ? Site::where('entreprise_id', auth()->user()->entreprise_id)->orderBy('nom')->get() : null);
+$mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
+$villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
+$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
 
 $requeteBase = computed(function () {
     [$debut, $fin] = $this->plage;
-    $q = Facture::query()->whereBetween('date', [$debut, $fin]);
-
-    if ($this->estGerant) {
-        if ($this->siteFiltre) {
-            $q->where('site_id', $this->siteFiltre);
-        }
-    } else {
-        $q->where('site_id', $this->monSite?->id ?? 0);
-    }
+    $q = Facture::query()->whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin]);
 
     if ($this->recherche) {
         $q->where('client', 'like', '%'.$this->recherche.'%');
@@ -44,30 +44,15 @@ $requeteBase = computed(function () {
     return $q;
 });
 
-$commerciaux = computed(function () {
-    $q = Commercial::where('est_spontane', false);
-    if (! $this->estGerant) {
-        $q->where('site_id', $this->monSite?->id ?? 0);
-    } elseif ($this->siteFiltre) {
-        $q->where('site_id', $this->siteFiltre);
-    }
-
-    return $q->orderBy('nom')->get();
-});
+$commerciaux = computed(fn () => Commercial::where('est_spontane', false)
+    ->whereIn('site_id', $this->idsSites)->orderBy('nom')->get());
 
 $chargesPeriode = computed(function () {
     [$debut, $fin] = $this->plage;
-    $q = Charge::where('type_operation', 'Charges')->whereBetween('date', [$debut, $fin]);
 
-    if ($this->estGerant) {
-        if ($this->siteFiltre) {
-            $q->where('site_id', $this->siteFiltre);
-        }
-    } else {
-        $q->where('site_id', $this->monSite?->id ?? 0);
-    }
-
-    return (int) $q->sum('montant');
+    return (int) Charge::where('type_operation', 'Charges')
+        ->whereIn('site_id', $this->idsSites)
+        ->whereBetween('date', [$debut, $fin])->sum('montant');
 });
 
 $kpis = computed(function () {
@@ -77,7 +62,7 @@ $kpis = computed(function () {
     return [
         'total' => $ca,
         'mecanique' => (int) $lignes->where('activite', 'Mécanique')->sum('montant'),
-        'carrosserie' => (int) $lignes->where('activite', 'Carrosserie')->sum('montant'),
+        'sinistre' => (int) $lignes->where('activite', 'Sinistre')->sum('montant'),
         'resultat' => $ca - $this->chargesPeriode,
     ];
 });
@@ -88,7 +73,7 @@ $graphique = computed(function () {
 
     $labels = [];
     $mecanique = [];
-    $carrosserie = [];
+    $sinistre = [];
     $resultat = [];
 
     foreach ($points as $point) {
@@ -96,14 +81,13 @@ $graphique = computed(function () {
         $ca = (int) $lignes->sum('montant');
         $charges = (int) \App\Domain\Operations\Models\Charge::query()
             ->where('type_operation', 'Charges')
+            ->whereIn('site_id', $this->idsSites)
             ->whereBetween('date', [$point['debut'], $point['fin']])
-            ->when(! $this->estGerant, fn ($q) => $q->where('site_id', $this->monSite?->id ?? 0))
-            ->when($this->estGerant && $this->siteFiltre, fn ($q) => $q->where('site_id', $this->siteFiltre))
             ->sum('montant');
 
         $labels[] = $point['label'];
         $mecanique[] = (int) $lignes->where('activite', 'Mécanique')->sum('montant');
-        $carrosserie[] = (int) $lignes->where('activite', 'Carrosserie')->sum('montant');
+        $sinistre[] = (int) $lignes->where('activite', 'Sinistre')->sum('montant');
         $resultat[] = $ca - $charges;
     }
 
@@ -111,24 +95,24 @@ $graphique = computed(function () {
         'labels' => $labels,
         'datasets' => [
             ['label' => 'Mécanique', 'data' => $mecanique, 'color' => '#191B20'],
-            ['label' => 'Carrosserie', 'data' => $carrosserie, 'color' => '#C8102E'],
+            ['label' => 'Sinistre', 'data' => $sinistre, 'color' => '#C8102E'],
             ['label' => 'Résultat net', 'data' => $resultat, 'color' => '#0E9F6E', 'type' => 'line'],
         ],
     ];
 });
 
-$detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'site'])->latest('date')->limit(50)->get());
+$detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'site'])->latest('date')->get());
 
 ?>
 
 <div>
-    <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
+    <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
+        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre" />
 
-    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="CA total facturé" :value="ae($this->kpis['total'])" :sub="$this->detail->count().' facture(s)'" />
-        <x-kpi-card label="CA Mécanique" :value="ae($this->kpis['mecanique'])" />
-        <x-kpi-card label="CA Carrosserie" :value="ae($this->kpis['carrosserie'])" />
-        <x-kpi-card label="Charges" :value="ae($this->chargesPeriode)" />
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px;">
+        <x-kpi-card label="CA — {{ $this->libellePerimetre }}" :value="ae($this->kpis['total'])" :sub="$this->detail->count().' facture(s)'"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['mecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['sinistre'])" />
+        <x-kpi-card label="Charges — {{ $this->libellePerimetre }}" :value="ae($this->chargesPeriode)" />
         <x-kpi-card label="Résultat net (CA − charges)" :value="ae($this->kpis['resultat'])"
             :bon="$this->kpis['resultat'] >= 0" :accent="$this->kpis['resultat'] < 0" />
     </div>
@@ -161,7 +145,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                         <th>Type</th>
                         <th>N° de facture</th>
                         <th>Activité</th>
-                        @if ($this->estGerant && ! $siteFiltre)
+                        @if (! $activiteFiltre && count($this->idsSites) > 1)
                             <th>Site</th>
                         @endif
                         <th>Montant</th>
@@ -169,7 +153,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($this->detail as $ligne)
+                    @forelse ($this->detail->forPage($pageDetail, 10) as $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td style="font-weight:700;">{{ $ligne->numero }}</td>
                             <td>{{ $ligne->date->format('d/m/Y') }}</td>
@@ -178,20 +162,18 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                             <td>{{ $ligne->type }}</td>
                             <td>{{ $ligne->n_facture }}</td>
                             <td>{{ $ligne->activite }}</td>
-                            @if ($this->estGerant && ! $siteFiltre)
+                            @if (! $activiteFiltre && count($this->idsSites) > 1)
                                 <td>{{ $ligne->site->nom }}</td>
                             @endif
                             <td style="font-variant-numeric:tabular-nums; font-weight:700;">{{ ae($ligne->montant) }}</td>
                             <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 10 : 9" texte="Aucune facture enregistrée sur cette période." />
+                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 10 : 9" texte="Aucune facture enregistrée sur cette période." />
                     @endforelse
                 </tbody>
             </table>
         </div>
-        @if ($this->detail->count() >= 50)
-            <p style="font-size:12.5px; color:#9A9DA5; margin-top:12px;">50 lignes affichées — affinez avec les filtres.</p>
-        @endif
+        <x-pagination :page="$pageDetail" :total="$this->detail->count()" prop="pageDetail" />
     </div>
 </div>

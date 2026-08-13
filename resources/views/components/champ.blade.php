@@ -9,6 +9,7 @@
     'requis' => false,
     'aide' => null,
     'liste' => null,
+    'disabled' => false,
 ])
 
 @php
@@ -18,7 +19,7 @@
 
 @if ($type === 'checkbox')
     <label style="font-size:13.5px; display:flex; gap:6px; align-items:center; padding-bottom:9px; white-space:nowrap;">
-        <input type="checkbox" wire:model="{{ $model }}">
+        <input type="checkbox" {{ $wire }}="{{ $model }}">
         {{ $label }}
     </label>
 @else
@@ -27,13 +28,13 @@
             {{ $label }}@if ($requis)<span style="color:var(--th-accent);"> *</span>@endif
         </label>
         @if ($type === 'select')
-            <select {{ $wire }}="{{ $model }}" class="champ">
+            <select {{ $wire }}="{{ $model }}" class="champ" @if ($disabled) disabled @endif>
                 @foreach ($options as $valeur => $libelle)
                     <option value="{{ $valeur }}">{{ $libelle }}</option>
                 @endforeach
             </select>
         @elseif ($type === 'textarea')
-            <textarea {{ $wire }}="{{ $model }}" rows="2" placeholder="{{ $placeholder }}" class="champ" style="resize:vertical;"></textarea>
+            <textarea {{ $wire }}="{{ $model }}" rows="2" placeholder="{{ $placeholder }}" class="champ" style="resize:vertical;" @if ($disabled) disabled @endif></textarea>
         @elseif ($type === 'password')
             {{-- Bouton œil : bascule entre texte masqué et texte lisible. --}}
             <div class="champ-mot-de-passe">
@@ -45,7 +46,7 @@
             </div>
         @else
             <input type="{{ $type }}" {{ $wire }}="{{ $model }}" placeholder="{{ $placeholder }}" class="champ"
-                @if ($liste) list="{{ $liste }}" @endif>
+                @if ($liste) list="{{ $liste }}" @endif @if ($disabled) disabled @endif>
         @endif
         @if ($aide)
             <span style="font-size:11.5px; color:#9A9DA5; margin-top:3px;">{{ $aide }}</span>

@@ -4,6 +4,7 @@ use App\Domain\Tenants\Actions\CreerAcces;
 use App\Domain\Tenants\Actions\CreerEntreprise;
 use App\Domain\Tenants\Models\Entreprise;
 use App\Domain\Tenants\Models\Site;
+use App\Domain\Tenants\Models\Ville;
 use App\Domain\Tenants\Services\EnregistreurLogo;
 use function Livewire\Volt\{state, computed, layout, title, usesFileUploads};
 
@@ -12,7 +13,7 @@ layout('layouts.guest');
 title('Inscrire mon entreprise');
 
 state([
-    // Étape courante : 1 = entreprise, 2 = sites, 3 = personnel.
+    // Étape courante : 1 = entreprise, 2 = villes, 3 = personnel.
     'etape' => 1,
     'entrepriseId' => null,
 
@@ -29,20 +30,25 @@ state([
     'codeEntreprise' => '',
     'logo' => null,
 
-    // Étape 2 — Site
-    'siteNom' => '', 'siteVille' => '', 'siteCommune' => '', 'siteTelephone' => '', 'siteAdresse' => '',
+    // Étape 2 — Ville (crée aussitôt ses deux sites : Mécanique et Sinistre)
+    'villeNom' => '', 'villeCommune' => '', 'villeTelephone' => '', 'villeAdresse' => '',
 
     // Étape 3 — Personnel
     'persRole' => 'responsable_site', 'persNom' => '', 'persEmail' => '', 'persMotDePasse' => '',
-    'persSiteId' => '', 'persActivite' => 'Mécanique', 'persObjectif' => '',
+    'persSiteId' => '', 'persActivite' => 'Mécanique/Sinistre',
+    'persObjectifMecanique' => 14_000_000, 'persObjectifSinistre' => 6_000_000,
 
     'message' => null,
 ]);
 
 $entreprise = computed(fn () => $this->entrepriseId ? Entreprise::find($this->entrepriseId) : null);
 
+$villes = computed(fn () => $this->entrepriseId
+    ? Ville::where('entreprise_id', $this->entrepriseId)->orderBy('code')->get()
+    : collect());
+
 $sites = computed(fn () => $this->entrepriseId
-    ? Site::where('entreprise_id', $this->entrepriseId)->orderBy('code')->get()
+    ? Site::where('entreprise_id', $this->entrepriseId)->orderBy('nom')->get()
     : collect());
 
 $personnel = computed(function () {
@@ -134,37 +140,45 @@ $creerEntreprise = function (CreerEntreprise $action, EnregistreurLogo $enregist
 
 // ---------------------------------------------------------------- Étape 2
 
-$ajouterSite = function () {
+$ajouterVille = function () {
     $donnees = $this->validate([
-        'siteNom' => ['required', 'string', 'max:255'],
-        'siteVille' => ['required', 'string', 'max:255'],
-        'siteCommune' => ['nullable', 'string', 'max:255'],
-        'siteTelephone' => ['nullable', 'string', 'max:40'],
-        'siteAdresse' => ['nullable', 'string', 'max:255'],
-    ], [], ['siteNom' => 'nom du site', 'siteVille' => 'ville']);
+        'villeNom' => ['required', 'string', 'max:255'],
+        'villeCommune' => ['nullable', 'string', 'max:255'],
+        'villeTelephone' => ['nullable', 'string', 'max:40'],
+        'villeAdresse' => ['nullable', 'string', 'max:255'],
+    ], [], ['villeNom' => 'nom de la ville']);
 
-    $rang = Site::where('entreprise_id', $this->entrepriseId)->count() + 1;
+    $rang = Ville::where('entreprise_id', $this->entrepriseId)->count() + 1;
     $couleurs = ['#2563EB', '#0E9F6E', '#D97706', '#C8102E', '#7C3AED', '#0891B2'];
 
-    Site::create([
+    $ville = Ville::create([
         'entreprise_id' => $this->entrepriseId,
-        'code' => 'S'.$rang,
-        'nom' => $donnees['siteNom'],
-        'ville' => $donnees['siteVille'],
-        'commune' => $donnees['siteCommune'] ?: null,
-        'telephone' => $donnees['siteTelephone'] ?: null,
-        'adresse' => $donnees['siteAdresse'] ?: null,
+        'code' => 'V'.$rang,
+        'nom' => $donnees['villeNom'],
+        'commune' => $donnees['villeCommune'] ?: null,
+        'telephone' => $donnees['villeTelephone'] ?: null,
+        'adresse' => $donnees['villeAdresse'] ?: null,
         'couleur' => $couleurs[($rang - 1) % count($couleurs)],
         'est_actif' => true,
     ]);
 
-    $this->reset(['siteNom', 'siteVille', 'siteCommune', 'siteTelephone', 'siteAdresse']);
-    $this->message = 'Site ajouté.';
+    foreach (['Mécanique', 'Sinistre'] as $activite) {
+        Site::create([
+            'entreprise_id' => $this->entrepriseId,
+            'ville_id' => $ville->id,
+            'nom' => $donnees['villeNom'].' — '.$activite,
+            'activite' => $activite,
+            'est_actif' => true,
+        ]);
+    }
+
+    $this->reset(['villeNom', 'villeCommune', 'villeTelephone', 'villeAdresse']);
+    $this->message = 'Ville ajoutée avec ses deux sites (Mécanique et Sinistre).';
 };
 
 $allerEtape3 = function () {
-    if ($this->sites->isEmpty()) {
-        $this->addError('siteNom', 'Créez au moins un site avant de continuer.');
+    if ($this->villes->isEmpty()) {
+        $this->addError('villeNom', 'Créez au moins une ville avant de continuer.');
 
         return;
     }
@@ -186,8 +200,9 @@ $ajouterPersonnel = function (CreerAcces $action) {
     ];
 
     if ($this->persRole === 'commercial') {
-        $regles['persActivite'] = ['required', 'in:Mécanique,Carrosserie'];
-        $regles['persObjectif'] = ['nullable', 'numeric', 'min:0'];
+        $regles['persActivite'] = ['required', 'in:Mécanique,Sinistre,Mécanique/Sinistre'];
+        $regles['persObjectifMecanique'] = ['nullable', 'numeric', 'min:0'];
+        $regles['persObjectifSinistre'] = ['nullable', 'numeric', 'min:0'];
     }
 
     $donnees = $this->validate($regles, [], [
@@ -199,12 +214,15 @@ $ajouterPersonnel = function (CreerAcces $action) {
         'nom' => $donnees['persNom'],
         'email' => $donnees['persEmail'],
         'mot_de_passe' => $donnees['persMotDePasse'],
-        'site_id' => $donnees['persSiteId'],
-        'activite' => $donnees['persActivite'] ?? null,
-        'objectif_mensuel' => $donnees['persObjectif'] ?? 0,
+        'perimetre' => $donnees['persRole'] === 'responsable_site' ? 'site:'.$donnees['persSiteId'] : null,
+        'site_id' => $donnees['persRole'] === 'commercial' ? $donnees['persSiteId'] : null,
+        'activite' => $donnees['persActivite'] ?? 'Mécanique/Sinistre',
+        'objectif_mecanique' => $donnees['persObjectifMecanique'] ?? 0,
+        'objectif_sinistre' => $donnees['persObjectifSinistre'] ?? 0,
     ]);
 
-    $this->reset(['persNom', 'persEmail', 'persMotDePasse', 'persObjectif']);
+    $this->reset(['persNom', 'persEmail', 'persMotDePasse', 'persObjectifMecanique', 'persObjectifSinistre']);
+    $this->persActivite = 'Mécanique/Sinistre';
     $this->message = 'Accès créé — le mot de passe devra être changé à la première connexion.';
 };
 
@@ -315,7 +333,7 @@ $terminer = function () {
             </form>
         @endif
 
-        {{-- ================================================= ÉTAPE 2 : SITES --}}
+        {{-- ================================================= ÉTAPE 2 : VILLES --}}
         @if ($etape === 2)
             <x-carte-section titre="Code entreprise à communiquer à votre personnel">
                 <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -328,39 +346,39 @@ $terminer = function () {
                 </div>
             </x-carte-section>
 
-            <x-carte-section titre="Création d'un site">
+            <x-carte-section titre="Création d'une ville">
                 <div class="bloc-saisie">
-                    <x-champ label="Nom" model="siteNom" requis="true" placeholder="Ex : Agence Nord" />
-                    <x-champ label="Ville" model="siteVille" requis="true" placeholder="Ex : Abidjan" />
-                    <x-champ label="Commune" model="siteCommune" placeholder="Ex : Cocody" />
-                    <x-champ label="Téléphone" model="siteTelephone" placeholder="+225 07 ..." />
-                    <x-champ label="Adresse" model="siteAdresse" placeholder="Ex : Boulevard Latrille" />
-                    <button type="button" wire:click="ajouterSite" class="bouton bouton-sombre">+ Ajouter le site</button>
+                    <x-champ label="Nom de la ville" model="villeNom" requis="true" placeholder="Ex : Abidjan" />
+                    <x-champ label="Commune" model="villeCommune" placeholder="Ex : Cocody" />
+                    <x-champ label="Téléphone" model="villeTelephone" placeholder="+225 07 ..." />
+                    <x-champ label="Adresse" model="villeAdresse" placeholder="Ex : Boulevard Latrille" />
+                    <button type="button" wire:click="ajouterVille" class="bouton bouton-sombre">+ Ajouter la ville</button>
                 </div>
                 <p style="font-size:12px; color:#9A9DA5; margin:10px 0 0;">
-                    Le responsable de chaque site pourra être nommé à l'étape suivante, ou plus tard depuis vos paramètres.
+                    Chaque ville crée aussitôt ses deux sites d'activité (Mécanique et Sinistre). Le
+                    responsable de chacun pourra être nommé à l'étape suivante, ou plus tard depuis vos paramètres.
                 </p>
 
                 <div class="tableau-conteneur" style="margin-top:16px;">
                     <table class="tableau">
                         <thead>
-                            <tr><th>Code</th><th>Nom</th><th>Ville</th><th>Commune</th><th>Téléphone</th><th>Adresse</th></tr>
+                            <tr><th>Code</th><th>Ville</th><th>Commune</th><th>Téléphone</th><th>Adresse</th><th>Sites</th></tr>
                         </thead>
                         <tbody>
-                            @forelse ($this->sites as $site)
+                            @forelse ($this->villes as $ville)
                                 <tr>
-                                    <td style="font-weight:700;">{{ $site->code }}</td>
+                                    <td style="font-weight:700;">{{ $ville->code }}</td>
                                     <td>
-                                        <span style="display:inline-block; width:9px; height:9px; border-radius:99px; background:{{ $site->couleur }}; margin-right:7px;"></span>
-                                        {{ $site->nom }}
+                                        <span style="display:inline-block; width:9px; height:9px; border-radius:99px; background:{{ $ville->couleur }}; margin-right:7px;"></span>
+                                        {{ $ville->nom }}
                                     </td>
-                                    <td>{{ $site->ville ?? '—' }}</td>
-                                    <td>{{ $site->commune ?? '—' }}</td>
-                                    <td>{{ $site->telephone ?? '—' }}</td>
-                                    <td>{{ $site->adresse ?? '—' }}</td>
+                                    <td>{{ $ville->commune ?? '—' }}</td>
+                                    <td>{{ $ville->telephone ?? '—' }}</td>
+                                    <td>{{ $ville->adresse ?? '—' }}</td>
+                                    <td>{{ $this->sites->where('ville_id', $ville->id)->pluck('activite')->implode(', ') }}</td>
                                 </tr>
                             @empty
-                                <x-table-vide :colspan="6" texte="Aucun site créé pour le moment." />
+                                <x-table-vide :colspan="6" texte="Aucune ville créée pour le moment." />
                             @endforelse
                         </tbody>
                     </table>
@@ -387,11 +405,12 @@ $terminer = function () {
                     <x-champ label="Adresse e-mail" model="persEmail" type="email" requis="true" />
                     <x-champ label="Mot de passe provisoire" model="persMotDePasse" type="password" requis="true" />
                     <x-champ label="Site d'affectation" model="persSiteId" type="select"
-                        :options="$this->sites->pluck('nom', 'id')" requis="true" width="200" />
+                        :options="$this->sites->mapWithKeys(fn ($s) => [$s->id => $s->nom.' ('.$s->activite.')'])" requis="true" width="240" />
                     @if ($persRole === 'commercial')
-                        <x-champ label="Activité" model="persActivite" type="select"
-                            :options="['Mécanique' => 'Mécanique', 'Carrosserie' => 'Carrosserie']" width="160" />
-                        <x-champ label="Objectif mensuel (FCFA)" model="persObjectif" type="number" width="180" />
+                        <x-champ label="Activité" model="persActivite" type="select" width="200"
+                            :options="['Mécanique/Sinistre' => 'Mécanique/Sinistre (les deux)', 'Mécanique' => 'Mécanique', 'Sinistre' => 'Sinistre']" />
+                        <x-champ label="Objectif Mécanique (FCFA)" model="persObjectifMecanique" type="number" width="180" />
+                        <x-champ label="Objectif Sinistre (FCFA)" model="persObjectifSinistre" type="number" width="180" />
                     @endif
                     <button type="button" wire:click="ajouterPersonnel" class="bouton bouton-sombre">+ Ajouter</button>
                 </div>

@@ -42,6 +42,17 @@ class MenuNavigation
             ]);
         }
 
+        if ($utilisateur->hasRole('caissier')) {
+            return self::construire([
+                ['label' => 'Tableau de bord', 'route' => 'caissier.tableau-de-bord'],
+                ['label' => 'Encaissements', 'route' => 'caissier.encaissements'],
+                ['label' => 'Décaissements', 'route' => 'caissier.decaissements'],
+                ['label' => 'Messages', 'route' => 'messages'],
+                ['label' => 'Notifications', 'route' => 'mes-notifications'],
+                ['label' => 'Paramètres', 'route' => 'mon-espace'],
+            ]);
+        }
+
         $onglets = [];
 
         $suffixe = [];

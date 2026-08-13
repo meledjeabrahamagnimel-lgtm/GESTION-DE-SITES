@@ -3,34 +3,35 @@
 use App\Domain\Operations\Models\Commercial;
 use App\Domain\Operations\Models\Devis;
 use App\Domain\Shared\Services\PeriodeCalculateur;
-use App\Domain\Tenants\Models\Site;
-use function Livewire\Volt\{state, computed};
+use App\Domain\Tenants\Support\PerimetreSites;
+use function Livewire\Volt\{state, computed, mount};
 
 state([
-    'periode' => 'semaine',
+    'periode' => 'periode',
     'dateDebut' => null,
     'dateFin' => null,
-    'siteFiltre' => '',
+    'villeFiltre' => '',
+    'activiteFiltre' => '',
     'recherche' => '',
     'commercialFiltre' => '',
+    'statutFiltre' => '',
+    'pageDetail' => 1,
 ]);
 
-$estGerant = computed(fn () => auth()->user()->hasRole('gerant'));
-$monSite = computed(fn () => $this->estGerant ? null : Site::where('responsable_id', auth()->id())->first());
+mount(function () {
+    $this->dateDebut ??= now()->startOfYear()->toDateString();
+    $this->dateFin ??= now()->toDateString();
+});
+
 $plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
-$sites = computed(fn () => $this->estGerant ? Site::where('entreprise_id', auth()->user()->entreprise_id)->orderBy('nom')->get() : null);
+$mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
+$villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
+$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
 
 $requeteBase = computed(function () {
     [$debut, $fin] = $this->plage;
-    $q = Devis::query()->whereBetween('date_emission', [$debut, $fin]);
-
-    if ($this->estGerant) {
-        if ($this->siteFiltre) {
-            $q->where('site_id', $this->siteFiltre);
-        }
-    } else {
-        $q->where('site_id', $this->monSite?->id ?? 0);
-    }
+    $q = Devis::query()->whereIn('site_id', $this->idsSites)->whereBetween('date_emission', [$debut, $fin]);
 
     if ($this->recherche) {
         $q->where('client', 'like', '%'.$this->recherche.'%');
@@ -43,16 +44,8 @@ $requeteBase = computed(function () {
     return $q;
 });
 
-$commerciaux = computed(function () {
-    $q = Commercial::where('est_spontane', false);
-    if (! $this->estGerant) {
-        $q->where('site_id', $this->monSite?->id ?? 0);
-    } elseif ($this->siteFiltre) {
-        $q->where('site_id', $this->siteFiltre);
-    }
-
-    return $q->orderBy('nom')->get();
-});
+$commerciaux = computed(fn () => Commercial::where('est_spontane', false)
+    ->whereIn('site_id', $this->idsSites)->orderBy('nom')->get());
 
 $kpis = computed(function () {
     $lignes = (clone $this->requeteBase)->get();
@@ -78,7 +71,7 @@ $kpis = computed(function () {
     ];
 });
 
-/** Délai moyen réception → émission, en jours (null si aucune date de réception connue). */
+/** Délai moyen réception → émission, en jours entiers (null si aucune date de réception connue). */
 $delaiMoyenEnvoi = function ($lignes) {
     $avecReception = $lignes->filter(fn ($d) => $d->date_reception && $d->date_emission);
 
@@ -86,7 +79,7 @@ $delaiMoyenEnvoi = function ($lignes) {
         return null;
     }
 
-    return round($avecReception->sum(fn ($d) => $d->date_reception->diffInDays($d->date_emission)) / $avecReception->count(), 1);
+    return (int) round($avecReception->sum(fn ($d) => $d->date_reception->diffInDays($d->date_emission)) / $avecReception->count());
 };
 
 $graphique = computed(function () {
@@ -119,15 +112,24 @@ $graphique = computed(function () {
     ];
 });
 
-$detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'site'])->latest('date_emission')->limit(50)->get());
+$detail = computed(function () {
+    $q = (clone $this->requeteBase)->with(['commercial', 'site'])->latest('date_emission');
+
+    if ($this->statutFiltre) {
+        $q->where('statut', $this->statutFiltre);
+    }
+
+    return $q->get();
+});
 
 ?>
 
 <div>
-    <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
+    <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
+        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="Devis émis" :value="$this->kpis['emis']" :sub="ae($this->kpis['montantEmis'])" />
+        <x-kpi-card label="Devis émis — {{ $this->libellePerimetre }}" :value="$this->kpis['emis']" :sub="ae($this->kpis['montantEmis'])" />
         <x-kpi-card label="Validés" :value="$this->kpis['valides']" :sub="ae($this->kpis['montantValide'])" couleur="#0E9F6E" />
         <x-kpi-card label="Refusés" :value="$this->kpis['refuses']" couleur="#C8102E" />
         <x-kpi-card label="En attente" :value="$this->kpis['attente']" :accent="$this->kpis['attente'] > 0" />
@@ -135,7 +137,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
         <x-kpi-card label="Différenciation moyenne" :value="ae($this->kpis['differenciation'] !== null ? (int) $this->kpis['differenciation'] : null)"
             sub="Écart moyen devis → validé" />
         <x-kpi-card label="Délai moyen d'envoi"
-            :value="$this->kpis['delaiEnvoi'] !== null ? str_replace('.', ',', (string) $this->kpis['delaiEnvoi']).' j' : '—'"
+            :value="$this->kpis['delaiEnvoi'] !== null ? $this->kpis['delaiEnvoi'].' j' : '—'"
             sub="Réception → émission" />
     </div>
 
@@ -155,6 +157,12 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                     <option value="{{ $commercial->id }}">{{ $commercial->nom }}</option>
                 @endforeach
             </select>
+            <select wire:model.live="statutFiltre" style="padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px;">
+                <option value="">Statut : tous</option>
+                <option value="En attente">En attente</option>
+                <option value="Validé">Validé</option>
+                <option value="Refusé">Refusé</option>
+            </select>
         </div>
         <div class="tableau-conteneur">
             <table class="tableau">
@@ -166,7 +174,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                         <th>Client</th>
                         <th>Date d'émission</th>
                         <th>Commercial</th>
-                        @if ($this->estGerant && ! $siteFiltre)
+                        @if (! $activiteFiltre && count($this->idsSites) > 1)
                             <th>Site</th>
                         @endif
                         <th>Statut du devis</th>
@@ -177,7 +185,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($this->detail as $ligne)
+                    @forelse ($this->detail->forPage($pageDetail, 10) as $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td style="font-weight:700;">{{ $ligne->numero }}</td>
                             <td>{{ $ligne->date_reception?->format('d/m/Y') ?? '—' }}</td>
@@ -185,7 +193,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                             <td>{{ $ligne->client }}</td>
                             <td>{{ $ligne->date_emission->format('d/m/Y') }}</td>
                             <td>{{ $ligne->commercial->nom }}</td>
-                            @if ($this->estGerant && ! $siteFiltre)
+                            @if (! $activiteFiltre && count($this->idsSites) > 1)
                                 <td>{{ $ligne->site->nom }}</td>
                             @endif
                             <td>
@@ -197,13 +205,11 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                             <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="$this->estGerant && ! $siteFiltre ? 12 : 11" texte="Aucun devis enregistré sur cette période." />
+                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 12 : 11" texte="Aucun devis enregistré sur cette période." />
                     @endforelse
                 </tbody>
             </table>
         </div>
-        @if ($this->detail->count() >= 50)
-            <p style="font-size:12.5px; color:#9A9DA5; margin-top:12px;">50 lignes affichées — affinez avec les filtres.</p>
-        @endif
+        <x-pagination :page="$pageDetail" :total="$this->detail->count()" prop="pageDetail" />
     </div>
 </div>

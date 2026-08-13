@@ -270,7 +270,7 @@ class MessagerieEtNotesSeeder extends Seeder
         $suivi = DossierNote::create(['entreprise_id' => $entrepriseId, 'user_id' => $commercial->id, 'nom' => 'Suivi clients', 'couleur' => '#2563EB']);
         $relances = DossierNote::create(['entreprise_id' => $entrepriseId, 'user_id' => $commercial->id, 'nom' => 'Relances', 'couleur' => '#D97706']);
 
-        Note::create(['entreprise_id' => $entrepriseId, 'user_id' => $commercial->id, 'dossier_note_id' => $suivi->id, 'titre' => 'Garage Koffi — flotte véhicules', 'corps' => 'Intéressé par un contrat annuel entretien. Relancer après le devis carrosserie.', 'est_epinglee' => true]);
+        Note::create(['entreprise_id' => $entrepriseId, 'user_id' => $commercial->id, 'dossier_note_id' => $suivi->id, 'titre' => 'Garage Koffi — flotte véhicules', 'corps' => 'Intéressé par un contrat annuel entretien. Relancer après le devis sinistre.', 'est_epinglee' => true]);
         Note::create(['entreprise_id' => $entrepriseId, 'user_id' => $commercial->id, 'dossier_note_id' => $relances->id, 'titre' => 'Mme Traoré — devis en attente', 'corps' => 'Devis envoyé le 28, attend le retour assurance.', 'rappel_le' => now()->addDays(2)]);
         Note::create(['entreprise_id' => $entrepriseId, 'user_id' => $commercial->id, 'dossier_note_id' => null, 'titre' => 'Idée : carnet clients zone industrielle', 'corps' => 'Prospecter davantage la zone industrielle en début de semaine.']);
     }

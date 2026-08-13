@@ -17,6 +17,7 @@ state([
     'motDePasse' => '',
     'habilitations' => [],
     'voirMotDePasse' => false,
+    'pageAdmins' => 1,
 ]);
 
 $moi = computed(fn () => auth()->user());
@@ -243,7 +244,7 @@ $supprimer = function (int $id) {
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach ($this->administrateurs as $admin)
+                    @foreach ($this->administrateurs->forPage($pageAdmins, 10) as $admin)
                         @php $gerable = $this->moi->peutGerer($admin); @endphp
                         <tr wire:key="admin-{{ $admin->id }}">
                             <td style="font-weight:600; display:flex; align-items:center; gap:8px;">
@@ -293,5 +294,6 @@ $supprimer = function (int $id) {
                 </tbody>
             </table>
         </div>
+        <x-pagination :page="$pageAdmins" :total="$this->administrateurs->count()" prop="pageAdmins" />
     </x-carte-section>
 </div>

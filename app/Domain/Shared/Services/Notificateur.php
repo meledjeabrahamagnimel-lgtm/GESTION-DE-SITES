@@ -97,18 +97,21 @@ class Notificateur
 
     /**
      * Encadrement à prévenir pour une saisie rattachée à un site : le responsable
-     * désigné sur la fiche du site. À défaut de responsable rattaché, on retombe sur
-     * le gérant pour qu'aucune transmission ne reste sans destinataire.
+     * propre au site, ou à défaut celui de sa ville (qui en couvre alors les deux
+     * activités). À défaut de responsable rattaché, on retombe sur le gérant pour
+     * qu'aucune transmission ne reste sans destinataire.
      *
      * @return array<int, int>
      */
     public static function encadrementDuSite(?int $siteId, int $entrepriseId): array
     {
         $responsables = DB::table('sites')
-            ->where('entreprise_id', $entrepriseId)
-            ->when($siteId, fn ($q) => $q->where('id', $siteId))
-            ->whereNotNull('responsable_id')
+            ->join('villes', 'villes.id', '=', 'sites.ville_id')
+            ->where('sites.entreprise_id', $entrepriseId)
+            ->when($siteId, fn ($q) => $q->where('sites.id', $siteId))
+            ->selectRaw('COALESCE(sites.responsable_id, villes.responsable_id) as responsable_id')
             ->pluck('responsable_id')
+            ->filter()
             ->map(fn ($id) => (int) $id)
             ->all();
 

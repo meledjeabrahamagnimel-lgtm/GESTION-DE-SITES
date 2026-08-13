@@ -31,7 +31,7 @@ class DemoCompletSeeder extends Seeder
             'Bonne fréquentation, deux prospects transformés dans la journée.',
         ],
         'devis' => [
-            'Plusieurs refus liés au prix jugé élevé sur la carrosserie.',
+            'Plusieurs refus liés au prix jugé élevé sur le sinistre.',
             'Devis en attente de validation assurance.',
             'Délai de pièces annoncé trop long par le fournisseur.',
             'Bon taux de validation sur la mécanique cette semaine.',

@@ -9,23 +9,37 @@ use App\Domain\Operations\Models\Prospection;
 use App\Domain\Operations\Models\SaisieJournaliere;
 use App\Domain\Shared\Services\PeriodeCalculateur;
 use App\Domain\Tenants\Models\Site;
-use function Livewire\Volt\{state, computed};
+use App\Domain\Tenants\Support\PerimetreSites;
+use function Livewire\Volt\{state, computed, mount};
 
 state([
-    'periode' => 'semaine',
+    'periode' => 'periode',
     'dateDebut' => null,
     'dateFin' => null,
-    'siteFiltre' => '',
+    'villeFiltre' => '',
+    'activiteFiltre' => '',
+    'pageSynthese' => 1,
 ]);
+
+mount(function () {
+    $this->dateDebut ??= now()->startOfYear()->toDateString();
+    $this->dateFin ??= now()->toDateString();
+});
 
 $plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
 
-$sites = computed(fn () => Site::where('entreprise_id', auth()->user()->entreprise_id)->orderBy('nom')->get());
+$mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
 
-/** Sites réellement pris en compte : tous, ou uniquement celui sélectionné dans le filtre. */
-$sitesRetenus = computed(fn () => $this->siteFiltre
-    ? $this->sites->where('id', (int) $this->siteFiltre)->values()
-    : $this->sites);
+$villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
+
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+
+/** Sites réellement pris en compte par le filtre ville + activité. */
+$sitesRetenus = computed(function () {
+    $ids = PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre);
+
+    return Site::whereIn('id', $ids)->with('ville')->orderBy('nom')->get();
+});
 
 $synthese = computed(function () {
     [$debut, $fin] = $this->plage;
@@ -59,8 +73,12 @@ $kpis = computed(function () {
     $nbEmis = (clone $devisEmis)->count();
     $nbValides = (clone $devisEmis)->where('statut', 'Validé')->count();
 
+    $facturesQ = Facture::whereIn('site_id', $idsSites)->whereBetween('date', [$debut, $fin]);
+
     return [
         'ca' => $this->synthese->sum('ca'),
+        'caMecanique' => (int) (clone $facturesQ)->where('activite', 'Mécanique')->sum('montant'),
+        'caSinistre' => (int) (clone $facturesQ)->where('activite', 'Sinistre')->sum('montant'),
         'charges' => $this->synthese->sum('charges'),
         'resultat' => $this->synthese->sum('resultat'),
         'encaisse' => $this->synthese->sum('encaisse'),
@@ -144,7 +162,7 @@ $alertes = computed(function () {
     return collect($alertes)->sortBy(fn ($a) => $ordre[$a['niveau']])->values();
 });
 
-/** Classement des commerciaux du groupe par taux d'atteinte de leur objectif au prorata. */
+/** Classement des commerciaux du groupe par taux de réalisation de leur objectif au prorata. */
 $topCommerciaux = computed(function () {
     [$debut, $fin] = $this->plage;
     $jours = PeriodeCalculateur::nombreDeJours($debut, $fin);
@@ -191,18 +209,18 @@ $commentaires = computed(function () {
 ?>
 
 <div>
-    <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
-
-    @php $portee = $siteFiltre ? $this->sitesRetenus->first()?->nom : 'groupe'; @endphp
+    <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
+        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="CA {{ $portee }}" :value="ae($this->kpis['ca'])" />
-        <x-kpi-card label="Charges {{ $portee }}" :value="ae($this->kpis['charges'])" />
-        <x-kpi-card label="Résultat net {{ $portee }}" :value="ae($this->kpis['resultat'])"
+        <x-kpi-card label="CA — {{ $this->libellePerimetre }}" :value="ae($this->kpis['ca'])"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['caMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['caSinistre'])" />
+        <x-kpi-card label="Charges — {{ $this->libellePerimetre }}" :value="ae($this->kpis['charges'])" />
+        <x-kpi-card label="Résultat net — {{ $this->libellePerimetre }}" :value="ae($this->kpis['resultat'])"
             sub="CA facturé − charges" :bon="$this->kpis['resultat'] >= 0" :accent="$this->kpis['resultat'] < 0" />
         <x-kpi-card label="Encaissé" :value="ae($this->kpis['encaisse'])"
             :sub="$this->kpis['ca'] > 0 ? an($this->kpis['encaisse'] / $this->kpis['ca']).' du CA facturé' : null" />
-        <x-kpi-card label="Trésorerie nette {{ $portee }}" :value="ae($this->kpis['treso'])" :accent="$this->kpis['treso'] < 0" />
+        <x-kpi-card label="Trésorerie nette — {{ $this->libellePerimetre }}" :value="ae($this->kpis['treso'])" :accent="$this->kpis['treso'] < 0" />
         <x-kpi-card label="Taux transfo devis" :value="an($this->kpis['tauxTransfo'])" />
         <x-kpi-card label="Véhicules sans facture" :value="$this->kpis['sansFacture']"
             :sub="$this->kpis['sansFacture'] > 0 ? 'Anomalie à signaler à la Direction' : 'Aucune anomalie'"
@@ -235,7 +253,7 @@ $commentaires = computed(function () {
         </div>
 
         <div class="carte">
-            <h3 class="titre-section">Top commerciaux (taux d'atteinte)</h3>
+            <h3 class="titre-section">Top commerciaux (taux de réalisation)</h3>
             @forelse ($this->topCommerciaux as $rang => $ligne)
                 @php
                     // Or, argent, bronze : la couleur du rang, comme dans la maquette.
@@ -301,10 +319,10 @@ $commentaires = computed(function () {
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($this->synthese as $ligne)
+                    @forelse ($this->synthese->forPage($pageSynthese, 10) as $ligne)
                         <tr>
                             <td style="font-weight:700;">
-                                <span style="display:inline-block; width:9px; height:9px; border-radius:99px; background:{{ $ligne['site']->couleur }}; margin-right:8px;"></span>
+                                <span style="display:inline-block; width:9px; height:9px; border-radius:99px; background:{{ $ligne['site']->ville->couleur ?? '#2563EB' }}; margin-right:8px;"></span>
                                 {{ $ligne['site']->nom }}
                             </td>
                             <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['ca']) }}</td>
@@ -321,5 +339,6 @@ $commentaires = computed(function () {
                 </tbody>
             </table>
         </div>
+        <x-pagination :page="$pageSynthese" :total="$this->synthese->count()" prop="pageSynthese" />
     </div>
 </div>

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Domain\Tenants\Models\Entreprise;
 use App\Domain\Tenants\Models\Site;
+use App\Domain\Tenants\Models\Ville;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -13,8 +14,9 @@ use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 /**
- * Le responsable de site tient les sites à jour depuis « Mon espace », sans
- * dépendre de la disponibilité du gérant. Le commercial n'y a pas accès.
+ * Le responsable de site tient les villes à jour depuis « Mon espace », sans
+ * dépendre de la disponibilité du gérant. Créer une ville crée aussitôt ses deux
+ * sites d'activité (Mécanique et Sinistre). Le commercial n'y a pas accès.
  */
 class SitesResponsableTest extends TestCase
 {
@@ -60,67 +62,68 @@ class SitesResponsableTest extends TestCase
         return $utilisateur;
     }
 
-    public function test_le_responsable_cree_un_site_avec_un_code_attribue(): void
+    public function test_le_responsable_cree_une_ville_avec_ses_deux_sites(): void
     {
         $this->actingAs($this->responsable);
 
         Volt::test('mon-espace')
             ->assertSet('estResponsable', true)
-            ->set('siteNom', 'Abidjan — Site 2')
-            ->set('siteVille', 'Abidjan')
-            ->set('siteCommune', 'Cocody')
-            ->set('siteTelephone', '+225 27 22 00 00')
-            ->call('enregistrerSite')
+            ->set('villeNom', 'Abidjan')
+            ->set('villeCommune', 'Cocody')
+            ->set('villeTelephone', '+225 27 22 00 00')
+            ->call('enregistrerVille')
             ->assertHasNoErrors();
 
-        $site = Site::where('entreprise_id', $this->alpha->id)->firstOrFail();
+        $ville = Ville::where('entreprise_id', $this->alpha->id)->firstOrFail();
 
-        $this->assertSame('Abidjan — Site 2', $site->nom);
-        $this->assertSame('Cocody', $site->commune);
-        $this->assertNotEmpty($site->code);
-        $this->assertTrue($site->est_actif);
+        $this->assertSame('Abidjan', $ville->nom);
+        $this->assertSame('Cocody', $ville->commune);
+        $this->assertNotEmpty($ville->code);
+        $this->assertTrue($ville->est_actif);
+
+        $sites = Site::where('ville_id', $ville->id)->orderBy('activite')->get();
+        $this->assertCount(2, $sites);
+        $this->assertSame(['Mécanique', 'Sinistre'], $sites->pluck('activite')->all());
     }
 
-    public function test_le_nom_et_la_ville_sont_obligatoires(): void
+    public function test_le_nom_est_obligatoire(): void
     {
         $this->actingAs($this->responsable);
 
         Volt::test('mon-espace')
-            ->call('enregistrerSite')
-            ->assertHasErrors(['siteNom' => 'required', 'siteVille' => 'required']);
+            ->call('enregistrerVille')
+            ->assertHasErrors(['villeNom' => 'required']);
 
-        $this->assertSame(0, Site::where('entreprise_id', $this->alpha->id)->count());
+        $this->assertSame(0, Ville::where('entreprise_id', $this->alpha->id)->count());
     }
 
-    public function test_le_responsable_modifie_un_site_existant(): void
+    public function test_le_responsable_modifie_une_ville_existante(): void
     {
-        $site = Site::create([
+        $ville = Ville::create([
             'entreprise_id' => $this->alpha->id,
-            'code' => 'S01',
+            'code' => 'V01',
             'nom' => 'Ancien nom',
-            'ville' => 'Bouaké',
         ]);
 
         $this->actingAs($this->responsable);
 
         Volt::test('mon-espace')
-            ->call('editerSite', $site->id)
-            ->assertSet('siteNom', 'Ancien nom')
-            ->set('siteNom', 'Nouveau nom')
-            ->call('enregistrerSite')
+            ->call('editerVille', $ville->id)
+            ->assertSet('villeNom', 'Ancien nom')
+            ->set('villeNom', 'Nouveau nom')
+            ->call('enregistrerVille')
             ->assertHasNoErrors();
 
-        $this->assertSame('Nouveau nom', $site->fresh()->nom);
-        $this->assertSame('S01', $site->fresh()->code, 'Le code ne doit pas changer à la modification.');
+        $this->assertSame('Nouveau nom', $ville->fresh()->nom);
+        $this->assertSame('V01', $ville->fresh()->code, 'Le code ne doit pas changer à la modification.');
     }
 
-    public function test_un_site_d_une_autre_entreprise_est_hors_de_portee(): void
+    public function test_une_ville_d_une_autre_entreprise_est_hors_de_portee(): void
     {
-        $siteEtranger = Site::withoutGlobalScopes()->create([
+        $villeEtrangere = Ville::withoutGlobalScopes()->create([
             'entreprise_id' => $this->beta->id,
             'code' => 'B01',
-            'nom' => 'Site Beta',
-            'ville' => 'Yamoussoukro',
+            'nom' => 'Ville Beta',
         ]);
 
         $this->actingAs($this->responsable);
@@ -129,30 +132,47 @@ class SitesResponsableTest extends TestCase
         // ne trouve tout simplement pas la ligne, et rien n'est modifiable.
         $this->expectException(ModelNotFoundException::class);
 
-        Volt::test('mon-espace')->call('editerSite', $siteEtranger->id);
+        Volt::test('mon-espace')->call('editerVille', $villeEtrangere->id);
     }
 
-    public function test_un_commercial_ne_peut_pas_creer_de_site(): void
+    public function test_un_commercial_ne_peut_pas_creer_de_ville(): void
     {
         $this->actingAs($this->commercial);
 
         Volt::test('mon-espace')
             ->assertSet('estResponsable', false)
-            ->set('siteNom', 'Site pirate')
-            ->set('siteVille', 'Abidjan')
-            ->call('enregistrerSite')
+            ->set('villeNom', 'Ville pirate')
+            ->call('enregistrerVille')
             ->assertForbidden();
 
-        $this->assertDatabaseMissing('sites', ['nom' => 'Site pirate']);
+        $this->assertDatabaseMissing('villes', ['nom' => 'Ville pirate']);
+    }
+
+    public function test_la_desactivation_d_une_ville_est_reversible(): void
+    {
+        $ville = Ville::create([
+            'entreprise_id' => $this->alpha->id,
+            'code' => 'V01',
+            'nom' => 'Abidjan',
+        ]);
+
+        $this->actingAs($this->responsable);
+
+        Volt::test('mon-espace')->call('basculerVille', $ville->id);
+        $this->assertFalse($ville->fresh()->est_actif);
+
+        Volt::test('mon-espace')->call('basculerVille', $ville->id);
+        $this->assertTrue($ville->fresh()->est_actif);
     }
 
     public function test_la_desactivation_d_un_site_est_reversible(): void
     {
+        $ville = Ville::create(['entreprise_id' => $this->alpha->id, 'code' => 'V01', 'nom' => 'Abidjan']);
         $site = Site::create([
             'entreprise_id' => $this->alpha->id,
-            'code' => 'S01',
-            'nom' => 'Site 1',
-            'ville' => 'Abidjan',
+            'ville_id' => $ville->id,
+            'nom' => 'Abidjan — Mécanique',
+            'activite' => 'Mécanique',
         ]);
 
         $this->actingAs($this->responsable);

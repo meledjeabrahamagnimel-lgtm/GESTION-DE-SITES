@@ -29,7 +29,7 @@ class Referentiel extends Model
 
     /** Valeurs livrées avec l'application, toujours disponibles. */
     public const DEFAUTS = [
-        self::ACTIVITE => ['Mécanique', 'Carrosserie'],
+        self::ACTIVITE => ['Mécanique', 'Sinistre'],
         self::MOYEN_PROSPECTION => ['RDV', 'Téléphone', 'Mail'],
         self::MOYEN_PAIEMENT => ['Espèces', 'Mobile Money', 'Chèque', 'Virement', 'Autres'],
         self::LIBELLE_CHARGE => ['Achats pièces', 'Salaires & personnel', 'Fonctionnement', 'Autres décaissements'],

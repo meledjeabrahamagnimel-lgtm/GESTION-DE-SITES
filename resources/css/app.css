@@ -236,6 +236,23 @@ input[type="password"].champ, input[type="date"].champ, select.champ, textarea.c
 .bouton-vert { background: var(--th-vert); }
 .bouton-danger { background: var(--th-accent); }
 
+/* Retour visuel systématique : même les boutons stylés au cas par cas en ligne (nombreux
+   dans les écrans de saisie) doivent réagir au survol et au clic, pas seulement ceux
+   utilisant la classe .bouton. La règle cible l'élément lui-même. */
+button:not(.bouton):not(:disabled) {
+    cursor: pointer;
+    transition: filter .12s ease, opacity .12s ease;
+}
+button:not(.bouton):not(:disabled):hover { filter: brightness(1.12); }
+button:not(.bouton):not(:disabled):active { filter: brightness(.9); }
+button:disabled { cursor: not-allowed; }
+
+/* Barre de navigation : chaque lien doit sentir le survol, que ce soit l'onglet actif
+   (léger éclaircissement) ou un onglet inactif (fond qui apparaît). */
+header nav a { transition: background-color .12s ease, filter .12s ease; }
+header nav a:not(.nav-actif):hover { background-color: rgba(255, 255, 255, .1) !important; }
+header nav a.nav-actif:hover { filter: brightness(1.12); }
+
 /* Onglets de période (Jour / Semaine / Mois / Période). */
 .onglet {
     padding: 7px 14px;

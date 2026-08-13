@@ -119,10 +119,6 @@
             </a>
 
             <p style="text-align:center; font-size:13.5px; color:var(--th-gris,#6B6E76); margin:22px 0 0;">
-                Pas encore de compte ?
-                <a href="{{ route('inscription') }}" style="color:var(--th-accent,#C8102E); font-weight:700; text-decoration:none;">Inscrire mon entreprise</a>
-            </p>
-            <p style="text-align:center; font-size:13.5px; color:var(--th-gris,#6B6E76); margin:8px 0 0;">
                 Vous êtes un collaborateur ?
                 <a href="{{ route('inscription.personnel') }}" style="color:var(--th-accent,#C8102E); font-weight:700; text-decoration:none;">Rejoindre avec un code entreprise</a>
             </p>

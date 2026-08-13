@@ -15,7 +15,12 @@ return new class extends Migration
             $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('numero', 20);
             $table->string('nom');
-            $table->enum('activite', ['Mécanique', 'Carrosserie'])->nullable();
+            $table->enum('activite', ['Mécanique', 'Sinistre', 'Mécanique/Sinistre'])->nullable();
+            $table->unsignedBigInteger('objectif_mecanique')->default(0);
+            $table->unsignedBigInteger('objectif_sinistre')->default(0);
+            // Toujours égal à objectif_mecanique + objectif_sinistre, tenu à jour par le
+            // modèle : conservé en colonne propre pour ne pas casser les agrégations
+            // existantes (SUM, tri, filtres) sur l'objectif global.
             $table->unsignedBigInteger('objectif_mensuel')->default(0);
             $table->enum('statut', ['Actif', 'Inactif'])->default('Actif');
             $table->boolean('est_spontane')->default(false);

@@ -7,6 +7,7 @@ use App\Domain\Operations\Models\Prospection;
 use App\Domain\Shared\Models\NotificationApp;
 use App\Domain\Tenants\Models\Entreprise;
 use App\Domain\Tenants\Models\Site;
+use App\Domain\Tenants\Models\Ville;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
@@ -47,11 +48,18 @@ class NotificationsProspectionTest extends TestCase
         $this->responsable = $this->utilisateur('responsable_site', 'Responsable Un', 'resp@exemple.test');
         $this->commercialUser = $this->utilisateur('commercial', 'Commercial Un', 'com@exemple.test');
 
-        $this->site = Site::create([
+        $ville = Ville::create([
             'entreprise_id' => $this->entreprise->id,
             'code' => 'AB1',
-            'nom' => 'Abidjan 1',
+            'nom' => 'Abidjan',
             'responsable_id' => $this->responsable->id,
+        ]);
+
+        $this->site = Site::create([
+            'entreprise_id' => $this->entreprise->id,
+            'ville_id' => $ville->id,
+            'nom' => 'Abidjan — Mécanique',
+            'activite' => 'Mécanique',
         ]);
 
         $this->commercial = Commercial::create([

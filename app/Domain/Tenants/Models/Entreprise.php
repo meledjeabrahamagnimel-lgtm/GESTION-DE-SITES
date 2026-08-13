@@ -61,6 +61,11 @@ class Entreprise extends Model
         return ['est_active' => 'boolean'];
     }
 
+    public function villes(): HasMany
+    {
+        return $this->hasMany(Ville::class);
+    }
+
     public function sites(): HasMany
     {
         return $this->hasMany(Site::class);

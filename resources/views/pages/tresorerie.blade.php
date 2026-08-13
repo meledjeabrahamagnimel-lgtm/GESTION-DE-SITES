@@ -4,46 +4,46 @@ use App\Domain\Operations\Models\Charge;
 use App\Domain\Operations\Models\Encaissement;
 use App\Domain\Operations\Models\Facture;
 use App\Domain\Shared\Services\PeriodeCalculateur;
-use App\Domain\Tenants\Models\Site;
-use function Livewire\Volt\{state, computed};
+use App\Domain\Tenants\Support\PerimetreSites;
+use function Livewire\Volt\{state, computed, mount};
 
 state([
-    'periode' => 'semaine',
+    'periode' => 'periode',
     'dateDebut' => null,
     'dateFin' => null,
-    'siteFiltre' => '',
+    'villeFiltre' => '',
+    'activiteFiltre' => '',
+    'pageEncaissements' => 1,
+    'pageDecaissements' => 1,
 ]);
 
-$estGerant = computed(fn () => auth()->user()->hasRole('gerant'));
-$monSite = computed(fn () => $this->estGerant ? null : Site::where('responsable_id', auth()->id())->first());
+mount(function () {
+    $this->dateDebut ??= now()->startOfYear()->toDateString();
+    $this->dateFin ??= now()->toDateString();
+});
+
 $plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
-$sites = computed(fn () => $this->estGerant ? Site::where('entreprise_id', auth()->user()->entreprise_id)->orderBy('nom')->get() : null);
+$mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
+$villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
+$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
 
 $encaissementsQ = computed(function () {
     [$debut, $fin] = $this->plage;
-    $q = Encaissement::whereBetween('date', [$debut, $fin]);
 
-    return $this->estGerant
-        ? ($this->siteFiltre ? $q->where('site_id', $this->siteFiltre) : $q)
-        : $q->where('site_id', $this->monSite?->id ?? 0);
+    return Encaissement::whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin]);
 });
 
 $chargesQ = computed(function () {
     [$debut, $fin] = $this->plage;
-    $q = Charge::whereBetween('date', [$debut, $fin]);
 
-    return $this->estGerant
-        ? ($this->siteFiltre ? $q->where('site_id', $this->siteFiltre) : $q)
-        : $q->where('site_id', $this->monSite?->id ?? 0);
+    return Charge::whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin]);
 });
 
 $facturesQ = computed(function () {
     [$debut, $fin] = $this->plage;
-    $q = Facture::whereBetween('date', [$debut, $fin]);
 
-    return $this->estGerant
-        ? ($this->siteFiltre ? $q->where('site_id', $this->siteFiltre) : $q)
-        : $q->where('site_id', $this->monSite?->id ?? 0);
+    return Facture::whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin]);
 });
 
 $kpis = computed(function () {
@@ -90,17 +90,18 @@ $graphique = computed(function () {
     ];
 });
 
-$detailEncaissements = computed(fn () => (clone $this->encaissementsQ)->with('site')->latest('date')->limit(30)->get());
-$detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->latest('date')->limit(30)->get());
+$detailEncaissements = computed(fn () => (clone $this->encaissementsQ)->with('site')->latest('date')->get());
+$detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->latest('date')->get());
 
 ?>
 
 <div>
-    <x-filtre-periode :periode="$periode" :sites="$this->sites" :site-filtre="$siteFiltre" />
+    <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
+        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="Encaissements" :value="ae($this->kpis['encaisse'])" couleur="#0E9F6E" />
-        <x-kpi-card label="Décaissements" :value="ae($this->kpis['decaisse'])" couleur="#C8102E" />
+        <x-kpi-card label="Encaissements — {{ $this->libellePerimetre }}" :value="ae($this->kpis['encaisse'])" couleur="#0E9F6E" />
+        <x-kpi-card label="Décaissements — {{ $this->libellePerimetre }}" :value="ae($this->kpis['decaisse'])" couleur="#C8102E" />
         <x-kpi-card label="Trésorerie nette" :value="ae($this->kpis['net'])" :accent="$this->kpis['net'] < 0" :couleur="$this->kpis['net'] >= 0 ? '#0E9F6E' : '#C8102E'" />
         <x-kpi-card label="Facturé non encaissé" :value="ae($this->kpis['nonEncaisse'])" sub="Créances clients" />
     </div>
@@ -126,7 +127,7 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->detailEncaissements as $ligne)
+                        @forelse ($this->detailEncaissements->forPage($pageEncaissements, 10) as $ligne)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td>{{ $ligne->date->format('d/m/Y') }}</td>
                                 <td>{{ $ligne->type }}</td>
@@ -141,6 +142,7 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
                     </tbody>
                 </table>
             </div>
+            <x-pagination :page="$pageEncaissements" :total="$this->detailEncaissements->count()" prop="pageEncaissements" />
         </div>
 
         <div class="carte">
@@ -158,7 +160,7 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->detailDecaissements as $ligne)
+                        @forelse ($this->detailDecaissements->forPage($pageDecaissements, 10) as $ligne)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td>{{ $ligne->date->format('d/m/Y') }}</td>
                                 <td>{{ $ligne->type_operation }}</td>
@@ -173,6 +175,7 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
                     </tbody>
                 </table>
             </div>
+            <x-pagination :page="$pageDecaissements" :total="$this->detailDecaissements->count()" prop="pageDecaissements" />
         </div>
     </div>
 </div>

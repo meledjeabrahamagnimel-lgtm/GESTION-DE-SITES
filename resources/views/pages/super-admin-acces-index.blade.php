@@ -5,9 +5,9 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use function Livewire\Volt\{state, computed};
 
-state(['motDePasseGenerePour' => null, 'motDePasseGenere' => null]);
+state(['motDePasseGenerePour' => null, 'motDePasseGenere' => null, 'pageUtilisateurs' => 1]);
 
-$utilisateurs = computed(fn () => User::with('entreprise')->orderByDesc('created_at')->limit(80)->get());
+$utilisateurs = computed(fn () => User::with('entreprise')->orderByDesc('created_at')->get());
 
 $roles = computed(fn () => User::nomsRolesParUtilisateur($this->utilisateurs->pluck('id')));
 
@@ -62,7 +62,7 @@ $forcerReinitialisation = function (int $id) {
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach ($this->utilisateurs as $utilisateur)
+                    @foreach ($this->utilisateurs->forPage($pageUtilisateurs, 10) as $utilisateur)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td>
                                 <div style="font-weight:600;">{{ $utilisateur->name }}</div>
@@ -98,4 +98,5 @@ $forcerReinitialisation = function (int $id) {
                 </tbody>
             </table>
         </div>
+        <x-pagination :page="$pageUtilisateurs" :total="$this->utilisateurs->count()" prop="pageUtilisateurs" />
     </x-a-venir>

@@ -16,7 +16,8 @@ usesPagination();
 state([
     'date' => null,
     'client' => '', 'localisation' => '', 'moyen' => 'RDV',
-    'activite' => '', 'passage' => false, 'devisApres' => false, 'observations' => '',
+    'activite' => '', 'passage' => false, 'datePassage' => null,
+    'devisApres' => false, 'dateDevis' => null, 'observations' => '',
     'commentaire' => '',
     'message' => null,
     'selection' => [],
@@ -104,6 +105,38 @@ $toutDeselectionner = function () {
     $this->selection = [];
 };
 
+/** Impossible de faire un devis sans passage : cocher l'un coche et date l'autre, à la même date. */
+$updatedPassage = function ($valeur) {
+    if (! $valeur) {
+        $this->devisApres = false;
+        $this->dateDevis = null;
+        $this->datePassage = null;
+
+        return;
+    }
+
+    $this->datePassage ??= $this->date;
+};
+
+$updatedDevisApres = function ($valeur) {
+    if (! $valeur) {
+        $this->dateDevis = null;
+
+        return;
+    }
+
+    $this->dateDevis ??= $this->date;
+    $this->passage = true;
+    $this->datePassage = $this->dateDevis;
+};
+
+/** Le devis n'a pas de date propre : elle vaut toujours la date de passage. */
+$updatedDateDevis = function ($valeur) {
+    if ($this->devisApres) {
+        $this->datePassage = $valeur;
+    }
+};
+
 $ajouter = function () {
     if (! $this->commercial) {
         return;
@@ -115,8 +148,15 @@ $ajouter = function () {
         'localisation' => ['nullable', 'string', 'max:255'],
         'moyen' => ['required', 'string', 'max:60'],
         'activite' => ['required', 'string', 'max:60'],
+        'datePassage' => ['nullable', 'date'],
+        'dateDevis' => ['nullable', 'date'],
         'observations' => ['nullable', 'string'],
     ], [], ['client' => 'clients visités', 'activite' => 'activité']);
+
+    $coherence = Prospection::normaliserPassage(
+        (bool) $this->passage, $donnees['datePassage'],
+        (bool) $this->devisApres, $donnees['dateDevis'],
+    );
 
     Prospection::create([
         'entreprise_id' => auth()->user()->entreprise_id,
@@ -128,16 +168,13 @@ $ajouter = function () {
         'localisation' => $donnees['localisation'] ?: null,
         'moyen' => $donnees['moyen'],
         'activite' => $donnees['activite'],
-        // Cast explicite : une case jamais cochée peut remonter vide du navigateur,
-        // et la colonne n'accepte pas NULL.
-        'passage' => (bool) $this->passage,
-        'devis_apres_passage' => (bool) $this->devisApres,
+        ...$coherence,
         'observations' => $donnees['observations'] ?: null,
         'cree_par' => auth()->id(),
         'statut_validation' => 'Brouillon',
     ]);
 
-    $this->reset(['client', 'localisation', 'observations', 'passage', 'devisApres']);
+    $this->reset(['client', 'localisation', 'observations', 'passage', 'datePassage', 'devisApres', 'dateDevis']);
     $this->resetPage();
     $this->message = 'Prospection enregistrée en brouillon. Sélectionnez-la puis transmettez-la à votre responsable.';
 };
@@ -234,8 +271,14 @@ $transmettreSelection = function () {
                 <x-champ label="Localisation" model="localisation" width="150" />
                 <x-champ label="Moyens" model="moyen" type="select" :options="$this->optionsMoyen" width="140" />
                 <x-champ label="Activité" model="activite" type="select" :options="$this->optionsActivite" width="150" />
-                <x-champ label="Passage" model="passage" type="checkbox" />
-                <x-champ label="Devis après passage" model="devisApres" type="checkbox" />
+                <x-champ label="Passage" model="passage" type="checkbox" live="true" />
+                @if ($passage && ! $devisApres)
+                    <x-champ label="Date de passage" model="datePassage" type="date" width="150" />
+                @endif
+                <x-champ label="Devis après passage" model="devisApres" type="checkbox" live="true" />
+                @if ($devisApres)
+                    <x-champ label="Date du devis (= date de passage)" model="dateDevis" type="date" live="true" width="180" />
+                @endif
                 <x-champ label="Observations" model="observations" />
                 <button type="button" wire:click="ajouter" class="bouton bouton-sombre">+ Ajouter</button>
             </div>
@@ -293,8 +336,8 @@ $transmettreSelection = function () {
                                 <td style="color:var(--th-gris,#6B6E76);">{{ $ligne->localisation ?? '—' }}</td>
                                 <td>{{ $ligne->moyen }}</td>
                                 <td>{{ $ligne->activite }}</td>
-                                <td>{{ $ligne->passage ? '☑' : '☐' }}</td>
-                                <td>{{ $ligne->devis_apres_passage ? '☑' : '☐' }}</td>
+                                <td>{{ $ligne->passage ? '☑' : '☐' }} {{ $ligne->date_passage?->format('d/m/Y') }}</td>
+                                <td>{{ $ligne->devis_apres_passage ? '☑' : '☐' }} {{ $ligne->date_devis?->format('d/m/Y') }}</td>
                                 <td style="color:var(--th-gris,#6B6E76);">{{ $ligne->observations ?? '—' }}</td>
                                 <td style="white-space:normal; min-width:230px;">
                                     <x-saisie-libre :sujet="$ligne"

@@ -19,7 +19,7 @@ return new class extends Migration
             $table->date('date_reception')->nullable();
             $table->date('date_emission');
             $table->string('client');
-            $table->enum('activite', ['Mécanique', 'Carrosserie']);
+            $table->enum('activite', ['Mécanique', 'Sinistre']);
             $table->enum('statut', ['En attente', 'Validé', 'Refusé'])->default('En attente');
             $table->unsignedBigInteger('montant_devis');
             $table->unsignedBigInteger('montant_valide')->nullable();

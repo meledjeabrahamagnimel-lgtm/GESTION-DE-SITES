@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Domain\Tenants\Models\Entreprise;
+use App\Domain\Tenants\Models\Site;
+use App\Domain\Tenants\Models\Ville;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -16,7 +18,7 @@ use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password', 'entreprise_id', 'telephone', 'est_actif', 'doit_changer_mot_de_passe', 'email_verified_at', 'photo_chemin', 'cree_par_id', 'est_fondateur', 'habilitations'])]
+#[Fillable(['name', 'email', 'password', 'entreprise_id', 'ville_id', 'site_id', 'telephone', 'est_actif', 'doit_changer_mot_de_passe', 'email_verified_at', 'photo_chemin', 'cree_par_id', 'est_fondateur', 'habilitations'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -117,6 +119,18 @@ class User extends Authenticatable
     public function entreprise(): BelongsTo
     {
         return $this->belongsTo(Entreprise::class);
+    }
+
+    /** Rattachement d'un caissier à une ville entière (les deux sites), s'il n'est pas rattaché à un site précis. */
+    public function ville(): BelongsTo
+    {
+        return $this->belongsTo(Ville::class);
+    }
+
+    /** Rattachement d'un caissier à un site précis (une seule activité). */
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
     }
 
     /** Administrateur qui a créé ce compte, pour délimiter le périmètre des secondaires. */

@@ -67,7 +67,13 @@ class Devis extends Model
 
     public function getActivitylogOptions(): LogOptions
     {
-        return LogOptions::defaults()->logOnlyDirty()->dontSubmitEmptyLogs();
+        return LogOptions::defaults()
+            ->logOnly([
+                'commercial_id', 'n_fiche_reception', 'date_reception', 'date_emission',
+                'client', 'activite', 'statut', 'montant_devis', 'montant_valide', 'observations',
+            ])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
     }
 
     /** Informations saisies librement, hors colonnes prévues. */

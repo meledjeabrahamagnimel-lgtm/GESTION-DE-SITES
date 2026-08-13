@@ -21,9 +21,8 @@ state([
     'telephone' => '',
     'motDePasse' => '',
     'motDePasse_confirmation' => '',
-    'siteId' => '',
-    'activite' => 'Mécanique',
-    'objectifMensuel' => '',
+    'siteId' => '', 'activite' => 'Mécanique/Sinistre',
+    'objectifMecanique' => 14_000_000, 'objectifSinistre' => 6_000_000,
 
     'succes' => false,
 ]);
@@ -75,13 +74,14 @@ $sInscrire = function (CreerAcces $action) {
     ];
 
     if ($this->role === 'commercial') {
-        $regles['activite'] = ['required', 'in:Mécanique,Carrosserie'];
-        $regles['objectifMensuel'] = ['nullable', 'numeric', 'min:0'];
+        $regles['activite'] = ['required', 'in:Mécanique,Sinistre,Mécanique/Sinistre'];
+        $regles['objectifMecanique'] = ['nullable', 'numeric', 'min:0'];
+        $regles['objectifSinistre'] = ['nullable', 'numeric', 'min:0'];
     }
 
     $donnees = $this->validate($regles, [], [
         'nom' => 'nom et prénoms', 'email' => 'adresse e-mail', 'motDePasse' => 'mot de passe',
-        'siteId' => 'site', 'activite' => 'activité', 'objectifMensuel' => 'objectif mensuel',
+        'siteId' => 'site', 'activite' => 'activité',
     ]);
 
     $utilisateur = $action->executer($this->entreprise, $donnees['role'], [
@@ -89,9 +89,11 @@ $sInscrire = function (CreerAcces $action) {
         'email' => $donnees['email'],
         'mot_de_passe' => $donnees['motDePasse'],
         'telephone' => $donnees['telephone'] ?: null,
-        'site_id' => $donnees['siteId'],
-        'activite' => $donnees['activite'] ?? null,
-        'objectif_mensuel' => $donnees['objectifMensuel'] ?? 0,
+        'perimetre' => $donnees['role'] === 'responsable_site' ? 'site:'.$donnees['siteId'] : null,
+        'site_id' => $donnees['role'] === 'commercial' ? $donnees['siteId'] : null,
+        'activite' => $donnees['activite'] ?? 'Mécanique/Sinistre',
+        'objectif_mecanique' => $donnees['objectifMecanique'] ?? 0,
+        'objectif_sinistre' => $donnees['objectifSinistre'] ?? 0,
         // Inscription volontaire : le mot de passe est déjà choisi par la personne.
         'doit_changer_mot_de_passe' => false,
     ]);
@@ -158,12 +160,13 @@ $sInscrire = function (CreerAcces $action) {
                         <x-champ label="Adresse e-mail" model="email" type="email" requis="true" />
                         <x-champ label="Téléphone" model="telephone" placeholder="+225 07 ..." />
                         <x-champ label="Site de rattachement" model="siteId" type="select"
-                            :options="$this->sites->pluck('nom', 'id')" requis="true" width="220" />
+                            :options="$this->sites->mapWithKeys(fn ($s) => [$s->id => $s->nom.' ('.$s->activite.')'])" requis="true" width="240" />
                         @if ($role === 'commercial')
-                            <x-champ label="Activité" model="activite" type="select"
-                                :options="['Mécanique' => 'Mécanique', 'Carrosserie' => 'Carrosserie']" width="170" />
-                            <x-champ label="Objectif mensuel (FCFA)" model="objectifMensuel" type="number" width="190"
+                            <x-champ label="Activité" model="activite" type="select" width="200"
+                                :options="['Mécanique/Sinistre' => 'Mécanique/Sinistre (les deux)', 'Mécanique' => 'Mécanique', 'Sinistre' => 'Sinistre']" />
+                            <x-champ label="Objectif Mécanique (FCFA)" model="objectifMecanique" type="number" width="190"
                                 aide="Laissez vide si votre gérant le définira." />
+                            <x-champ label="Objectif Sinistre (FCFA)" model="objectifSinistre" type="number" width="190" />
                         @endif
                         <x-champ label="Mot de passe" model="motDePasse" type="password" requis="true" aide="8 caractères minimum" />
                         <x-champ label="Confirmer le mot de passe" model="motDePasse_confirmation" type="password" requis="true" />

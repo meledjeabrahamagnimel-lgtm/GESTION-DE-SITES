@@ -6,14 +6,16 @@ use App\Domain\Operations\Models\Commercial;
 use App\Domain\Operations\Services\GenerateurNumero;
 use App\Domain\Tenants\Models\Entreprise;
 use App\Domain\Tenants\Models\Site;
+use App\Domain\Tenants\Models\Ville;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
- * Création d'un accès (Gérant, Responsable de site ou Commercial) au sein d'une entreprise.
- * Utilisée par le Gérant (crée Responsables/Commerciaux), le Responsable (crée des Commerciaux)
- * et le Super Admin (crée n'importe quel rôle, dans n'importe quelle entreprise).
+ * Création d'un accès (Gérant, Responsable de site, Commercial ou Caissier) au sein
+ * d'une entreprise. Utilisée par le Gérant (crée Responsables/Commerciaux/Caissiers),
+ * le Responsable (crée des Commerciaux/Caissiers) et le Super Admin (crée n'importe
+ * quel rôle, dans n'importe quelle entreprise).
  */
 class CreerAcces
 {
@@ -36,20 +38,27 @@ class CreerAcces
             $utilisateur->assignRole($role);
 
             if ($role === 'responsable_site') {
-                Site::where('id', $donnees['site_id'])
-                    ->where('entreprise_id', $entreprise->id)
-                    ->update(['responsable_id' => $utilisateur->id]);
+                $this->affecterPerimetre($entreprise, $utilisateur, $donnees['perimetre']);
+            }
+
+            if ($role === 'caissier') {
+                $this->affecterPerimetre($entreprise, $utilisateur, $donnees['perimetre'], surUtilisateur: true);
             }
 
             if ($role === 'commercial') {
+                $site = Site::where('id', $donnees['site_id'])->where('entreprise_id', $entreprise->id)->firstOrFail();
+                $objectifMecanique = (int) ($donnees['objectif_mecanique'] ?? 0);
+                $objectifSinistre = (int) ($donnees['objectif_sinistre'] ?? 0);
+
                 Commercial::create([
                     'entreprise_id' => $entreprise->id,
-                    'site_id' => $donnees['site_id'],
+                    'site_id' => $site->id,
                     'user_id' => $utilisateur->id,
                     'numero' => GenerateurNumero::suivant($entreprise->id, 'com'),
                     'nom' => $donnees['nom'],
-                    'activite' => $donnees['activite'],
-                    'objectif_mensuel' => $donnees['objectif_mensuel'] ?? 0,
+                    'activite' => $donnees['activite'] ?? 'Mécanique/Sinistre',
+                    'objectif_mecanique' => $objectifMecanique,
+                    'objectif_sinistre' => $objectifSinistre,
                     'statut' => 'Actif',
                     'est_spontane' => false,
                 ]);
@@ -57,5 +66,34 @@ class CreerAcces
 
             return $utilisateur;
         });
+    }
+
+    /**
+     * Affecte un responsable ou un caissier à son périmètre : une ville entière (les
+     * deux sites) ou un site précis (une seule activité), selon la valeur choisie dans
+     * la liste déroulante — au format "ville:<id>" ou "site:<id>".
+     *
+     * Le responsable est rattaché en marquant la ville/le site comme le sien
+     * (`responsable_id`) ; le caissier, lui, porte directement son rattachement sur son
+     * propre compte (`users.ville_id`/`site_id`), car plusieurs caissiers peuvent
+     * partager le même site.
+     */
+    private function affecterPerimetre(Entreprise $entreprise, User $utilisateur, string $perimetre, bool $surUtilisateur = false): void
+    {
+        [$type, $id] = explode(':', $perimetre, 2);
+
+        if ($surUtilisateur) {
+            $utilisateur->update($type === 'ville' ? ['ville_id' => $id, 'site_id' => null] : ['site_id' => $id, 'ville_id' => null]);
+
+            return;
+        }
+
+        if ($type === 'ville') {
+            Ville::where('id', $id)->where('entreprise_id', $entreprise->id)->update(['responsable_id' => $utilisateur->id]);
+
+            return;
+        }
+
+        Site::where('id', $id)->where('entreprise_id', $entreprise->id)->update(['responsable_id' => $utilisateur->id]);
     }
 }

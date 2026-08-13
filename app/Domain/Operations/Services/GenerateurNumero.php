@@ -16,6 +16,7 @@ class GenerateurNumero
         'dev' => 'D',
         'fac' => 'F',
         'com' => 'C',
+        'nfa' => 'NF',
     ];
 
     public static function suivant(int $entrepriseId, string $type): string

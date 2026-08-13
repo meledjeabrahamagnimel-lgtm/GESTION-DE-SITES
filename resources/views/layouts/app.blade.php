@@ -1,5 +1,8 @@
 @php
     $navigation = auth()->user() ? \App\Domain\Shared\Services\MenuNavigation::pour(auth()->user()) : [];
+    $exerciceActuel = auth()->user()?->entreprise_id
+        ? \App\Domain\Tenants\Models\Exercice::actuel(auth()->user()->entreprise_id)
+        : null;
 @endphp
 <!DOCTYPE html>
 <html lang="fr" style="{{ collect(auth()->user()?->entreprise?->theme() ?? [])->map(fn ($v, $k) => "$k:$v")->implode(';') }}">
@@ -27,7 +30,7 @@
                 </a>
                 <nav style="display:flex; gap:4px; flex-wrap:wrap;">
                     @foreach ($navigation as $item)
-                        <a href="{{ $item['route'] }}" wire:navigate
+                        <a href="{{ $item['route'] }}" wire:navigate class="{{ $item['actif'] ? 'nav-actif' : '' }}"
                            style="display:flex; align-items:center; gap:6px; padding:9px 14px; border-radius:7px; font-size:14.5px; font-weight:600; text-decoration:none; white-space:nowrap;
                                   color:{{ $item['actif'] ? '#fff' : '#C7C9CF' }};
                                   background:{{ $item['actif'] ? 'var(--th-accent, #C8102E)' : 'transparent' }};">
@@ -37,6 +40,25 @@
                 </nav>
             </div>
             <div style="display:flex; align-items:center; gap:16px;">
+                @if ($exerciceActuel)
+                    @php
+                        $couleurExercice = $exerciceActuel->statut === 'Clos' ? '#C8102E' : '#0E9F6E';
+                    @endphp
+                    @if (auth()->user()?->hasRole('gerant'))
+                        <a href="{{ route('parametres') }}?onglet=exercices" wire:navigate
+                           style="display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; text-decoration:none;
+                                  color:#fff; background:{{ $couleurExercice }}22; border:1px solid {{ $couleurExercice }}; border-radius:99px; padding:5px 12px;">
+                            <span style="width:7px; height:7px; border-radius:99px; background:{{ $couleurExercice }};"></span>
+                            Exercice {{ $exerciceActuel->annee }} — {{ $exerciceActuel->statut }}
+                        </a>
+                    @else
+                        <span style="display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700;
+                                     color:#C7C9CF; border:1px solid #4B4E55; border-radius:99px; padding:5px 12px;">
+                            <span style="width:7px; height:7px; border-radius:99px; background:{{ $couleurExercice }};"></span>
+                            Exercice {{ $exerciceActuel->annee }}
+                        </span>
+                    @endif
+                @endif
                 <livewire:cloche-notifications />
                 <a href="{{ route('mot-de-passe.modifier') }}" wire:navigate
                    style="font-size:13.5px; color:#C7C9CF; text-decoration:none; display:flex; align-items:center; gap:8px;">

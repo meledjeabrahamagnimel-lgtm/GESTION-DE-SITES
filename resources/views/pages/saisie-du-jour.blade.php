@@ -13,6 +13,7 @@ use App\Domain\Shared\Models\NotificationApp;
 use App\Domain\Shared\Models\Referentiel;
 use App\Domain\Shared\Services\Notificateur;
 use App\Domain\Tenants\Models\Site;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use function Livewire\Volt\{state, computed, mount, uses};
 
@@ -20,17 +21,23 @@ uses([GereLesDonneesLibres::class]);
 
 state([
     'date' => null,
-
-    'comNom' => '', 'comActivite' => 'Mécanique', 'comObjectif' => '',
-    'editionCommercialId' => null, 'editionNom' => '',
+    'siteActifId' => null,
 
     'prosClient' => '', 'prosLocalisation' => '', 'prosMoyen' => 'RDV', 'prosCommercialId' => '',
-    'prosActivite' => 'Mécanique', 'prosPassage' => false, 'prosDevisApres' => false, 'prosObs' => '',
+    'prosActivite' => 'Mécanique', 'prosPassage' => false, 'prosDatePassage' => null,
+    'prosDevisApres' => false, 'prosDateDevis' => null, 'prosObs' => '',
+
+    'editionProspectionId' => null,
+    'editionProsClient' => '', 'editionProsLocalisation' => '', 'editionProsMoyen' => 'RDV',
+    'editionProsCommercialId' => '', 'editionProsActivite' => 'Mécanique',
+    'editionProsPassage' => false, 'editionProsDatePassage' => null,
+    'editionProsDevisApres' => false, 'editionProsDateDevis' => null,
+    'editionProsObs' => '',
 
     'devisSelection' => [], 'devisBrouillon' => [],
     'factureSelection' => [], 'factureBrouillon' => [],
 
-    'encType' => 'Client', 'encMoyen' => 'Espèces', 'encMontant' => '', 'encClient' => '', 'encTiers' => '',
+    'encType' => 'Client', 'encFactureId' => '', 'encMoyen' => 'Espèces', 'encMontant' => '', 'encClient' => '', 'encTiers' => '',
 
     'chgDate' => null, 'chgTypeOp' => 'Charges', 'chgLibelle' => 'Achats pièces',
     'chgMoyen' => 'Espèces', 'chgMontant' => '', 'chgTiers' => '', 'chgObs' => '',
@@ -40,16 +47,82 @@ state([
     'vehiculesSansFacture' => 0,
     'commentaireProspects' => '', 'commentaireDevis' => '', 'commentaireCA' => '',
     'commentaireTresorerie' => '', 'commentaireCharges' => '',
+
+    'pageProsATraiter' => 1, 'pageProsDuJour' => 1, 'pageAttenteDevis' => 1,
+    'pageDevisDuJour' => 1, 'pageDevisEnAttente' => 1, 'pageValidesNonFactures' => 1,
+    'pageFacturesDuJour' => 1, 'pageEncaissementsDuJour' => 1, 'pageChargesDuJour' => 1,
 ]);
 
-$site = computed(fn () => Site::where('responsable_id', auth()->id())->first());
+/** Sites dont le responsable a la charge, directement ou via sa ville — un ou deux. */
+$mesSites = computed(fn () => Site::visiblesPour(auth()->user()));
+
+/**
+ * Sites réellement pris en compte par l'écran : un seul (celui choisi), ou les deux
+ * du périmètre si « Les deux » est sélectionné — auquel cas les tableaux consolident
+ * les deux sites et l'Activité redevient libre dans chaque saisie.
+ */
+$sitesActifs = computed(function () {
+    if ($this->siteActifId === 'les-deux') {
+        return $this->mesSites;
+    }
+
+    $s = $this->siteActifId ? $this->mesSites->firstWhere('id', (int) $this->siteActifId) : $this->mesSites->first();
+
+    return $s ? collect([$s]) : collect();
+});
+
+$siteIdsActifs = computed(fn () => $this->sitesActifs->pluck('id')->all());
+
+/** Le site précis choisi, ou null en mode « Les deux » — sert à verrouiller l'Activité dans les saisies. */
+$siteUnique = computed(fn () => $this->sitesActifs->count() === 1 ? $this->sitesActifs->first() : null);
+
+/** Activité imposée dans chaque saisie quand un site précis est choisi ; libre en mode « Les deux ». */
+$activiteVerrouillee = computed(fn () => $this->siteUnique?->activite);
+
+/**
+ * Site d'ancrage pour les sous-systèmes sans notion d'activité propre (charges,
+ * décaissements, encaissements, commentaires du jour) : le site précis choisi, ou le
+ * premier du périmètre en mode « Les deux » — ces saisies restent rattachées à un
+ * site physique unique, la consolidation ne concernant que la lecture.
+ */
+$site = computed(fn () => $this->sitesActifs->first());
+
+/** Vrai si l'exercice est clos pour la ville de ce site à la date sélectionnée : toute saisie y est bloquée. */
+$exerciceFerme = computed(fn () => $this->site
+    && \App\Domain\Tenants\Models\Exercice::estFerme(auth()->user()->entreprise_id, $this->site->ville_id, $this->date));
+
+/** Résout le site physique d'une nouvelle ligne prospection/devis/facture à partir de son activité. */
+$resoudreSiteId = function (string $activite) {
+    return $this->mesSites->firstWhere('activite', $activite)?->id;
+};
 
 mount(function () {
     $this->date = now()->toDateString();
     $this->chgDate = now()->toDateString();
+    $this->siteActifId = $this->mesSites->first()?->id;
+    $this->prosActivite = $this->activiteVerrouillee ?? $this->prosActivite;
     $this->prosCommercialId = $this->commerciauxSelectables->keys()->first() ?? '';
     $this->chargerSaisieJournaliere();
 });
+
+$reinitialiserPagination = function () {
+    $this->pageProsATraiter = $this->pageProsDuJour = $this->pageAttenteDevis = 1;
+    $this->pageDevisDuJour = $this->pageDevisEnAttente = $this->pageValidesNonFactures = 1;
+    $this->pageFacturesDuJour = $this->pageEncaissementsDuJour = $this->pageChargesDuJour = 1;
+};
+
+$updatedSiteActifId = function () {
+    $this->devisSelection = [];
+    $this->devisBrouillon = [];
+    $this->factureSelection = [];
+    $this->factureBrouillon = [];
+    $this->prosCommercialId = $this->commerciauxSelectables->keys()->first() ?? '';
+    if ($this->activiteVerrouillee) {
+        $this->prosActivite = $this->activiteVerrouillee;
+    }
+    $this->reinitialiserPagination();
+    $this->chargerSaisieJournaliere();
+};
 
 $chargerSaisieJournaliere = function () {
     if (! $this->site) {
@@ -121,6 +194,7 @@ $updatedDate = function () {
     $this->factureSelection = [];
     $this->factureBrouillon = [];
     $this->chgDate = $this->date;
+    $this->reinitialiserPagination();
     $this->chargerSaisieJournaliere();
 };
 
@@ -132,11 +206,9 @@ $dateLabel = computed(function () {
     return $jours[$d->dayOfWeek].' '.$d->format('d').' '.$mois[$d->month - 1].' '.$d->format('Y');
 });
 
-$commerciaux = computed(fn () => Commercial::where('site_id', $this->site?->id ?? 0)->with('donneesLibres')->orderBy('numero')->get());
+$commerciauxSelectables = computed(fn () => Commercial::whereIn('site_id', $this->siteIdsActifs)->where('statut', 'Actif')->orderBy('numero')->pluck('nom', 'id'));
 
-$commerciauxSelectables = computed(fn () => Commercial::where('site_id', $this->site?->id ?? 0)->where('statut', 'Actif')->orderBy('numero')->pluck('nom', 'id'));
-
-$prospectionsATraiter = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)
+$prospectionsATraiter = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)
     ->aTraiter()->with('commercial')->orderBy('date')->get());
 
 /**
@@ -150,7 +222,7 @@ $avertirDuRetour = function (array $ids, string $statut, ?string $motif = null) 
         return;
     }
 
-    $destinataires = Prospection::where('site_id', $this->site->id)
+    $destinataires = Prospection::whereIn('site_id', $this->siteIdsActifs)
         ->whereIn('id', $ids)
         ->with('commercial:id,user_id')
         ->get()
@@ -179,7 +251,7 @@ $avertirDuRetour = function (array $ids, string $statut, ?string $motif = null) 
 $validerProspection = function (int $id) {
     $this->avertirDuRetour([$id], 'Validée');
 
-    Prospection::where('site_id', $this->site->id)->aTraiter()->where('id', $id)
+    Prospection::whereIn('site_id', $this->siteIdsActifs)->aTraiter()->where('id', $id)
         ->update(['statut_validation' => 'Validée', 'motif_refus' => null]);
     unset($this->prospectionsATraiter, $this->prospectionsDuJour);
 };
@@ -188,41 +260,42 @@ $refuserProspection = function (int $id) {
     $motif = $this->motifRefus[$id] ?? null;
     $this->avertirDuRetour([$id], 'Refusée', $motif);
 
-    Prospection::where('site_id', $this->site->id)->aTraiter()->where('id', $id)
+    Prospection::whereIn('site_id', $this->siteIdsActifs)->aTraiter()->where('id', $id)
         ->update(['statut_validation' => 'Refusée', 'motif_refus' => $motif]);
     unset($this->prospectionsATraiter, $this->prospectionsDuJour);
 };
 
 $validerToutesProspections = function () {
-    $ids = Prospection::where('site_id', $this->site->id)->aTraiter()->pluck('id')->all();
+    $ids = Prospection::whereIn('site_id', $this->siteIdsActifs)->aTraiter()->pluck('id')->all();
     $this->avertirDuRetour($ids, 'Validée');
 
-    Prospection::where('site_id', $this->site->id)->aTraiter()
+    Prospection::whereIn('site_id', $this->siteIdsActifs)->aTraiter()
         ->update(['statut_validation' => 'Validée', 'motif_refus' => null]);
     unset($this->prospectionsATraiter, $this->prospectionsDuJour);
 };
 
-$prospectionsDuJour = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->visibles()->whereDate('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
+$prospectionsDuJour = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)->visibles()->whereDate('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
 
-$prospectionsAttenteDevis = computed(fn () => Prospection::where('site_id', $this->site?->id ?? 0)->where('statut_validation', 'Validée')->where('devis_apres_passage', true)->doesntHave('devis')->with('commercial')->orderBy('date')->limit(12)->get());
+$prospectionsAttenteDevis = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)->where('statut_validation', 'Validée')->where('devis_apres_passage', true)->doesntHave('devis')->with('commercial')->orderBy('date')->get());
 
-$devisDuJour = computed(fn () => Devis::where('site_id', $this->site?->id ?? 0)->whereDate('date_emission', $this->date)->with('commercial')->orderByDesc('id')->get());
+$devisDuJour = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)->whereDate('date_emission', $this->date)->with('commercial')->orderByDesc('id')->get());
 
-$devisEnAttente = computed(fn () => Devis::where('site_id', $this->site?->id ?? 0)->where('statut', 'En attente')->with('commercial')->orderBy('date_emission')->get());
+$devisEnAttente = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)->where('statut', 'En attente')->with('commercial')->orderBy('date_emission')->get());
 
-$devisValidesNonFactures = computed(fn () => Devis::where('site_id', $this->site?->id ?? 0)->where('statut', 'Validé')->doesntHave('facture')->with('commercial')->orderBy('date_emission')->limit(12)->get());
+$devisValidesNonFactures = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)->where('statut', 'Validé')->doesntHave('facture')->with('commercial')->orderBy('date_emission')->get());
 
-$facturesDuJour = computed(fn () => Facture::where('site_id', $this->site?->id ?? 0)->whereDate('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
+$facturesDuJour = computed(fn () => Facture::whereIn('site_id', $this->siteIdsActifs)->whereDate('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
 
-$encaissementsDuJour = computed(fn () => Encaissement::where('site_id', $this->site?->id ?? 0)->whereDate('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
+$encaissementsDuJour = computed(fn () => Encaissement::whereIn('site_id', $this->siteIdsActifs)->whereDate('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
 
-$chargesDuJour = computed(fn () => Charge::where('site_id', $this->site?->id ?? 0)->whereDate('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
+/** Factures encore soldables sur les sites actifs : c'est la garde-fou anti-double-saisie avec le caissier. */
+$facturesAvecReste = computed(fn () => Facture::whereIn('site_id', $this->siteIdsActifs)->avecResteAEncaisser()->orderByDesc('date')->get());
 
-$statistiquesCommerciaux = computed(fn () => Commercial::where('site_id', $this->site?->id ?? 0)->where('est_spontane', false)->with('site')->orderBy('numero')->get());
+$chargesDuJour = computed(fn () => Charge::whereIn('site_id', $this->siteIdsActifs)->whereDate('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
 
 $clientsConnus = computed(function () {
-    return Prospection::where('site_id', $this->site?->id ?? 0)->latest('id')->limit(200)->pluck('client')
-        ->merge(Devis::where('site_id', $this->site?->id ?? 0)->latest('id')->limit(200)->pluck('client'))
+    return Prospection::whereIn('site_id', $this->siteIdsActifs)->latest('id')->limit(200)->pluck('client')
+        ->merge(Devis::whereIn('site_id', $this->siteIdsActifs)->latest('id')->limit(200)->pluck('client'))
         ->unique()->values()->take(40);
 });
 
@@ -248,66 +321,66 @@ $updatedChgTypeOp = function () {
     $this->chgLibelle = $this->chgTypeOp === 'Charges' ? 'Achats pièces' : 'Transfert de trésorerie vers un autre site';
 };
 
-// 1. Liste des commerciaux
+// 1. Prospections
 
-$ajouterCommercial = function () {
-    $donnees = $this->validate([
-        'comNom' => ['required', 'string', 'max:255'],
-        'comActivite' => ['required', Rule::in(array_keys($this->optionsActivite))],
-        'comObjectif' => ['nullable', 'numeric', 'min:0'],
-    ], [], ['comNom' => 'nom et prénoms', 'comActivite' => 'activité', 'comObjectif' => 'objectif mensuel']);
-
-    Commercial::create([
-        'entreprise_id' => auth()->user()->entreprise_id,
-        'site_id' => $this->site->id,
-        'numero' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'com'),
-        'nom' => $donnees['comNom'],
-        'activite' => $donnees['comActivite'],
-        'objectif_mensuel' => $donnees['comObjectif'] ?: 0,
-        'statut' => 'Actif',
-    ]);
-
-    $this->reset(['comNom', 'comObjectif']);
-    $this->comActivite = 'Mécanique';
-};
-
-$basculerEditionCommercial = function (int $id) {
-    if ($this->editionCommercialId === $id) {
-        $this->editionCommercialId = null;
+/** Impossible de faire un devis sans passage : cocher l'un coche et date l'autre, à la même date. */
+$updatedProsPassage = function ($valeur) {
+    if (! $valeur) {
+        $this->prosDevisApres = false;
+        $this->prosDateDevis = null;
+        $this->prosDatePassage = null;
 
         return;
     }
 
-    $this->editionCommercialId = $id;
-    $this->editionNom = Commercial::where('site_id', $this->site->id)->findOrFail($id)->nom;
+    $this->prosDatePassage ??= $this->date;
 };
 
-$enregistrerEditionCommercial = function (int $id) {
-    $donnees = $this->validate(['editionNom' => ['required', 'string', 'max:255']], [], ['editionNom' => 'nom et prénoms']);
-    Commercial::where('site_id', $this->site->id)->where('id', $id)->update(['nom' => $donnees['editionNom']]);
-    $this->editionCommercialId = null;
+$updatedProsDevisApres = function ($valeur) {
+    if (! $valeur) {
+        $this->prosDateDevis = null;
+
+        return;
+    }
+
+    $this->prosDateDevis ??= $this->date;
+    $this->prosPassage = true;
+    $this->prosDatePassage = $this->prosDateDevis;
 };
 
-$basculerStatutCommercial = function (int $id) {
-    $commercial = Commercial::where('site_id', $this->site->id)->findOrFail($id);
-    $commercial->update(['statut' => $commercial->statut === 'Actif' ? 'Inactif' : 'Actif']);
+/** Le devis n'a pas de date propre : elle vaut toujours la date de passage. */
+$updatedProsDateDevis = function ($valeur) {
+    if ($this->prosDevisApres) {
+        $this->prosDatePassage = $valeur;
+    }
 };
-
-// 2. Prospections
 
 $ajouterProspection = function () {
+    if ($this->exerciceFerme) {
+        $this->addError('exercice', "L'exercice est clos pour ce site à cette date — saisie impossible.");
+
+        return;
+    }
+
     $donnees = $this->validate([
         'prosClient' => ['required', 'string', 'max:255'],
         'prosLocalisation' => ['nullable', 'string', 'max:255'],
         'prosMoyen' => ['required', Rule::in(array_keys($this->optionsMoyenProspection))],
-        'prosCommercialId' => ['required', Rule::exists('commerciaux', 'id')->where('site_id', $this->site->id)],
+        'prosCommercialId' => ['required', Rule::exists('commerciaux', 'id')->whereIn('site_id', $this->siteIdsActifs)],
         'prosActivite' => ['required', Rule::in(array_keys($this->optionsActivite))],
+        'prosDatePassage' => ['nullable', 'date'],
+        'prosDateDevis' => ['nullable', 'date'],
         'prosObs' => ['nullable', 'string'],
     ], [], ['prosClient' => 'clients visités', 'prosCommercialId' => 'commercial', 'prosActivite' => 'activité']);
 
+    $coherence = Prospection::normaliserPassage(
+        (bool) $this->prosPassage, $donnees['prosDatePassage'],
+        (bool) $this->prosDevisApres, $donnees['prosDateDevis'],
+    );
+
     Prospection::create([
         'entreprise_id' => auth()->user()->entreprise_id,
-        'site_id' => $this->site->id,
+        'site_id' => $this->resoudreSiteId($donnees['prosActivite']) ?? $this->site->id,
         'commercial_id' => $donnees['prosCommercialId'],
         'numero' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'pro'),
         'date' => $this->date,
@@ -315,18 +388,99 @@ $ajouterProspection = function () {
         'localisation' => $donnees['prosLocalisation'] ?: null,
         'moyen' => $donnees['prosMoyen'],
         'activite' => $donnees['prosActivite'],
-        'passage' => (bool) $this->prosPassage,
-        'devis_apres_passage' => (bool) $this->prosDevisApres,
+        ...$coherence,
         'observations' => $donnees['prosObs'] ?: null,
         'cree_par' => auth()->id(),
     ]);
 
-    $this->reset(['prosClient', 'prosLocalisation', 'prosObs', 'prosPassage', 'prosDevisApres']);
+    $this->reset(['prosClient', 'prosLocalisation', 'prosObs', 'prosPassage', 'prosDatePassage', 'prosDevisApres', 'prosDateDevis']);
     $this->prosMoyen = 'RDV';
-    $this->prosActivite = 'Mécanique';
+    $this->prosActivite = $this->activiteVerrouillee ?? 'Mécanique';
 };
 
-// 3. Devis
+$modifierProspection = function (int $id) {
+    $p = Prospection::whereIn('site_id', $this->siteIdsActifs)->findOrFail($id);
+
+    $this->editionProspectionId = $p->id;
+    $this->editionProsClient = $p->client;
+    $this->editionProsLocalisation = $p->localisation ?? '';
+    $this->editionProsMoyen = $p->moyen;
+    $this->editionProsCommercialId = $p->commercial_id;
+    $this->editionProsActivite = $p->activite;
+    $this->editionProsPassage = $p->passage;
+    $this->editionProsDatePassage = $p->date_passage?->toDateString();
+    $this->editionProsDevisApres = $p->devis_apres_passage;
+    $this->editionProsDateDevis = $p->date_devis?->toDateString();
+    $this->editionProsObs = $p->observations ?? '';
+};
+
+$annulerEditionProspection = function () {
+    $this->editionProspectionId = null;
+};
+
+/** Miroir des règles de cohérence de la création, appliquées cette fois à l'édition en ligne. */
+$updatedEditionProsPassage = function ($valeur) {
+    if (! $valeur) {
+        $this->editionProsDevisApres = false;
+        $this->editionProsDateDevis = null;
+        $this->editionProsDatePassage = null;
+
+        return;
+    }
+
+    $this->editionProsDatePassage ??= $this->date;
+};
+
+$updatedEditionProsDevisApres = function ($valeur) {
+    if (! $valeur) {
+        $this->editionProsDateDevis = null;
+
+        return;
+    }
+
+    $this->editionProsDateDevis ??= $this->date;
+    $this->editionProsPassage = true;
+    $this->editionProsDatePassage = $this->editionProsDateDevis;
+};
+
+$updatedEditionProsDateDevis = function ($valeur) {
+    if ($this->editionProsDevisApres) {
+        $this->editionProsDatePassage = $valeur;
+    }
+};
+
+$enregistrerEditionProspection = function () {
+    $donnees = $this->validate([
+        'editionProsClient' => ['required', 'string', 'max:255'],
+        'editionProsLocalisation' => ['nullable', 'string', 'max:255'],
+        'editionProsMoyen' => ['required', Rule::in(array_keys($this->optionsMoyenProspection))],
+        'editionProsCommercialId' => ['required', Rule::exists('commerciaux', 'id')->whereIn('site_id', $this->siteIdsActifs)],
+        'editionProsActivite' => ['required', Rule::in(array_keys($this->optionsActivite))],
+        'editionProsDatePassage' => ['nullable', 'date'],
+        'editionProsDateDevis' => ['nullable', 'date'],
+        'editionProsObs' => ['nullable', 'string'],
+    ], [], ['editionProsClient' => 'clients visités', 'editionProsCommercialId' => 'commercial', 'editionProsActivite' => 'activité']);
+
+    $coherence = Prospection::normaliserPassage(
+        (bool) $this->editionProsPassage, $donnees['editionProsDatePassage'],
+        (bool) $this->editionProsDevisApres, $donnees['editionProsDateDevis'],
+    );
+
+    Prospection::whereIn('site_id', $this->siteIdsActifs)->findOrFail($this->editionProspectionId)->update([
+        'client' => $donnees['editionProsClient'],
+        'localisation' => $donnees['editionProsLocalisation'] ?: null,
+        'moyen' => $donnees['editionProsMoyen'],
+        'commercial_id' => $donnees['editionProsCommercialId'],
+        'activite' => $donnees['editionProsActivite'],
+        ...$coherence,
+        'observations' => $donnees['editionProsObs'] ?: null,
+    ]);
+
+    $this->editionProspectionId = null;
+    unset($this->prospectionsDuJour);
+};
+
+// 2. Devis
 
 $genererBrouillonsDevis = function () {
     $ids = collect($this->devisSelection)->filter()->keys()->all();
@@ -334,8 +488,9 @@ $genererBrouillonsDevis = function () {
         return;
     }
 
-    $this->devisBrouillon = Prospection::where('site_id', $this->site->id)->whereIn('id', $ids)->get()->map(fn ($p) => [
+    $this->devisBrouillon = Prospection::whereIn('site_id', $this->siteIdsActifs)->whereIn('id', $ids)->get()->map(fn ($p) => [
         'prospection_id' => $p->id,
+        'prospection_numero' => $p->numero,
         'date_reception' => now()->toDateString(),
         'n_fiche_reception' => '',
         'client' => $p->client,
@@ -356,10 +511,16 @@ $annulerBrouillonsDevis = function () {
 };
 
 $validerDevis = function () {
+    if ($this->exerciceFerme) {
+        $this->addError('exercice', "L'exercice est clos pour ce site à cette date — saisie impossible.");
+
+        return;
+    }
+
     // Défense en profondeur : le brouillon est un tableau lié côté client, on revérifie
-    // que chaque commercial/prospection référencé appartient bien au site du Responsable.
-    $commerciauxDuSite = Commercial::where('site_id', $this->site->id)->pluck('id');
-    $prospectionsDuSite = Prospection::where('site_id', $this->site->id)->pluck('id');
+    // que chaque commercial/prospection référencé appartient bien à un site du Responsable.
+    $commerciauxDuSite = Commercial::whereIn('site_id', $this->siteIdsActifs)->pluck('id');
+    $prospectionsDuSite = Prospection::whereIn('site_id', $this->siteIdsActifs)->pluck('id');
 
     foreach ($this->devisBrouillon as $ligne) {
         if (empty($ligne['montant_devis']) || ! is_numeric($ligne['montant_devis'])) {
@@ -372,7 +533,7 @@ $validerDevis = function () {
 
         Devis::create([
             'entreprise_id' => auth()->user()->entreprise_id,
-            'site_id' => $this->site->id,
+            'site_id' => $this->resoudreSiteId($ligne['activite']) ?? $this->site->id,
             'commercial_id' => $ligne['commercial_id'],
             'prospection_id' => $ligne['prospection_id'],
             'numero' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'dev'),
@@ -397,15 +558,17 @@ $changerStatutDevis = function (int $id, string $statut) {
         return;
     }
 
-    $devis = Devis::where('site_id', $this->site->id)->findOrFail($id);
+    $devis = Devis::whereIn('site_id', $this->siteIdsActifs)->findOrFail($id);
     $devis->update([
         'statut' => $statut,
-        'montant_valide' => $statut === 'Validé' ? $devis->montant_valide : null,
+        // Le montant validé démarre égal au montant du devis — modifiable ensuite via le
+        // champ dédié — plutôt que de laisser un montant vide à chaque première validation.
+        'montant_valide' => $statut === 'Validé' ? ($devis->montant_valide ?? $devis->montant_devis) : null,
     ]);
 };
 
 $changerMontantValide = function (int $id, $valeur) {
-    $devis = Devis::where('site_id', $this->site->id)->findOrFail($id);
+    $devis = Devis::whereIn('site_id', $this->siteIdsActifs)->findOrFail($id);
     if ($devis->statut !== 'Validé') {
         return;
     }
@@ -421,12 +584,12 @@ $genererBrouillonsFactures = function () {
         return;
     }
 
-    $this->factureBrouillon = Devis::where('site_id', $this->site->id)->whereIn('id', $ids)->get()->map(fn ($d) => [
+    $this->factureBrouillon = Devis::whereIn('site_id', $this->siteIdsActifs)->whereIn('id', $ids)->get()->map(fn ($d) => [
         'devis_id' => $d->id,
+        'devis_numero' => $d->numero,
         'commercial_id' => $d->commercial_id,
         'client' => $d->client,
         'type' => 'FNE',
-        'n_facture' => '',
         'activite' => $d->activite,
         'montant' => $d->montant_valide ?? $d->montant_devis,
         'observations' => '',
@@ -440,13 +603,19 @@ $annulerBrouillonsFactures = function () {
 };
 
 $validerFactures = function () {
+    if ($this->exerciceFerme) {
+        $this->addError('exercice', "L'exercice est clos pour ce site à cette date — saisie impossible.");
+
+        return;
+    }
+
     // Défense en profondeur : le brouillon est un tableau lié côté client, on revérifie
-    // que chaque commercial/devis référencé appartient bien au site du Responsable.
-    $commerciauxDuSite = Commercial::where('site_id', $this->site->id)->pluck('id');
-    $devisDuSite = Devis::where('site_id', $this->site->id)->pluck('id');
+    // que chaque commercial/devis référencé appartient bien à un site du Responsable.
+    $commerciauxDuSite = Commercial::whereIn('site_id', $this->siteIdsActifs)->pluck('id');
+    $devisDuSite = Devis::whereIn('site_id', $this->siteIdsActifs)->pluck('id');
 
     foreach ($this->factureBrouillon as $ligne) {
-        if (empty($ligne['n_facture']) || empty($ligne['montant']) || ! is_numeric($ligne['montant'])) {
+        if (empty($ligne['montant']) || ! is_numeric($ligne['montant'])) {
             continue;
         }
 
@@ -456,11 +625,13 @@ $validerFactures = function () {
 
         Facture::create([
             'entreprise_id' => auth()->user()->entreprise_id,
-            'site_id' => $this->site->id,
+            'site_id' => $this->resoudreSiteId($ligne['activite']) ?? $this->site->id,
             'devis_id' => $ligne['devis_id'],
             'commercial_id' => $ligne['commercial_id'],
             'numero' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'fac'),
-            'n_facture' => $ligne['n_facture'],
+            // Le N° de facture est généré automatiquement, jamais saisi à la main — un champ
+            // manuel oublié faisait silencieusement disparaître la ligne à la validation.
+            'n_facture' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'nfa'),
             'date' => $this->date,
             'client' => $ligne['client'],
             'type' => $ligne['type'],
@@ -477,34 +648,81 @@ $validerFactures = function () {
 // Encaissements du jour
 
 $ajouterEncaissement = function () {
+    if ($this->exerciceFerme) {
+        $this->addError('exercice', "L'exercice est clos pour ce site à cette date — saisie impossible.");
+
+        return;
+    }
+
     $donnees = $this->validate([
         'encType' => ['required', Rule::in(array_keys($this->optionsTypeEncaissement))],
+        'encFactureId' => [$this->encType === 'Client' ? 'required' : 'nullable', 'nullable', 'integer'],
         'encMoyen' => ['required', Rule::in(array_keys($this->optionsMoyenPaiement))],
         'encMontant' => ['required', 'numeric', 'min:1'],
         'encClient' => ['nullable', 'string', 'max:255'],
         'encTiers' => ['nullable', 'string', 'max:255'],
-    ], [], ['encMontant' => 'montant']);
+    ], [], ['encMontant' => 'montant', 'encFactureId' => 'facture']);
+
+    $montant = (int) $donnees['encMontant'];
+    $factureId = null;
+    $client = $donnees['encClient'] ?: null;
+    // La facture peut appartenir à l'un ou l'autre site en mode « Les deux » : l'encaissement
+    // est rattaché au site réel de la facture, jamais au seul site d'ancrage.
+    $siteIdResolu = $this->site->id;
+
+    if ($donnees['encFactureId']) {
+        // Verrou en base : empêche qu'un encaissement du responsable et du caissier,
+        // saisis au même instant sur la même facture, dépassent ensemble son montant.
+        $depassement = DB::transaction(function () use ($donnees, $montant, &$factureId, &$client, &$siteIdResolu) {
+            $facture = Facture::whereIn('site_id', $this->siteIdsActifs)->lockForUpdate()->find($donnees['encFactureId']);
+
+            if (! $facture || $montant > $facture->resteAEncaisser()) {
+                return true;
+            }
+
+            $factureId = $facture->id;
+            $client = $facture->client;
+            $siteIdResolu = $facture->site_id;
+
+            return false;
+        });
+
+        if ($depassement) {
+            $this->addError('encMontant', 'Cette facture est déjà soldée, ou le montant dépasse son reste à encaisser.');
+            unset($this->facturesAvecReste);
+
+            return;
+        }
+    }
 
     Encaissement::create([
         'entreprise_id' => auth()->user()->entreprise_id,
-        'site_id' => $this->site->id,
+        'site_id' => $siteIdResolu,
+        'facture_id' => $factureId,
         'date' => $this->date,
         'type' => $donnees['encType'],
         'moyen' => $donnees['encMoyen'],
-        'montant' => (int) $donnees['encMontant'],
-        'client' => $donnees['encClient'] ?: null,
+        'montant' => $montant,
+        'client' => $client,
         'autres_tiers' => $donnees['encTiers'] ?: null,
         'cree_par' => auth()->id(),
     ]);
 
-    $this->reset(['encMontant', 'encClient', 'encTiers']);
+    $this->reset(['encMontant', 'encClient', 'encTiers', 'encFactureId']);
     $this->encType = 'Client';
     $this->encMoyen = 'Espèces';
+    unset($this->facturesAvecReste);
 };
 
 // Charges & décaissements du jour
 
 $ajouterCharge = function () {
+    if ($this->site && \App\Domain\Tenants\Models\Exercice::estFerme(auth()->user()->entreprise_id, $this->site->ville_id, $this->chgDate)) {
+        $this->addError('exercice', "L'exercice est clos pour ce site à cette date — saisie impossible.");
+
+        return;
+    }
+
     $donnees = $this->validate([
         'chgDate' => ['required', 'date'],
         'chgTypeOp' => ['required', 'in:Charges,Décaissements'],
@@ -543,97 +761,46 @@ $ajouterCharge = function () {
 ?>
 
 <div>
-    @if (! $this->site)
+    @if ($this->mesSites->isEmpty())
         <x-a-venir titre="Aucun site assigné" description="Ce compte Responsable n'est rattaché à aucun site pour le moment. Contactez votre Gérant." />
     @else
-        <div class="carte">
-            <div>
-                <h1 style="font-size:19px; font-weight:800; margin:0 0 4px;">Saisie du jour — {{ $this->site->nom }}</h1>
+        <div class="carte" style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:220px;">
+                <h1 style="font-size:19px; font-weight:800; margin:0 0 4px;">
+                    Saisie du jour — {{ $this->siteUnique?->nom ?? ($this->mesSites->first()->ville->nom.' — Mécanique + Sinistre') }}
+                </h1>
                 <p style="color:#6B6E76; font-size:14px; margin:0;">Chaque ligne est enregistrée immédiatement à l'ajout et alimente les tableaux de bord en temps réel.</p>
             </div>
-            <div style="display:flex; flex-direction:column; gap:4px;">
-                <label class="champ-libelle">Date de la journée (calendrier)</label>
-                <input type="date" wire:model.live="date" class="champ" style="width:158px;">
-                <span style="font-size:11.5px; color:var(--th-gris,#6B6E76);">Rattachement : <b>{{ $this->dateLabel }}</b></span>
+            <div style="display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
+                @if ($this->mesSites->count() > 1)
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <label class="champ-libelle">Site</label>
+                        <select wire:model.live="siteActifId" class="champ" style="width:220px;">
+                            @foreach ($this->mesSites as $s)
+                                <option value="{{ $s->id }}">{{ $s->nom }} — {{ $s->activite }}</option>
+                            @endforeach
+                            <option value="les-deux">Les deux (Mécanique + Sinistre)</option>
+                        </select>
+                    </div>
+                @endif
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label class="champ-libelle">Date de la journée (calendrier)</label>
+                    <input type="date" wire:model.live="date" class="champ" style="width:158px;">
+                    <span style="font-size:11.5px; color:var(--th-gris,#6B6E76);">Rattachement : <b>{{ $this->dateLabel }}</b></span>
+                </div>
             </div>
         </div>
 
+        @if ($this->exerciceFerme)
+            <div class="encart encart-alerte" style="margin-bottom:16px;">
+                L'exercice est clos pour <b>{{ $this->site->ville->nom }}</b> à cette date : la saisie est bloquée. Un gérant peut réouvrir l'exercice depuis les Paramètres.
+            </div>
+        @endif
+        @error('exercice') <div class="encart encart-alerte" style="margin-bottom:16px;">{{ $message }}</div> @enderror
+
         <x-carte-section titre="Flux commercial" icone="commercial" couleur="var(--th-ink,#191B20)">
-            <x-sous-titre n="1" t="Liste des commerciaux" />
-            <div class="tableau-conteneur">
-                <table class="tableau">
-                    <thead>
-                        <tr>
-                            <th>N°</th>
-                            <th>Nom et Prénoms</th>
-                            <th>Activité</th>
-                            <th>Objectif mensuel</th>
-                            <th>Statut</th>
-                            <th>Informations libres</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($this->commerciaux as $commercial)
-                            <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); opacity:{{ $commercial->statut === 'Inactif' ? '.55' : '1' }};" wire:key="commercial-{{ $commercial->id }}">
-                                <td style="font-weight:700;">{{ $commercial->numero }}</td>
-                                <td>
-                                    @if ($editionCommercialId === $commercial->id)
-                                        <input type="text" wire:model="editionNom" style="padding:5px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13.5px; width:180px;">
-                                    @else
-                                        <b>{{ $commercial->nom }}</b>
-                                    @endif
-                                </td>
-                                <td>{{ $commercial->activite ?? '—' }}</td>
-                                <td>{{ $commercial->est_spontane ? '—' : ae($commercial->objectif_mensuel) }}</td>
-                                <td>
-                                    @if ($commercial->est_spontane)
-                                        <span style="color:#6B6E76;">Actif (fixe)</span>
-                                    @else
-                                        <button type="button" wire:click="basculerStatutCommercial({{ $commercial->id }})"
-                                            style="padding:4px 10px; border-radius:99px; font-size:12.5px; font-weight:700; border:1px solid {{ $commercial->statut === 'Inactif' ? '#C8102E55' : '#0E9F6E55' }}; background:{{ $commercial->statut === 'Inactif' ? '#FDF2F4' : '#EAF9F3' }}; color:{{ $commercial->statut === 'Inactif' ? '#C8102E' : '#0E9F6E' }}; cursor:pointer;">
-                                            {{ $commercial->statut }}
-                                        </button>
-                                    @endif
-                                </td>
-                                <td style="white-space:normal; min-width:220px;">
-                                    <x-saisie-libre :sujet="$commercial"
-                                        :ouvert="$libreSujetId === $commercial->id && $libreSujetType === get_class($commercial)" />
-                                </td>
-                                <td style="text-align:right;">
-                                    @unless ($commercial->est_spontane)
-                                        @if ($editionCommercialId === $commercial->id)
-                                            <button type="button" wire:click="enregistrerEditionCommercial({{ $commercial->id }})"
-                                                style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer;">Terminer</button>
-                                        @else
-                                            <button type="button" wire:click="basculerEditionCommercial({{ $commercial->id }})"
-                                                style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer;">Modifier</button>
-                                        @endif
-                                    @endunless
-                                </td>
-                            </tr>
-                        @empty
-                            <x-table-vide :colspan="7" texte="Aucun commercial rattaché à ce site." />
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="bloc-saisie">
-                <x-champ label="Nom et prénoms" model="comNom" />
-                <x-champ label="Activité" model="comActivite" type="select" :options="$this->optionsActivite" width="150" />
-                <x-champ label="Objectif mensuel (FCFA)" model="comObjectif" type="number" width="150" />
-                <button type="button" wire:click="ajouterCommercial"
-                    class="bouton bouton-sombre">
-                    + Ajouter un commercial
-                </button>
-                <span style="font-size:11.5px; color:#9A9DA5; flex-basis:100%;">
-                    « Client spontané » recense les clients venus sans démarchage. Un commercial « Inactif » disparaît des listes déroulantes dès le jour de désactivation, jusqu'à réactivation.
-                </span>
-            </div>
-
             @if ($this->prospectionsATraiter->isNotEmpty())
-                <x-sous-titre n="2" t="Prospections transmises par vos commerciaux" />
+                <x-sous-titre n="1" t="Prospections transmises par vos commerciaux" />
                 <p style="font-size:12.5px; font-weight:700; color:var(--th-bleu,#2563EB); margin:0 0 8px;">
                     {{ $this->prospectionsATraiter->count() }} prospection(s) en attente de votre validation.
                     <button type="button" wire:click="validerToutesProspections"
@@ -651,7 +818,7 @@ $ajouterCharge = function () {
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach ($this->prospectionsATraiter as $p)
+                            @foreach ($this->prospectionsATraiter->forPage($pageProsATraiter, 10) as $p)
                                 <tr wire:key="a-traiter-{{ $p->id }}">
                                     <td style="font-weight:700;">{{ $p->numero }}</td>
                                     <td>{{ $p->date->format('d/m/Y') }}</td>
@@ -675,9 +842,10 @@ $ajouterCharge = function () {
                         </tbody>
                     </table>
                 </div>
+                <x-pagination :page="$pageProsATraiter" :total="$this->prospectionsATraiter->count()" prop="pageProsATraiter" />
             @endif
 
-            <x-sous-titre n="2" t="Prospections" />
+            <x-sous-titre n="1" t="Prospections" />
             <div class="tableau-conteneur">
                 <table class="tableau">
                     <thead>
@@ -690,42 +858,106 @@ $ajouterCharge = function () {
                             <th>Activité</th>
                             <th>Passage</th>
                             <th>Devis après passage</th>
-                            <th>Observations</th>
                             <th>Informations libres</th>
+                            <th style="text-align:right;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->prospectionsDuJour as $p)
-                            <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="font-weight:700;">{{ $p->numero }}</td>
-                                <td>{{ $p->client }}</td>
-                                <td style="color:#6B6E76;">{{ $p->localisation ?? '—' }}</td>
-                                <td>{{ $p->moyen }}</td>
-                                <td>{{ $p->commercial->nom }}</td>
-                                <td>{{ $p->activite }}</td>
-                                <td>{{ $p->passage ? '☑' : '☐' }}</td>
-                                <td>{{ $p->devis_apres_passage ? '☑' : '☐' }}</td>
-                                <td style="color:#6B6E76;">{{ $p->observations ?? '—' }}</td>
-                                <td style="white-space:normal; min-width:220px;">
-                                    <x-saisie-libre :sujet="$p"
-                                        :ouvert="$libreSujetId === $p->id && $libreSujetType === get_class($p)" />
-                                </td>
-                            </tr>
+                        @forelse ($this->prospectionsDuJour->forPage($pageProsDuJour, 10) as $p)
+                            @if ($editionProspectionId === $p->id)
+                                <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); background:#FDF2F4;" wire:key="pros-edit-{{ $p->id }}">
+                                    <td style="font-weight:700;">{{ $p->numero }}</td>
+                                    <td><input type="text" wire:model="editionProsClient" class="champ" style="min-width:130px;"></td>
+                                    <td><input type="text" wire:model="editionProsLocalisation" class="champ" style="min-width:110px;"></td>
+                                    <td>
+                                        <select wire:model="editionProsMoyen" class="champ">
+                                            @foreach ($this->optionsMoyenProspection as $valeur => $libelle)
+                                                <option value="{{ $valeur }}">{{ $libelle }}</option>
+                                            @endforeach
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select wire:model="editionProsCommercialId" class="champ">
+                                            @foreach ($this->commerciauxSelectables as $id => $nom)
+                                                <option value="{{ $id }}">{{ $nom }}</option>
+                                            @endforeach
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select wire:model="editionProsActivite" class="champ">
+                                            @foreach ($this->optionsActivite as $valeur => $libelle)
+                                                <option value="{{ $valeur }}">{{ $libelle }}</option>
+                                            @endforeach
+                                        </select>
+                                    </td>
+                                    <td style="white-space:normal; min-width:150px;">
+                                        <label style="display:flex; align-items:center; gap:5px; font-size:13px;">
+                                            <input type="checkbox" wire:model.live="editionProsPassage"> Passage
+                                        </label>
+                                        @if ($editionProsPassage && ! $editionProsDevisApres)
+                                            <input type="date" wire:model="editionProsDatePassage" class="champ" style="margin-top:4px;">
+                                        @endif
+                                    </td>
+                                    <td style="white-space:normal; min-width:180px;">
+                                        <label style="display:flex; align-items:center; gap:5px; font-size:13px;">
+                                            <input type="checkbox" wire:model.live="editionProsDevisApres"> Devis après passage
+                                        </label>
+                                        @if ($editionProsDevisApres)
+                                            <input type="date" wire:model.live="editionProsDateDevis" class="champ" style="margin-top:4px;">
+                                            <span style="font-size:10.5px; color:#9A9DA5;">= date de passage</span>
+                                        @endif
+                                    </td>
+                                    <td style="white-space:normal; min-width:220px;">
+                                        <textarea wire:model="editionProsObs" rows="2" placeholder="Observations"
+                                            style="width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13px;"></textarea>
+                                    </td>
+                                    <td style="text-align:right; white-space:nowrap;">
+                                        <button type="button" wire:click="enregistrerEditionProspection" class="bouton bouton-petit bouton-vert" style="margin-right:5px;">Enregistrer</button>
+                                        <button type="button" wire:click="annulerEditionProspection" class="bouton bouton-petit bouton-secondaire">Annuler</button>
+                                    </td>
+                                </tr>
+                            @else
+                                <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="pros-{{ $p->id }}">
+                                    <td style="font-weight:700;">{{ $p->numero }}</td>
+                                    <td>{{ $p->client }}</td>
+                                    <td style="color:#6B6E76;">{{ $p->localisation ?? '—' }}</td>
+                                    <td>{{ $p->moyen }}</td>
+                                    <td>{{ $p->commercial->nom }}</td>
+                                    <td>{{ $p->activite }}</td>
+                                    <td>{{ $p->passage ? '☑' : '☐' }} {{ $p->date_passage?->format('d/m/Y') }}</td>
+                                    <td>{{ $p->devis_apres_passage ? '☑' : '☐' }} {{ $p->date_devis?->format('d/m/Y') }}</td>
+                                    <td style="white-space:normal; min-width:220px;">
+                                        <x-saisie-libre :sujet="$p"
+                                            :ouvert="$libreSujetId === $p->id && $libreSujetType === get_class($p)" />
+                                    </td>
+                                    <td style="text-align:right; white-space:nowrap;">
+                                        <a href="{{ route('prospection.voir', $p) }}" wire:navigate class="bouton bouton-petit bouton-secondaire" style="margin-right:5px;">Voir</a>
+                                        <button type="button" wire:click="modifierProspection({{ $p->id }})" class="bouton bouton-petit bouton-secondaire">Modifier</button>
+                                    </td>
+                                </tr>
+                            @endif
                         @empty
                             <x-table-vide :colspan="10" texte="Aucune prospection saisie pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>
             </div>
+            <x-pagination :page="$pageProsDuJour" :total="$this->prospectionsDuJour->count()" prop="pageProsDuJour" />
 
             <div class="bloc-saisie">
                 <x-champ label="Clients visités" model="prosClient" />
                 <x-champ label="Localisation" model="prosLocalisation" width="130" />
                 <x-champ label="Moyens" model="prosMoyen" type="select" :options="$this->optionsMoyenProspection" width="130" />
                 <x-champ label="Commercial" model="prosCommercialId" type="select" :options="$this->commerciauxSelectables" width="170" />
-                <x-champ label="Activité" model="prosActivite" type="select" :options="$this->optionsActivite" width="140" />
-                <x-champ label="Passage" model="prosPassage" type="checkbox" />
-                <x-champ label="Devis après passage" model="prosDevisApres" type="checkbox" />
+                <x-champ label="Activité" model="prosActivite" type="select" :options="$this->optionsActivite" width="140" :disabled="$this->activiteVerrouillee !== null" />
+                <x-champ label="Passage" model="prosPassage" type="checkbox" live="true" />
+                @if ($prosPassage && ! $prosDevisApres)
+                    <x-champ label="Date de passage" model="prosDatePassage" type="date" width="150" />
+                @endif
+                <x-champ label="Devis après passage" model="prosDevisApres" type="checkbox" live="true" />
+                @if ($prosDevisApres)
+                    <x-champ label="Date du devis (= date de passage)" model="prosDateDevis" type="date" live="true" width="180" />
+                @endif
                 <x-champ label="Observations" model="prosObs" />
                 <button type="button" wire:click="ajouterProspection"
                     class="bouton bouton-sombre">
@@ -740,7 +972,7 @@ $ajouterCharge = function () {
                     style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:13.5px; resize:vertical;"></textarea>
             </div>
 
-            <x-sous-titre n="3" t="Devis" />
+            <x-sous-titre n="2" t="Devis" />
 
             @if ($this->prospectionsAttenteDevis->isNotEmpty())
                 <div style="width:100%;">
@@ -761,7 +993,7 @@ $ajouterCharge = function () {
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($this->prospectionsAttenteDevis as $p)
+                                @foreach ($this->prospectionsAttenteDevis->forPage($pageAttenteDevis, 10) as $p)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="attente-devis-{{ $p->id }}">
                                         <td><input type="checkbox" wire:model="devisSelection.{{ $p->id }}"></td>
                                         <td style="font-weight:700;">{{ $p->numero }}</td>
@@ -775,6 +1007,7 @@ $ajouterCharge = function () {
                             </tbody>
                         </table>
                     </div>
+                    <x-pagination :page="$pageAttenteDevis" :total="$this->prospectionsAttenteDevis->count()" prop="pageAttenteDevis" />
                     <button type="button" wire:click="genererBrouillonsDevis"
                         style="margin-top:8px; background:var(--th-ink,#191B20); color:#fff; border:0; border-radius:8px; padding:8px 14px; font-weight:700; font-size:13px; cursor:pointer;">
                         + Ajouter devis
@@ -787,6 +1020,10 @@ $ajouterCharge = function () {
                     <p style="font-size:12.5px; font-weight:700; margin:0 0 8px;">Renseigner les informations du tableau devis puis valider :</p>
                     @foreach ($devisBrouillon as $i => $ligne)
                         <div wire:key="devis-brouillon-{{ $i }}" style="display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label style="font-size:12.5px; font-weight:600; color:#4B4E55;">N° prospection d'origine</label>
+                                <span style="padding:8px 10px; font-weight:700;">{{ $ligne['prospection_numero'] }}</span>
+                            </div>
                             <x-champ label="Date de réception" model="devisBrouillon.{{ $i }}.date_reception" type="date" width="140" />
                             <x-champ label="N° fiche de réception" model="devisBrouillon.{{ $i }}.n_fiche_reception" width="130" />
                             <x-champ label="Client" model="devisBrouillon.{{ $i }}.client" />
@@ -797,7 +1034,7 @@ $ajouterCharge = function () {
                             @if (($ligne['statut'] ?? '') === 'Validé')
                                 <x-champ label="Montant validé" model="devisBrouillon.{{ $i }}.montant_valide" type="number" width="130" />
                             @endif
-                            <x-champ label="Activité" model="devisBrouillon.{{ $i }}.activite" type="select" :options="['Mécanique' => 'Mécanique', 'Carrosserie' => 'Carrosserie']" width="140" />
+                            <x-champ label="Activité" model="devisBrouillon.{{ $i }}.activite" type="select" :options="['Mécanique' => 'Mécanique', 'Sinistre' => 'Sinistre']" width="140" :disabled="$this->activiteVerrouillee !== null" />
                             <x-champ label="Observations" model="devisBrouillon.{{ $i }}.observations" />
                         </div>
                     @endforeach
@@ -832,7 +1069,7 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->devisDuJour as $d)
+                        @forelse ($this->devisDuJour->forPage($pageDevisDuJour, 10) as $d)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td style="font-weight:700;">{{ $d->numero }}</td>
                                 <td>{{ $d->date_reception?->format('d/m/Y') ?? '—' }}</td>
@@ -852,6 +1089,7 @@ $ajouterCharge = function () {
                     </tbody>
                 </table>
             </div>
+            <x-pagination :page="$pageDevisDuJour" :total="$this->devisDuJour->count()" prop="pageDevisDuJour" />
 
             @if ($this->devisEnAttente->isNotEmpty())
                 <div style="width:100%; margin-top:14px;">
@@ -871,7 +1109,7 @@ $ajouterCharge = function () {
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($this->devisEnAttente as $d)
+                                @foreach ($this->devisEnAttente->forPage($pageDevisEnAttente, 10) as $d)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="devis-attente-{{ $d->id }}">
                                         <td style="font-weight:700;">{{ $d->numero }}</td>
                                         <td>{{ $d->client }}</td>
@@ -898,6 +1136,7 @@ $ajouterCharge = function () {
                             </tbody>
                         </table>
                     </div>
+                    <x-pagination :page="$pageDevisEnAttente" :total="$this->devisEnAttente->count()" prop="pageDevisEnAttente" />
                 </div>
             @endif
 
@@ -908,35 +1147,6 @@ $ajouterCharge = function () {
                     style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:13.5px; resize:vertical;"></textarea>
             </div>
 
-            <x-sous-titre n="4" t="Statistiques des commerciaux" />
-            <div class="tableau-conteneur">
-                <table class="tableau">
-                    <thead>
-                        <tr>
-                            <th>N°</th>
-                            <th>Commercial</th>
-                            <th>Site</th>
-                            <th>Activité</th>
-                            <th>Objectif mensuel</th>
-                            <th>Objectif journalier (mensuel/30)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($this->statistiquesCommerciaux as $s)
-                            <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="font-weight:700;">{{ $s->numero }}</td>
-                                <td>{{ $s->nom }}</td>
-                                <td>{{ $s->site->nom }}</td>
-                                <td>{{ $s->activite }}</td>
-                                <td>{{ ae($s->objectif_mensuel) }}</td>
-                                <td>{{ ae($s->objectifJournalier()) }}</td>
-                            </tr>
-                        @empty
-                            <x-table-vide :colspan="6" texte="Aucun commercial actif sur ce site." />
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
         </x-carte-section>
 
         <x-carte-section titre="Chiffre d'affaires facturé" icone="facture" couleur="var(--th-vert,#0E9F6E)">
@@ -958,7 +1168,7 @@ $ajouterCharge = function () {
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($this->devisValidesNonFactures as $d)
+                                @foreach ($this->devisValidesNonFactures->forPage($pageValidesNonFactures, 10) as $d)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="valide-non-facture-{{ $d->id }}">
                                         <td><input type="checkbox" wire:model="factureSelection.{{ $d->id }}"></td>
                                         <td style="font-weight:700;">{{ $d->numero }}</td>
@@ -971,6 +1181,7 @@ $ajouterCharge = function () {
                             </tbody>
                         </table>
                     </div>
+                    <x-pagination :page="$pageValidesNonFactures" :total="$this->devisValidesNonFactures->count()" prop="pageValidesNonFactures" />
                     <button type="button" wire:click="genererBrouillonsFactures"
                         style="margin-top:8px; background:var(--th-ink,#191B20); color:#fff; border:0; border-radius:8px; padding:8px 14px; font-weight:700; font-size:13px; cursor:pointer;">
                         + Facturer la sélection
@@ -983,11 +1194,18 @@ $ajouterCharge = function () {
                     <p style="font-size:12.5px; font-weight:700; margin:0 0 8px;">Tableau de facturation — compléter puis valider :</p>
                     @foreach ($factureBrouillon as $i => $ligne)
                         <div wire:key="facture-brouillon-{{ $i }}" style="display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label style="font-size:12.5px; font-weight:600; color:#4B4E55;">N° devis d'origine</label>
+                                <span style="padding:8px 10px; font-weight:700;">{{ $ligne['devis_numero'] }}</span>
+                            </div>
                             <x-champ label="Commercial" model="factureBrouillon.{{ $i }}.commercial_id" type="select" :options="$this->commerciauxSelectables" width="160" />
                             <x-champ label="Clients" model="factureBrouillon.{{ $i }}.client" />
                             <x-champ label="Type" model="factureBrouillon.{{ $i }}.type" type="select" :options="['FNE' => 'FNE', 'HT' => 'HT']" width="90" />
-                            <x-champ label="N° de facture" model="factureBrouillon.{{ $i }}.n_facture" width="130" />
-                            <x-champ label="Activité" model="factureBrouillon.{{ $i }}.activite" type="select" :options="['Mécanique' => 'Mécanique', 'Carrosserie' => 'Carrosserie']" width="140" />
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label style="font-size:12.5px; font-weight:600; color:#4B4E55;">N° de facture</label>
+                                <span style="padding:8px 10px; color:#9A9DA5; font-style:italic;">généré automatiquement</span>
+                            </div>
+                            <x-champ label="Activité" model="factureBrouillon.{{ $i }}.activite" type="select" :options="['Mécanique' => 'Mécanique', 'Sinistre' => 'Sinistre']" width="140" :disabled="$this->activiteVerrouillee !== null" />
                             <x-champ label="Montant de la facture" model="factureBrouillon.{{ $i }}.montant" type="number" width="140" />
                             <x-champ label="Observations" model="factureBrouillon.{{ $i }}.observations" />
                         </div>
@@ -1021,7 +1239,7 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->facturesDuJour as $f)
+                        @forelse ($this->facturesDuJour->forPage($pageFacturesDuJour, 10) as $f)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td style="font-weight:700;">{{ $f->numero }}</td>
                                 <td>{{ $f->commercial->nom }}</td>
@@ -1042,6 +1260,7 @@ $ajouterCharge = function () {
                     </tbody>
                 </table>
             </div>
+            <x-pagination :page="$pageFacturesDuJour" :total="$this->facturesDuJour->count()" prop="pageFacturesDuJour" />
 
             <div style="margin-top:14px;">
                 <label style="display:block; font-size:12.5px; font-weight:600; color:#4B4E55; margin-bottom:5px;">Commentaire — Chiffre d'affaires</label>
@@ -1065,7 +1284,7 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->encaissementsDuJour as $e)
+                        @forelse ($this->encaissementsDuJour->forPage($pageEncaissementsDuJour, 10) as $e)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td>{{ $e->type }}</td>
                                 <td>{{ $e->moyen }}</td>
@@ -1083,27 +1302,35 @@ $ajouterCharge = function () {
                     </tbody>
                 </table>
             </div>
+            <x-pagination :page="$pageEncaissementsDuJour" :total="$this->encaissementsDuJour->count()" prop="pageEncaissementsDuJour" />
 
             <div class="bloc-saisie">
-                <x-champ label="Type d'encaissement" model="encType" type="select" :options="$this->optionsTypeEncaissement" width="140" />
+                <x-champ label="Type d'encaissement" model="encType" type="select" live="true" :options="$this->optionsTypeEncaissement" width="140" />
+                @if ($encType === 'Client')
+                    <x-champ label="Facture à encaisser" model="encFactureId" type="select" width="260"
+                        :options="$this->facturesAvecReste->mapWithKeys(fn ($f) => [$f->id => $f->n_facture.' — '.$f->client.' — reste '.ae($f->resteAEncaisser())])" />
+                @endif
                 <x-champ label="Moyens" model="encMoyen" type="select" :options="$this->optionsMoyenPaiement" width="150" />
                 <x-champ label="Montant (FCFA)" model="encMontant" type="number" width="140" />
-                <div style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:160px;">
-                    <label style="font-size:12.5px; font-weight:600; color:#4B4E55;">Clients</label>
-                    <input type="text" wire:model="encClient" list="clients-connus"
-                        style="padding:8px 10px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px;">
-                    <datalist id="clients-connus">
-                        @foreach ($this->clientsConnus as $client)
-                            <option value="{{ $client }}"></option>
-                        @endforeach
-                    </datalist>
-                </div>
-                <x-champ label="Autres tiers à préciser" model="encTiers" />
+                @if ($encType !== 'Client')
+                    <div style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:160px;">
+                        <label style="font-size:12.5px; font-weight:600; color:#4B4E55;">Clients</label>
+                        <input type="text" wire:model="encClient" list="clients-connus"
+                            style="padding:8px 10px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px;">
+                        <datalist id="clients-connus">
+                            @foreach ($this->clientsConnus as $client)
+                                <option value="{{ $client }}"></option>
+                            @endforeach
+                        </datalist>
+                    </div>
+                    <x-champ label="Autres tiers à préciser" model="encTiers" />
+                @endif
                 <button type="button" wire:click="ajouterEncaissement"
                     class="bouton bouton-sombre">
                     + Ajouter
                 </button>
             </div>
+            @error('encMontant') <div style="color:#C8102E; font-size:13.5px; margin-top:8px;">{{ $message }}</div> @enderror
 
             <div style="margin-top:14px;">
                 <label style="display:block; font-size:12.5px; font-weight:600; color:#4B4E55; margin-bottom:5px;">Commentaire — Trésorerie</label>
@@ -1129,7 +1356,7 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->chargesDuJour as $c)
+                        @forelse ($this->chargesDuJour->forPage($pageChargesDuJour, 10) as $c)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td>{{ $c->date->format('d/m/Y') }}</td>
                                 <td>{{ $c->type_operation === 'Charges' ? 'Charges' : 'Décaissements' }}</td>
@@ -1149,6 +1376,7 @@ $ajouterCharge = function () {
                     </tbody>
                 </table>
             </div>
+            <x-pagination :page="$pageChargesDuJour" :total="$this->chargesDuJour->count()" prop="pageChargesDuJour" />
 
             <div class="bloc-saisie">
                 <x-champ label="Date" model="chgDate" type="date" width="140" />

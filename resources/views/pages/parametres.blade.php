@@ -1,8 +1,9 @@
 <?php
 
-use App\Domain\Tenants\Actions\CreerAcces;
 use App\Domain\Tenants\Models\Entreprise;
+use App\Domain\Tenants\Models\Exercice;
 use App\Domain\Tenants\Models\Site;
+use App\Domain\Tenants\Models\Ville;
 use App\Domain\Tenants\Services\EnregistreurLogo;
 use App\Models\User;
 use Illuminate\Validation\Rule;
@@ -10,8 +11,11 @@ use function Livewire\Volt\{state, computed, mount, usesFileUploads};
 
 usesFileUploads();
 
+// Lié à l'URL : un lien externe (ex. le badge Exercice de l'en-tête) peut ouvrir
+// directement le bon onglet via /parametres?onglet=exercices.
+state(['onglet' => 'entreprise'])->url(except: 'entreprise');
+
 state([
-    'onglet' => 'entreprise',
     'message' => null,
 
     // Fiche entreprise
@@ -25,17 +29,27 @@ state([
     // Mon compte
     'monNom' => '', 'monEmail' => '', 'monTelephone' => '',
 
-    // Nouveau site
-    'siteNom' => '', 'siteVille' => '', 'siteCommune' => '', 'siteTelephone' => '', 'siteAdresse' => '',
+    // Nouvelle ville (crée aussitôt ses deux sites : Mécanique et Sinistre)
+    'villeNom' => '', 'villeCommune' => '', 'villeTelephone' => '', 'villeAdresse' => '',
 
-    // Nouveau personnel
-    'persRole' => 'commercial', 'persNom' => '', 'persEmail' => '', 'persMotDePasse' => '',
-    'persSiteId' => '', 'persActivite' => 'Mécanique', 'persObjectif' => '',
+    // Nouvel exercice
+    'exerciceAnnee' => (int) date('Y'),
+
+    'pageVilles' => 1,
+    'pagePersonnel' => 1,
 ]);
 
 $entreprise = computed(fn () => Entreprise::find(auth()->user()->entreprise_id));
 
-$sites = computed(fn () => Site::where('entreprise_id', auth()->user()->entreprise_id)->orderBy('code')->get());
+$villes = computed(fn () => Ville::where('entreprise_id', auth()->user()->entreprise_id)
+    ->with(['sites' => fn ($q) => $q->orderBy('activite')])->orderBy('code')->get());
+
+$sites = computed(fn () => Site::where('entreprise_id', auth()->user()->entreprise_id)->orderBy('nom')->get());
+
+$exercices = computed(fn () => Exercice::where('entreprise_id', auth()->user()->entreprise_id)
+    ->with('villes')->orderByDesc('annee')->get());
+
+$villesActives = computed(fn () => Ville::where('entreprise_id', auth()->user()->entreprise_id)->where('est_actif', true)->orderBy('nom')->get());
 
 $personnel = computed(function () {
     $utilisateurs = User::where('entreprise_id', auth()->user()->entreprise_id)->orderByDesc('id')->get();
@@ -152,73 +166,106 @@ $enregistrerMonCompte = function () {
     $this->message = 'Vos informations ont été mises à jour.';
 };
 
-$ajouterSite = function () {
+$ajouterVille = function () {
     $donnees = $this->validate([
-        'siteNom' => ['required', 'string', 'max:255'],
-        'siteVille' => ['required', 'string', 'max:255'],
-        'siteCommune' => ['nullable', 'string', 'max:255'],
-        'siteTelephone' => ['nullable', 'string', 'max:40'],
-        'siteAdresse' => ['nullable', 'string', 'max:255'],
-    ], [], ['siteNom' => 'nom du site', 'siteVille' => 'ville']);
+        'villeNom' => ['required', 'string', 'max:255'],
+        'villeCommune' => ['nullable', 'string', 'max:255'],
+        'villeTelephone' => ['nullable', 'string', 'max:40'],
+        'villeAdresse' => ['nullable', 'string', 'max:255'],
+    ], [], ['villeNom' => 'nom de la ville']);
 
-    $rang = $this->sites->count() + 1;
+    $rang = $this->villes->count() + 1;
     $couleurs = ['#2563EB', '#0E9F6E', '#D97706', '#C8102E', '#7C3AED', '#0891B2'];
 
-    Site::create([
+    $ville = Ville::create([
         'entreprise_id' => auth()->user()->entreprise_id,
-        'code' => 'S'.$rang,
-        'nom' => $donnees['siteNom'],
-        'ville' => $donnees['siteVille'],
-        'commune' => $donnees['siteCommune'] ?: null,
-        'telephone' => $donnees['siteTelephone'] ?: null,
-        'adresse' => $donnees['siteAdresse'] ?: null,
+        'code' => 'V'.$rang,
+        'nom' => $donnees['villeNom'],
+        'commune' => $donnees['villeCommune'] ?: null,
+        'telephone' => $donnees['villeTelephone'] ?: null,
+        'adresse' => $donnees['villeAdresse'] ?: null,
         'couleur' => $couleurs[($rang - 1) % count($couleurs)],
         'est_actif' => true,
     ]);
 
-    $this->reset(['siteNom', 'siteVille', 'siteCommune', 'siteTelephone', 'siteAdresse']);
-    unset($this->sites);
-    $this->message = 'Site créé.';
-};
-
-$ajouterPersonnel = function (CreerAcces $action) {
-    $regles = [
-        'persRole' => ['required', 'in:responsable_site,commercial'],
-        'persNom' => ['required', 'string', 'max:255'],
-        'persEmail' => ['required', 'email', 'max:255', 'unique:users,email'],
-        'persMotDePasse' => ['required', 'string', 'min:8'],
-        'persSiteId' => ['required', Rule::exists('sites', 'id')->where('entreprise_id', auth()->user()->entreprise_id)],
-    ];
-
-    if ($this->persRole === 'commercial') {
-        $regles['persActivite'] = ['required', 'in:Mécanique,Carrosserie'];
-        $regles['persObjectif'] = ['nullable', 'numeric', 'min:0'];
+    foreach (['Mécanique', 'Sinistre'] as $activite) {
+        Site::create([
+            'entreprise_id' => auth()->user()->entreprise_id,
+            'ville_id' => $ville->id,
+            'nom' => $donnees['villeNom'].' — '.$activite,
+            'activite' => $activite,
+            'est_actif' => true,
+        ]);
     }
 
-    $donnees = $this->validate($regles, [], [
-        'persNom' => 'nom et prénoms', 'persEmail' => 'adresse e-mail',
-        'persMotDePasse' => 'mot de passe', 'persSiteId' => 'site', 'persActivite' => 'activité',
+    $this->reset(['villeNom', 'villeCommune', 'villeTelephone', 'villeAdresse']);
+    unset($this->villes, $this->sites);
+    $this->message = 'Ville créée avec ses deux sites (Mécanique et Sinistre).';
+};
+
+$creerExercice = function () {
+    $donnees = $this->validate([
+        'exerciceAnnee' => ['required', 'integer', 'min:2000', 'max:2100', Rule::unique('exercices', 'annee')->where('entreprise_id', auth()->user()->entreprise_id)],
+    ], [], ['exerciceAnnee' => 'année']);
+
+    Exercice::create([
+        'entreprise_id' => auth()->user()->entreprise_id,
+        'annee' => $donnees['exerciceAnnee'],
+        'statut' => 'Ouvert',
+        // Le tout premier exercice de l'entreprise devient le défaut d'office, sinon le
+        // badge d'en-tête n'aurait rien à afficher tant que le gérant n'a rien choisi.
+        'est_defaut' => ! Exercice::where('entreprise_id', auth()->user()->entreprise_id)->exists(),
     ]);
 
-    $action->executer($this->entreprise, $donnees['persRole'], [
-        'nom' => $donnees['persNom'],
-        'email' => $donnees['persEmail'],
-        'mot_de_passe' => $donnees['persMotDePasse'],
-        'site_id' => $donnees['persSiteId'],
-        'activite' => $donnees['persActivite'] ?? null,
-        'objectif_mensuel' => $donnees['persObjectif'] ?? 0,
-    ]);
+    $this->exerciceAnnee = (int) $donnees['exerciceAnnee'] + 1;
+    unset($this->exercices);
+    $this->message = 'Exercice créé.';
+};
 
-    $this->reset(['persNom', 'persEmail', 'persMotDePasse', 'persObjectif']);
-    unset($this->personnel);
-    $this->message = 'Accès créé — le mot de passe devra être changé à la première connexion.';
+$definirExerciceParDefaut = function (int $exerciceId) {
+    $exercice = Exercice::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($exerciceId);
+    $exercice->definirParDefaut();
+    unset($this->exercices);
+    $this->message = "Exercice {$exercice->annee} marqué par défaut — c'est celui-ci que toute l'équipe voit dans l'en-tête.";
+};
+
+$clorePourVille = function (int $exerciceId, int $villeId) {
+    $exercice = Exercice::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($exerciceId);
+    $ville = Ville::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($villeId);
+
+    $exercice->clorePourVille($ville, auth()->user());
+    unset($this->exercices);
+    $this->message = "Exercice {$exercice->annee} clos pour {$ville->nom}.";
+};
+
+$reouvrirPourVille = function (int $exerciceId, int $villeId) {
+    $exercice = Exercice::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($exerciceId);
+    $ville = Ville::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($villeId);
+
+    $exercice->reouvrirPourVille($ville);
+    unset($this->exercices);
+    $this->message = "Exercice {$exercice->annee} réouvert pour {$ville->nom}.";
+};
+
+$cloreExercice = function (int $exerciceId) {
+    $exercice = Exercice::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($exerciceId);
+    $exercice->update(['statut' => 'Clos', 'cloture_le' => now()]);
+    unset($this->exercices);
+    $this->message = "Exercice {$exercice->annee} clos.";
+};
+
+$reouvrirExercice = function (int $exerciceId) {
+    $exercice = Exercice::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($exerciceId);
+    $exercice->update(['statut' => 'Ouvert', 'cloture_le' => null]);
+    unset($this->exercices);
+    $this->message = "Exercice {$exercice->annee} réouvert.";
 };
 
 ?>
 
 <div>
     <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;">
-        @foreach (['entreprise' => 'Fiche entreprise', 'compte' => 'Mon compte', 'sites' => 'Sites', 'personnel' => 'Personnel'] as $cle => $libelle)
+        @foreach (['entreprise' => 'Fiche entreprise', 'compte' => 'Mon compte', 'villes' => 'Villes', 'personnel' => 'Personnel', 'acces' => 'Ajouter un accès', 'exercices' => 'Exercices'] as $cle => $libelle)
             <button type="button" wire:click="$set('onglet', '{{ $cle }}')"
                 class="onglet {{ $onglet === $cle ? 'est-actif' : '' }}">{{ $libelle }}</button>
         @endforeach
@@ -325,72 +372,63 @@ $ajouterPersonnel = function (CreerAcces $action) {
         </form>
     @endif
 
-    {{-- ------------------------------------------------------------ Sites --}}
-    @if ($onglet === 'sites')
-        <x-carte-section titre="Création d'un site">
+    {{-- ----------------------------------------------------------- Villes --}}
+    @if ($onglet === 'villes')
+        <x-carte-section titre="Création d'une ville">
+            <p style="font-size:13px; color:var(--th-gris,#6B6E76); margin:0 0 14px;">
+                Créer une ville crée aussitôt ses deux sites d'activité (Mécanique et Sinistre).
+            </p>
             <div class="bloc-saisie">
-                <x-champ label="Nom" model="siteNom" requis="true" placeholder="Ex : Agence Nord" />
-                <x-champ label="Ville" model="siteVille" requis="true" placeholder="Ex : Abidjan" />
-                <x-champ label="Commune" model="siteCommune" placeholder="Ex : Cocody" />
-                <x-champ label="Téléphone" model="siteTelephone" placeholder="+225 07 ..." />
-                <x-champ label="Adresse" model="siteAdresse" />
-                <button type="button" wire:click="ajouterSite" class="bouton bouton-sombre">+ Ajouter le site</button>
+                <x-champ label="Nom de la ville" model="villeNom" requis="true" placeholder="Ex : Bouaké" />
+                <x-champ label="Commune" model="villeCommune" placeholder="Ex : Koko" />
+                <x-champ label="Téléphone" model="villeTelephone" placeholder="+225 07 ..." />
+                <x-champ label="Adresse" model="villeAdresse" />
+                <button type="button" wire:click="ajouterVille" class="bouton bouton-sombre">+ Ajouter la ville</button>
             </div>
 
             <div class="tableau-conteneur" style="margin-top:16px;">
                 <table class="tableau">
-                    <thead><tr><th>Code</th><th>Nom</th><th>Ville</th><th>Commune</th><th>Téléphone</th><th>Responsable</th></tr></thead>
+                    <thead><tr><th>Code</th><th>Ville</th><th>Commune</th><th>Téléphone</th><th>Responsable</th><th>Sites</th></tr></thead>
                     <tbody>
-                        @forelse ($this->sites as $site)
+                        @forelse ($this->villes->forPage($pageVilles, 10) as $ville)
                             <tr>
-                                <td style="font-weight:700;">{{ $site->code }}</td>
+                                <td style="font-weight:700;">{{ $ville->code }}</td>
                                 <td>
-                                    <span style="display:inline-block; width:9px; height:9px; border-radius:99px; background:{{ $site->couleur }}; margin-right:7px;"></span>
-                                    {{ $site->nom }}
+                                    <span style="display:inline-block; width:9px; height:9px; border-radius:99px; background:{{ $ville->couleur }}; margin-right:7px;"></span>
+                                    {{ $ville->nom }}
                                 </td>
-                                <td>{{ $site->ville ?? '—' }}</td>
-                                <td>{{ $site->commune ?? '—' }}</td>
-                                <td>{{ $site->telephone ?? '—' }}</td>
-                                <td>{{ $site->responsable?->name ?? '— à nommer —' }}</td>
+                                <td>{{ $ville->commune ?? '—' }}</td>
+                                <td>{{ $ville->telephone ?? '—' }}</td>
+                                <td>{{ $ville->responsable?->name ?? '— à nommer —' }}</td>
+                                <td>
+                                    @foreach ($ville->sites as $site)
+                                        {{ $site->nom }} ({{ $site->responsable?->name ?? 'hérite de la ville' }}){{ ! $loop->last ? ', ' : '' }}
+                                    @endforeach
+                                </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="6" texte="Aucun site enregistré." />
+                            <x-table-vide :colspan="6" texte="Aucune ville enregistrée." />
                         @endforelse
                     </tbody>
                 </table>
             </div>
+            <x-pagination :page="$pageVilles" :total="$this->villes->count()" prop="pageVilles" />
         </x-carte-section>
     @endif
 
     {{-- -------------------------------------------------------- Personnel --}}
     @if ($onglet === 'personnel')
-        <x-carte-section titre="Ajouter un membre du personnel">
-            <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
-                @foreach (['commercial' => 'Commercial', 'responsable_site' => 'Responsable de site'] as $cle => $libelle)
-                    <button type="button" wire:click="$set('persRole', '{{ $cle }}')"
-                        class="onglet {{ $persRole === $cle ? 'est-actif' : '' }}">{{ $libelle }}</button>
-                @endforeach
-            </div>
-
-            <div class="bloc-saisie">
-                <x-champ label="Nom et prénoms" model="persNom" requis="true" />
-                <x-champ label="Adresse e-mail" model="persEmail" type="email" requis="true" />
-                <x-champ label="Mot de passe provisoire" model="persMotDePasse" type="password" requis="true" />
-                <x-champ label="Site d'affectation" model="persSiteId" type="select"
-                    :options="$this->sites->pluck('nom', 'id')" requis="true" width="200" />
-                @if ($persRole === 'commercial')
-                    <x-champ label="Activité" model="persActivite" type="select"
-                        :options="['Mécanique' => 'Mécanique', 'Carrosserie' => 'Carrosserie']" width="160" />
-                    <x-champ label="Objectif mensuel (FCFA)" model="persObjectif" type="number" width="180" />
-                @endif
-                <button type="button" wire:click="ajouterPersonnel" class="bouton bouton-sombre">+ Ajouter</button>
-            </div>
+        <x-carte-section titre="Personnel de l'entreprise">
+            <p style="font-size:13px; color:var(--th-gris,#6B6E76); margin:0 0 14px;">
+                Pour créer un Responsable de site, un Commercial ou un Caissier, direction l'onglet
+                <button type="button" wire:click="$set('onglet', 'acces')" style="background:none; border:0; padding:0; color:var(--th-accent,#C8102E); font-weight:700; cursor:pointer; font-size:13px;">Ajouter un accès</button>.
+            </p>
 
             <div class="tableau-conteneur" style="margin-top:16px;">
                 <table class="tableau">
                     <thead><tr><th>Nom</th><th>E-mail</th><th>Rôle</th><th>Statut</th></tr></thead>
                     <tbody>
-                        @forelse ($this->personnel as $ligne)
+                        @forelse ($this->personnel->forPage($pagePersonnel, 10) as $ligne)
                             <tr>
                                 <td style="font-weight:600;">{{ $ligne['utilisateur']->name }}</td>
                                 <td>{{ $ligne['utilisateur']->email }}</td>
@@ -407,6 +445,92 @@ $ajouterPersonnel = function (CreerAcces $action) {
                     </tbody>
                 </table>
             </div>
+            <x-pagination :page="$pagePersonnel" :total="$this->personnel->count()" prop="pagePersonnel" />
         </x-carte-section>
+    @endif
+
+    {{-- ------------------------------------------------- Ajouter un accès --}}
+    @if ($onglet === 'acces')
+        <livewire:acces-creer />
+    @endif
+
+    {{-- -------------------------------------------------------- Exercices --}}
+    @if ($onglet === 'exercices')
+        <x-carte-section titre="Nouvel exercice" icone="liste" couleur="#2563EB">
+            <p style="font-size:13px; color:var(--th-gris,#6B6E76); margin:0 0 14px;">
+                Un exercice couvre une année civile. Il se clôture ville par ville ; tant qu'une
+                ville reste ouverte, la saisie y reste possible. La clôture complète de
+                l'exercice est toujours une décision volontaire, jamais automatique.
+            </p>
+            <div class="bloc-saisie">
+                <x-champ label="Année" model="exerciceAnnee" type="number" width="140" />
+                <button type="button" wire:click="creerExercice" class="bouton bouton-sombre">+ Créer l'exercice</button>
+            </div>
+        </x-carte-section>
+
+        @foreach ($this->exercices as $exercice)
+            @php
+                $toutesClosesIci = $exercice->toutesLesVillesSontClosesPour(auth()->user()->entreprise_id);
+            @endphp
+            <x-carte-section titre="Exercice {{ $exercice->annee }}" icone="liste" couleur="{{ $exercice->statut === 'Clos' ? '#C8102E' : '#0E9F6E' }}">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap;">
+                    <span class="pastille {{ $exercice->statut === 'Clos' ? 'pastille-rouge' : 'pastille-vert' }}">
+                        {{ $exercice->statut === 'Clos' ? 'Exercice clos' : 'Exercice ouvert' }}
+                    </span>
+                    @if ($exercice->est_defaut)
+                        <span class="pastille pastille-bleu">★ Par défaut — visible par toute l'équipe</span>
+                    @else
+                        <button type="button" wire:click="definirExerciceParDefaut({{ $exercice->id }})" class="bouton bouton-secondaire bouton-petit">
+                            Définir par défaut
+                        </button>
+                    @endif
+                    @if ($exercice->statut === 'Clos')
+                        <span style="font-size:12.5px; color:#6B6E76;">Clos le {{ $exercice->cloture_le?->format('d/m/Y') }}</span>
+                        <button type="button" wire:click="reouvrirExercice({{ $exercice->id }})" class="bouton bouton-secondaire bouton-petit">Réouvrir l'exercice</button>
+                    @elseif ($toutesClosesIci)
+                        <span style="font-size:12.5px; color:#D97706; font-weight:600;">Toutes les villes sont closes — l'exercice peut être clôturé.</span>
+                        <button type="button" wire:click="cloreExercice({{ $exercice->id }})"
+                            wire:confirm="Clôturer définitivement l'exercice {{ $exercice->annee }} ? Plus aucune saisie ne sera possible pour cette année, sur aucune ville."
+                            class="bouton bouton-sombre bouton-petit">Clôturer l'exercice</button>
+                    @endif
+                </div>
+
+                <div class="tableau-conteneur">
+                    <table class="tableau">
+                        <thead><tr><th>Ville</th><th>Statut</th><th>Clôturé le</th><th style="text-align:right;">Actions</th></tr></thead>
+                        <tbody>
+                            @forelse ($this->villesActives as $ville)
+                                @php
+                                    $pivot = $exercice->villes->firstWhere('id', $ville->id)?->pivot;
+                                    $statutVille = $pivot?->statut ?? 'Ouvert';
+                                @endphp
+                                <tr wire:key="exercice-{{ $exercice->id }}-ville-{{ $ville->id }}">
+                                    <td style="font-weight:600;">{{ $ville->nom }}</td>
+                                    <td>
+                                        <span class="pastille {{ $statutVille === 'Clos' ? 'pastille-rouge' : 'pastille-vert' }}">{{ $statutVille }}</span>
+                                    </td>
+                                    <td>{{ $pivot?->cloture_le ? \Illuminate\Support\Carbon::parse($pivot->cloture_le)->format('d/m/Y') : '—' }}</td>
+                                    <td style="text-align:right;">
+                                        @if ($statutVille === 'Clos')
+                                            <button type="button" wire:click="reouvrirPourVille({{ $exercice->id }}, {{ $ville->id }})" class="bouton bouton-secondaire bouton-petit">Réouvrir</button>
+                                        @else
+                                            <button type="button" wire:click="clorePourVille({{ $exercice->id }}, {{ $ville->id }})"
+                                                wire:confirm="Clôturer l'exercice {{ $exercice->annee }} pour {{ $ville->nom }} ? Plus aucune saisie ne sera possible pour cette ville sur cette année."
+                                                class="bouton bouton-secondaire bouton-petit">Clôturer</button>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <x-table-vide :colspan="4" texte="Aucune ville active." />
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </x-carte-section>
+        @endforeach
+
+        @if ($this->exercices->isEmpty())
+            <p class="legende-vide">Aucun exercice créé pour le moment.</p>
+        @endif
     @endif
 </div>

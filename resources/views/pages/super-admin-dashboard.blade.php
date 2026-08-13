@@ -2,7 +2,9 @@
 
 use App\Domain\Tenants\Models\Entreprise;
 use App\Models\User;
-use function Livewire\Volt\{computed};
+use function Livewire\Volt\{computed, state};
+
+state(['pageRepartition' => 1]);
 
 $stats = computed(fn () => [
     'entreprises' => Entreprise::count(),
@@ -64,7 +66,7 @@ $repartition = computed(function () {
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($this->repartition as $ligne)
+                    @forelse ($this->repartition->forPage($pageRepartition, 10) as $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td style="font-weight:700;">
                                 <a href="{{ route('super-admin.entreprises.show', $ligne['entreprise']) }}" wire:navigate style="color:inherit;">{{ $ligne['entreprise']->nom }}</a>
@@ -88,5 +90,6 @@ $repartition = computed(function () {
                 </tbody>
             </table>
         </div>
+        <x-pagination :page="$pageRepartition" :total="$this->repartition->count()" prop="pageRepartition" />
     </div>
 </div>

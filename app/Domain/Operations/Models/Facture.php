@@ -50,9 +50,42 @@ class Facture extends Model
         return $this->hasMany(Encaissement::class);
     }
 
+    public function montantEncaisse(): int
+    {
+        return (int) $this->encaissements()->sum('montant');
+    }
+
+    /**
+     * Solde restant à encaisser sur cette facture. C'est ce chiffre qui protège contre
+     * la double saisie : responsable et caissier ne voient et ne peuvent saisir que les
+     * factures dont le reste est strictement positif ; une fois soldée, la facture
+     * disparaît des deux écrans.
+     *
+     * Réutilise la somme préchargée par `withSum('encaissements', 'montant')` quand elle
+     * est disponible, pour éviter une requête par ligne sur les écrans qui listent
+     * plusieurs factures à la fois.
+     */
+    public function resteAEncaisser(): int
+    {
+        $encaisse = $this->encaissements_sum_montant ?? $this->montantEncaisse();
+
+        return max(0, $this->montant - (int) $encaisse);
+    }
+
+    /** Factures dont il reste un solde à encaisser, calculé en base pour rester performant. */
+    public function scopeAvecResteAEncaisser($query)
+    {
+        return $query->whereRaw(
+            'montant > (select coalesce(sum(montant), 0) from encaissements where encaissements.facture_id = factures.id)'
+        );
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
-        return LogOptions::defaults()->logOnlyDirty()->dontSubmitEmptyLogs();
+        return LogOptions::defaults()
+            ->logOnly(['commercial_id', 'n_facture', 'date', 'client', 'type', 'activite', 'montant', 'observations'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
     }
 
     /** Informations saisies librement, hors colonnes prévues. */

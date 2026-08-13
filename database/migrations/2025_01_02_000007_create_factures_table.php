@@ -19,7 +19,7 @@ return new class extends Migration
             $table->date('date');
             $table->string('client');
             $table->enum('type', ['FNE', 'HT'])->default('FNE');
-            $table->enum('activite', ['Mécanique', 'Carrosserie']);
+            $table->enum('activite', ['Mécanique', 'Sinistre']);
             $table->unsignedBigInteger('montant');
             $table->text('observations')->nullable();
             $table->foreignId('cree_par')->nullable()->constrained('users')->nullOnDelete();

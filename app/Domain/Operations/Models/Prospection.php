@@ -16,7 +16,8 @@ use Spatie\Activitylog\Traits\LogsActivity;
 
 #[Fillable([
     'entreprise_id', 'site_id', 'commercial_id', 'numero', 'date', 'client',
-    'localisation', 'moyen', 'activite', 'passage', 'devis_apres_passage',
+    'localisation', 'moyen', 'activite', 'passage', 'date_passage',
+    'devis_apres_passage', 'date_devis',
     'observations', 'cree_par', 'statut_validation', 'motif_refus', 'transmise_le',
 ])]
 class Prospection extends Model
@@ -28,7 +29,9 @@ class Prospection extends Model
         return [
             'date' => 'date',
             'passage' => 'boolean',
+            'date_passage' => 'date',
             'devis_apres_passage' => 'boolean',
+            'date_devis' => 'date',
             'transmise_le' => 'datetime',
         ];
     }
@@ -60,9 +63,38 @@ class Prospection extends Model
         return $query->where('statut_validation', 'Transmise');
     }
 
+    /**
+     * Un devis après passage implique nécessairement un passage, à la même date :
+     * impossible de faire un devis sans être passé. Appliqué côté serveur — la case à
+     * cocher côté client n'est qu'un confort, pas une garantie.
+     *
+     * @return array{passage: bool, date_passage: ?string, devis_apres_passage: bool, date_devis: ?string}
+     */
+    public static function normaliserPassage(bool $passage, ?string $datePassage, bool $devisApresPassage, ?string $dateDevis): array
+    {
+        if ($devisApresPassage) {
+            $passage = true;
+            $datePassage = $dateDevis;
+        }
+
+        return [
+            'passage' => $passage,
+            'date_passage' => $passage ? $datePassage : null,
+            'devis_apres_passage' => $devisApresPassage,
+            'date_devis' => $devisApresPassage ? $dateDevis : null,
+        ];
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
-        return LogOptions::defaults()->logOnlyDirty()->dontSubmitEmptyLogs();
+        return LogOptions::defaults()
+            ->logOnly([
+                'commercial_id', 'client', 'localisation', 'moyen', 'activite',
+                'passage', 'date_passage', 'devis_apres_passage', 'date_devis',
+                'observations', 'statut_validation', 'motif_refus',
+            ])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
     }
 
     /** Informations saisies librement, hors colonnes prévues. */

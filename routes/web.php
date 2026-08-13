@@ -32,7 +32,7 @@ Route::middleware(['auth'])->group(function () {
     Volt::route('/mes-notifications', 'mes-notifications')->name('mes-notifications');
 
     // Espace personnel : profil, photo, rattachement, listes déroulantes.
-    Route::middleware(['role:responsable_site|commercial'])->group(function () {
+    Route::middleware(['role:responsable_site|commercial|caissier'])->group(function () {
         Volt::route('/mon-espace', 'mon-espace')->name('mon-espace');
     });
 
@@ -44,6 +44,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::middleware(['role:responsable_site'])->group(function () {
         Volt::route('/saisie-du-jour', 'saisie-du-jour')->name('saisie-du-jour');
+        Volt::route('/saisie-du-jour/prospections/{prospection}', 'prospection-voir')->name('prospection.voir');
     });
 
     Route::middleware(['role:gerant|responsable_site'])->group(function () {
@@ -63,6 +64,12 @@ Route::middleware(['auth'])->group(function () {
         Volt::route('/ma-performance', 'ma-performance')->name('ma-performance');
         Volt::route('/mes-prospections', 'mes-prospections')->name('mes-prospections');
         Volt::route('/mes-notes', 'mes-notes')->name('mes-notes');
+    });
+
+    Route::prefix('caissier')->name('caissier.')->middleware(['role:caissier'])->group(function () {
+        Volt::route('/tableau-de-bord', 'caissier-tableau-de-bord')->name('tableau-de-bord');
+        Volt::route('/encaissements', 'caissier-encaissements')->name('encaissements');
+        Volt::route('/decaissements', 'caissier-decaissements')->name('decaissements');
     });
 
     // Super Admin — plateforme, hors périmètre d'une entreprise.
