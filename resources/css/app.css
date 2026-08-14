@@ -257,7 +257,8 @@ header nav a.nav-actif:hover { filter: brightness(1.12); }
    pour rester cohérent avec le reste de l'application (Alpine a été retiré). Le
    contenu est masqué automatiquement par le navigateur tant que <details> n'est pas
    ouvert — seule la position et l'habillage du panneau sont à notre charge. */
-.nav-groupe { position: relative; }
+.nav-groupe { position: relative; display: flex; align-items: center; }
+.nav-groupe:not([open]) .nav-groupe-panneau { display: none; }
 .nav-groupe summary { transition: background-color .12s ease, filter .12s ease; }
 .nav-groupe summary::-webkit-details-marker { display: none; }
 .nav-groupe summary::marker { content: ""; }
