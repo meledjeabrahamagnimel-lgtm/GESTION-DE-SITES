@@ -54,37 +54,23 @@ $facturesQ = computed(function () {
     return Facture::whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin]);
 });
 
+/**
+ * Encaissements et charges n'ont pas d'étiquette Mécanique/Sinistre en base — ils ne
+ * sont rattachés qu'au site où ils sont enregistrés, et un même site accueille souvent
+ * un commercial qui vend sur les deux activités. Une ventilation par activité du site
+ * afficherait donc « Sinistre : 0 F » même quand des mouvements liés à cette activité
+ * existent bel et bien — trompeur plutôt qu'informatif. Ces KPI restent consolidés.
+ */
 $kpis = computed(function () {
-    $encaissements = (clone $this->encaissementsQ)->with('site:id,activite')->get();
-    $charges = (clone $this->chargesQ)->with('site:id,activite')->get();
-    $factures = (clone $this->facturesQ)->get();
-
-    $encaisse = (int) $encaissements->sum('montant');
-    $decaisse = (int) $charges->sum('montant');
-    $facture = (int) $factures->sum('montant');
-
-    $encaisseParActivite = fn ($activite) => (int) $encaissements->filter(fn ($e) => $e->site?->activite === $activite)->sum('montant');
-    $decaisseParActivite = fn ($activite) => (int) $charges->filter(fn ($c) => $c->site?->activite === $activite)->sum('montant');
-    $factureParActivite = fn ($activite) => (int) $factures->where('activite', $activite)->sum('montant');
-
-    $encaisseMecanique = $encaisseParActivite('Mécanique');
-    $encaisseSinistre = $encaisseParActivite('Sinistre');
-    $decaisseMecanique = $decaisseParActivite('Mécanique');
-    $decaisseSinistre = $decaisseParActivite('Sinistre');
+    $encaisse = (int) (clone $this->encaissementsQ)->sum('montant');
+    $decaisse = (int) (clone $this->chargesQ)->sum('montant');
+    $facture = (int) (clone $this->facturesQ)->sum('montant');
 
     return [
         'encaisse' => $encaisse,
-        'encaisseMecanique' => $encaisseMecanique,
-        'encaisseSinistre' => $encaisseSinistre,
         'decaisse' => $decaisse,
-        'decaisseMecanique' => $decaisseMecanique,
-        'decaisseSinistre' => $decaisseSinistre,
         'net' => $encaisse - $decaisse,
-        'netMecanique' => $encaisseMecanique - $decaisseMecanique,
-        'netSinistre' => $encaisseSinistre - $decaisseSinistre,
         'nonEncaisse' => max(0, $facture - $encaisse),
-        'nonEncaisseMecanique' => max(0, $factureParActivite('Mécanique') - $encaisseMecanique),
-        'nonEncaisseSinistre' => max(0, $factureParActivite('Sinistre') - $encaisseSinistre),
     ];
 });
 
@@ -130,14 +116,10 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="Encaissements — {{ $this->libellePerimetre }}" :value="ae($this->kpis['encaisse'])" couleur="#0E9F6E"
-            :mecanique="$activiteFiltre ? null : ae($this->kpis['encaisseMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['encaisseSinistre'])" />
-        <x-kpi-card label="Décaissements — {{ $this->libellePerimetre }}" :value="ae($this->kpis['decaisse'])" couleur="#C8102E"
-            :mecanique="$activiteFiltre ? null : ae($this->kpis['decaisseMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['decaisseSinistre'])" />
-        <x-kpi-card label="Trésorerie nette — {{ $this->libellePerimetre }}" :value="ae($this->kpis['net'])" :accent="$this->kpis['net'] < 0" :couleur="$this->kpis['net'] >= 0 ? '#0E9F6E' : '#C8102E'"
-            :mecanique="$activiteFiltre ? null : ae($this->kpis['netMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['netSinistre'])" />
-        <x-kpi-card label="Facturé non encaissé — {{ $this->libellePerimetre }}" :value="ae($this->kpis['nonEncaisse'])" sub="Créances clients"
-            :mecanique="$activiteFiltre ? null : ae($this->kpis['nonEncaisseMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['nonEncaisseSinistre'])" />
+        <x-kpi-card label="Encaissements — {{ $this->libellePerimetre }}" :value="ae($this->kpis['encaisse'])" couleur="#0E9F6E" />
+        <x-kpi-card label="Décaissements — {{ $this->libellePerimetre }}" :value="ae($this->kpis['decaisse'])" couleur="#C8102E" />
+        <x-kpi-card label="Trésorerie nette — {{ $this->libellePerimetre }}" :value="ae($this->kpis['net'])" :accent="$this->kpis['net'] < 0" :couleur="$this->kpis['net'] >= 0 ? '#0E9F6E' : '#C8102E'" />
+        <x-kpi-card label="Facturé non encaissé — {{ $this->libellePerimetre }}" :value="ae($this->kpis['nonEncaisse'])" sub="Créances clients" />
     </div>
 
     <div style="margin-bottom:20px;">

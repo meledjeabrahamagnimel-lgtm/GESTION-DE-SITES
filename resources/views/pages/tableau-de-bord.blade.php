@@ -101,28 +101,21 @@ $kpis = computed(function () {
     $facturesQ = Facture::whereIn('site_id', $idsSites)->whereBetween('date', [$debut, $fin])
         ->when($this->commercialFiltre, fn ($q) => $q->where('commercial_id', $this->commercialFiltre));
 
-    $parActivite = fn ($cle, $activite) => (int) $this->synthese
-        ->filter(fn ($l) => $l['site']->activite === $activite)->sum($cle);
-
-    $sansFactureMecanique = $parActivite('sansFacture', 'Mécanique');
-    $sansFactureSinistre = $parActivite('sansFacture', 'Sinistre');
-
+    // Charges, encaissements, résultat et véhicules sans facture n'ont pas d'étiquette
+    // Mécanique/Sinistre en base — ils ne sont rattachés qu'au site où ils sont
+    // enregistrés, et un même site accueille souvent un commercial qui vend sur les deux
+    // activités. Une ventilation par activité du site afficherait donc « Sinistre : 0 F »
+    // même quand des mouvements liés à cette activité existent bel et bien — trompeur
+    // plutôt qu'informatif. Seuls le CA et le taux de transfo (chaque facture/devis porte
+    // sa propre étiquette) peuvent être ventilés de façon fiable.
     return [
         'ca' => $this->synthese->sum('ca'),
         'caMecanique' => (int) (clone $facturesQ)->where('activite', 'Mécanique')->sum('montant'),
         'caSinistre' => (int) (clone $facturesQ)->where('activite', 'Sinistre')->sum('montant'),
         'charges' => $this->synthese->sum('charges'),
-        'chargesMecanique' => $parActivite('charges', 'Mécanique'),
-        'chargesSinistre' => $parActivite('charges', 'Sinistre'),
         'resultat' => $this->synthese->sum('resultat'),
-        'resultatMecanique' => $parActivite('resultat', 'Mécanique'),
-        'resultatSinistre' => $parActivite('resultat', 'Sinistre'),
         'encaisse' => $this->synthese->sum('encaisse'),
-        'encaisseMecanique' => $parActivite('encaisse', 'Mécanique'),
-        'encaisseSinistre' => $parActivite('encaisse', 'Sinistre'),
         'treso' => $this->synthese->sum('treso'),
-        'tresoMecanique' => $parActivite('treso', 'Mécanique'),
-        'tresoSinistre' => $parActivite('treso', 'Sinistre'),
         // Taux de transformation des devis émis sur la période.
         'tauxTransfo' => $nbEmis > 0 ? $nbValides / $nbEmis : null,
         'tauxTransfoMecanique' => $tauxTransfoActivite('Mécanique'),
@@ -130,8 +123,6 @@ $kpis = computed(function () {
         // Anomalie critique remontée par les responsables de site.
         'sansFacture' => (int) SaisieJournaliere::whereIn('site_id', $idsSites)
             ->whereBetween('date', [$debut, $fin])->sum('vehicules_sans_facture'),
-        'sansFactureMecanique' => $sansFactureMecanique,
-        'sansFactureSinistre' => $sansFactureSinistre,
     ];
 });
 
@@ -260,22 +251,17 @@ $commentaires = computed(function () {
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="CA — {{ $this->libellePerimetre }}" :value="ae($this->kpis['ca'])"
             :mecanique="$activiteFiltre ? null : ae($this->kpis['caMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['caSinistre'])" />
-        <x-kpi-card label="Charges — {{ $this->libellePerimetre }}" :value="ae($this->kpis['charges'])"
-            :mecanique="$activiteFiltre ? null : ae($this->kpis['chargesMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['chargesSinistre'])" />
+        <x-kpi-card label="Charges — {{ $this->libellePerimetre }}" :value="ae($this->kpis['charges'])" />
         <x-kpi-card label="Résultat net — {{ $this->libellePerimetre }}" :value="ae($this->kpis['resultat'])"
-            sub="CA facturé − charges" :bon="$this->kpis['resultat'] >= 0" :accent="$this->kpis['resultat'] < 0"
-            :mecanique="$activiteFiltre ? null : ae($this->kpis['resultatMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['resultatSinistre'])" />
+            sub="CA facturé − charges" :bon="$this->kpis['resultat'] >= 0" :accent="$this->kpis['resultat'] < 0" />
         <x-kpi-card label="Encaissé — {{ $this->libellePerimetre }}" :value="ae($this->kpis['encaisse'])"
-            :sub="$this->kpis['ca'] > 0 ? an($this->kpis['encaisse'] / $this->kpis['ca']).' du CA facturé' : null"
-            :mecanique="$activiteFiltre ? null : ae($this->kpis['encaisseMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['encaisseSinistre'])" />
-        <x-kpi-card label="Trésorerie nette — {{ $this->libellePerimetre }}" :value="ae($this->kpis['treso'])" :accent="$this->kpis['treso'] < 0"
-            :mecanique="$activiteFiltre ? null : ae($this->kpis['tresoMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['tresoSinistre'])" />
+            :sub="$this->kpis['ca'] > 0 ? an($this->kpis['encaisse'] / $this->kpis['ca']).' du CA facturé' : null" />
+        <x-kpi-card label="Trésorerie nette — {{ $this->libellePerimetre }}" :value="ae($this->kpis['treso'])" :accent="$this->kpis['treso'] < 0" />
         <x-kpi-card label="Taux transfo devis — {{ $this->libellePerimetre }}" :value="an($this->kpis['tauxTransfo'])"
             :mecanique="$activiteFiltre ? null : an($this->kpis['tauxTransfoMecanique'])" :sinistre="$activiteFiltre ? null : an($this->kpis['tauxTransfoSinistre'])" />
         <x-kpi-card label="Véhicules sans facture — {{ $this->libellePerimetre }}" :value="$this->kpis['sansFacture']"
             :sub="$this->kpis['sansFacture'] > 0 ? 'Anomalie à signaler à la Direction' : 'Aucune anomalie'"
-            :accent="$this->kpis['sansFacture'] > 0" :bon="$this->kpis['sansFacture'] === 0"
-            :mecanique="$activiteFiltre ? null : $this->kpis['sansFactureMecanique']" :sinistre="$activiteFiltre ? null : $this->kpis['sansFactureSinistre']" />
+            :accent="$this->kpis['sansFacture'] > 0" :bon="$this->kpis['sansFacture'] === 0" />
     </div>
 
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:16px; margin-bottom:20px;">
