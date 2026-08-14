@@ -32,7 +32,10 @@ state([
 
 mount(function () {
     $this->date = now()->toDateString();
-    $this->activite = $this->commercial?->activite ?? array_key_first($this->optionsActivite);
+    // Un commercial n'est pas cantonné à une activité : il travaille dans une ville et
+    // choisit l'activité concernée à chaque prospection. « Mécanique/Sinistre » (valeur
+    // possible sur la fiche commercial) n'est pas une activité de prospection valide.
+    $this->activite = array_key_first($this->optionsActivite);
 });
 
 $commercial = computed(fn () => Commercial::where('user_id', auth()->id())->with('site')->first());
