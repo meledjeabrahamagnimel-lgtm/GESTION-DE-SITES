@@ -50,6 +50,25 @@ $requeteBase = computed(function () {
 $commerciaux = computed(fn () => Commercial::where('est_spontane', false)
     ->whereIn('site_id', $this->idsSites)->orderBy('nom')->get());
 
+/** Répartition des prospections par commercial sur la période retenue. */
+$parCommercial = computed(function () {
+    $lignes = (clone $this->requeteBase)->get();
+
+    return $this->commerciaux->map(function ($commercial) use ($lignes) {
+        $siens = $lignes->where('commercial_id', $commercial->id);
+        $passages = $siens->where('passage', true);
+        $devisApres = $siens->where('devis_apres_passage', true)->count();
+
+        return [
+            'commercial' => $commercial,
+            'clients' => $siens->count(),
+            'passages' => $passages->count(),
+            'devisApres' => $devisApres,
+            'taux' => $passages->count() > 0 ? $devisApres / $passages->count() : null,
+        ];
+    })->filter(fn ($l) => $l['clients'] > 0)->sortByDesc('clients')->values();
+});
+
 $kpis = computed(function () {
     $lignes = (clone $this->requeteBase)->get();
 
@@ -98,8 +117,8 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
 
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="Clients visités — {{ $this->libellePerimetre }}" :value="$this->kpis['clients']" />
-        <x-kpi-card label="Passages sur site" :value="$this->kpis['passages']" />
-        <x-kpi-card label="Devis après passage" :value="$this->kpis['devisApres']" />
+        <x-kpi-card label="Passages sur site — {{ $this->libellePerimetre }}" :value="$this->kpis['passages']" />
+        <x-kpi-card label="Devis après passage — {{ $this->libellePerimetre }}" :value="$this->kpis['devisApres']" />
         <x-kpi-card label="Taux devis / passage"
             :value="an($this->kpis['passages'] > 0 ? $this->kpis['devisApres'] / $this->kpis['passages'] : null)" />
     </div>
@@ -107,6 +126,36 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
     <div style="margin-bottom:20px;">
         <x-chart-card titre="Visites, passages et devis établis" id="prospects-hebdo"
             :labels="$this->graphique['labels']" :datasets="$this->graphique['datasets']" />
+    </div>
+
+    <div class="carte" style="margin-bottom:20px;">
+        <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Répartition par commercial</h3>
+        <div class="tableau-conteneur">
+            <table class="tableau">
+                <thead>
+                    <tr>
+                        <th>Commercial</th>
+                        <th>Clients visités</th>
+                        <th>Passages</th>
+                        <th>Devis après passage</th>
+                        <th>Taux devis / passage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($this->parCommercial as $ligne)
+                        <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                            <td style="font-weight:700;">{{ $ligne['commercial']->nom }}</td>
+                            <td>{{ $ligne['clients'] }}</td>
+                            <td>{{ $ligne['passages'] }}</td>
+                            <td>{{ $ligne['devisApres'] }}</td>
+                            <td style="font-weight:700; color:{{ ($ligne['taux'] ?? 0) >= 0.5 ? '#0E9F6E' : '#D97706' }};">{{ an($ligne['taux']) }}</td>
+                        </tr>
+                    @empty
+                        <x-table-vide :colspan="5" texte="Aucune prospection enregistrée sur cette période." />
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <div class="carte">

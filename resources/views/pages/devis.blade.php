@@ -15,6 +15,8 @@ state([
     'recherche' => '',
     'commercialFiltre' => '',
     'statutFiltre' => '',
+    'dateFiltre' => '',
+    'nFactureFiltre' => '',
     'pageDetail' => 1,
 ]);
 
@@ -47,6 +49,24 @@ $requeteBase = computed(function () {
 $commerciaux = computed(fn () => Commercial::where('est_spontane', false)
     ->whereIn('site_id', $this->idsSites)->orderBy('nom')->get());
 
+/** Répartition des devis par commercial sur la période retenue : nombre émis, validés et montant validé. */
+$parCommercial = computed(function () {
+    $lignes = (clone $this->requeteBase)->get();
+
+    return $this->commerciaux->map(function ($commercial) use ($lignes) {
+        $siens = $lignes->where('commercial_id', $commercial->id);
+        $valides = $siens->where('statut', 'Validé');
+
+        return [
+            'commercial' => $commercial,
+            'emis' => $siens->count(),
+            'valides' => $valides->count(),
+            'montantValide' => (int) $valides->sum('montant_valide'),
+            'taux' => $siens->count() > 0 ? $valides->count() / $siens->count() : null,
+        ];
+    })->filter(fn ($l) => $l['emis'] > 0)->sortByDesc('montantValide')->values();
+});
+
 $kpis = computed(function () {
     $lignes = (clone $this->requeteBase)->get();
     $emis = $lignes->count();
@@ -57,8 +77,12 @@ $kpis = computed(function () {
     return [
         'emis' => $emis,
         'montantEmis' => $lignes->sum('montant_devis'),
+        'montantEmisMecanique' => (int) $lignes->where('activite', 'Mécanique')->sum('montant_devis'),
+        'montantEmisSinistre' => (int) $lignes->where('activite', 'Sinistre')->sum('montant_devis'),
         'valides' => $valides->count(),
         'montantValide' => $valides->sum('montant_valide'),
+        'montantValideMecanique' => (int) $valides->where('activite', 'Mécanique')->sum('montant_valide'),
+        'montantValideSinistre' => (int) $valides->where('activite', 'Sinistre')->sum('montant_valide'),
         'refuses' => $refuses,
         'attente' => $attente,
         'tauxTransfo' => $emis > 0 ? $valides->count() / $emis : null,
@@ -113,10 +137,18 @@ $graphique = computed(function () {
 });
 
 $detail = computed(function () {
-    $q = (clone $this->requeteBase)->with(['commercial', 'site'])->latest('date_emission');
+    $q = (clone $this->requeteBase)->with(['commercial', 'site', 'facture'])->latest('date_emission');
 
     if ($this->statutFiltre) {
         $q->where('statut', $this->statutFiltre);
+    }
+
+    if ($this->dateFiltre) {
+        $q->whereDate('date_emission', $this->dateFiltre);
+    }
+
+    if ($this->nFactureFiltre) {
+        $q->whereHas('facture', fn ($f) => $f->where('n_facture', 'like', '%'.$this->nFactureFiltre.'%'));
     }
 
     return $q->get();
@@ -129,10 +161,12 @@ $detail = computed(function () {
         :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="Devis émis — {{ $this->libellePerimetre }}" :value="$this->kpis['emis']" :sub="ae($this->kpis['montantEmis'])" />
-        <x-kpi-card label="Validés" :value="$this->kpis['valides']" :sub="ae($this->kpis['montantValide'])" couleur="#0E9F6E" />
-        <x-kpi-card label="Refusés" :value="$this->kpis['refuses']" couleur="#C8102E" />
-        <x-kpi-card label="En attente" :value="$this->kpis['attente']" :accent="$this->kpis['attente'] > 0" />
+        <x-kpi-card label="Devis émis — {{ $this->libellePerimetre }}" :value="$this->kpis['emis']" :sub="ae($this->kpis['montantEmis'])"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['montantEmisMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['montantEmisSinistre'])" />
+        <x-kpi-card label="Validés — {{ $this->libellePerimetre }}" :value="$this->kpis['valides']" :sub="ae($this->kpis['montantValide'])" couleur="#0E9F6E"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['montantValideMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['montantValideSinistre'])" />
+        <x-kpi-card label="Refusés — {{ $this->libellePerimetre }}" :value="$this->kpis['refuses']" couleur="#C8102E" />
+        <x-kpi-card label="En attente — {{ $this->libellePerimetre }}" :value="$this->kpis['attente']" :accent="$this->kpis['attente'] > 0" />
         <x-kpi-card label="Taux transfo (nb)" :value="an($this->kpis['tauxTransfo'])" />
         <x-kpi-card label="Différenciation moyenne" :value="ae($this->kpis['differenciation'] !== null ? (int) $this->kpis['differenciation'] : null)"
             sub="Écart moyen devis → validé" />
@@ -144,6 +178,36 @@ $detail = computed(function () {
     <div style="margin-bottom:20px;">
         <x-chart-card titre="Devis émis vs validés" id="devis-hebdo"
             :labels="$this->graphique['labels']" :datasets="$this->graphique['datasets']" />
+    </div>
+
+    <div class="carte" style="margin-bottom:20px;">
+        <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Répartition par commercial</h3>
+        <div class="tableau-conteneur">
+            <table class="tableau">
+                <thead>
+                    <tr>
+                        <th>Commercial</th>
+                        <th>Devis émis</th>
+                        <th>Devis validés</th>
+                        <th>Montant validé</th>
+                        <th>Taux de transformation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($this->parCommercial as $ligne)
+                        <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                            <td style="font-weight:700;">{{ $ligne['commercial']->nom }}</td>
+                            <td>{{ $ligne['emis'] }}</td>
+                            <td>{{ $ligne['valides'] }}</td>
+                            <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['montantValide']) }}</td>
+                            <td style="font-weight:700; color:{{ ($ligne['taux'] ?? 0) >= 0.5 ? '#0E9F6E' : '#D97706' }};">{{ an($ligne['taux']) }}</td>
+                        </tr>
+                    @empty
+                        <x-table-vide :colspan="5" texte="Aucun devis enregistré sur cette période." />
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <div class="carte">
@@ -163,6 +227,10 @@ $detail = computed(function () {
                 <option value="Validé">Validé</option>
                 <option value="Refusé">Refusé</option>
             </select>
+            <input type="date" wire:model.live="dateFiltre"
+                style="padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px;">
+            <input type="text" wire:model.live.debounce.400ms="nFactureFiltre" placeholder="N° de facture…"
+                style="width:160px; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px;">
         </div>
         <div class="tableau-conteneur">
             <table class="tableau">
@@ -180,12 +248,18 @@ $detail = computed(function () {
                         <th>Statut du devis</th>
                         <th>Montant du devis</th>
                         <th>Montant validé</th>
+                        <th>Montant restant</th>
                         <th>Activité</th>
                         <th>Observations</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($this->detail->forPage($pageDetail, 10) as $ligne)
+                        @php
+                            $montantFacture = $ligne->facture?->montant ?? 0;
+                            $montantRestant = $ligne->montant_valide !== null ? $ligne->montant_valide - $montantFacture : null;
+                            $couleurRestant = $montantRestant === null ? 'inherit' : ($montantRestant > $montantFacture ? '#C8102E' : '#0E9F6E');
+                        @endphp
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td style="font-weight:700;">{{ $ligne->numero }}</td>
                             <td>{{ $ligne->date_reception?->format('d/m/Y') ?? '—' }}</td>
@@ -201,11 +275,12 @@ $detail = computed(function () {
                             </td>
                             <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne->montant_devis) }}</td>
                             <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne->montant_valide) }}</td>
+                            <td style="font-variant-numeric:tabular-nums; font-weight:700; color:{{ $couleurRestant }};">{{ $montantRestant !== null ? ae($montantRestant) : '—' }}</td>
                             <td>{{ $ligne->activite }}</td>
                             <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 12 : 11" texte="Aucun devis enregistré sur cette période." />
+                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 13 : 12" texte="Aucun devis enregistré sur cette période." />
                     @endforelse
                 </tbody>
             </table>

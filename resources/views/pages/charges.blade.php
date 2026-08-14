@@ -39,11 +39,15 @@ $caPeriode = computed(function () {
 });
 
 $kpis = computed(function () {
-    $lignes = (clone $this->requeteBase)->where('type_operation', 'Charges')->get();
+    $lignes = (clone $this->requeteBase)->where('type_operation', 'Charges')->with('site:id,activite')->get();
     $total = (int) $lignes->sum('montant');
+    $mecanique = (int) $lignes->filter(fn ($l) => $l->site?->activite === 'Mécanique')->sum('montant');
+    $sinistre = (int) $lignes->filter(fn ($l) => $l->site?->activite === 'Sinistre')->sum('montant');
 
     return [
         'total' => $total,
+        'totalMecanique' => $mecanique,
+        'totalSinistre' => $sinistre,
         'pieces' => (int) $lignes->where('libelle', 'Achats pièces')->sum('montant'),
         'salaires' => (int) $lignes->where('libelle', 'Salaires & personnel')->sum('montant'),
         'resultat' => $this->caPeriode - $total,
@@ -81,10 +85,11 @@ $detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('da
         :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="Total charges — {{ $this->libellePerimetre }}" :value="ae($this->kpis['total'])" sub="Hors transferts et décaissements DG" />
+        <x-kpi-card label="Total charges — {{ $this->libellePerimetre }}" :value="ae($this->kpis['total'])" sub="Hors transferts et décaissements DG"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['totalMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['totalSinistre'])" />
         <x-kpi-card label="Achats pièces" :value="ae($this->kpis['pieces'])" />
         <x-kpi-card label="Salaires & personnel" :value="ae($this->kpis['salaires'])" />
-        <x-kpi-card label="Résultat net" :value="ae($this->kpis['resultat'])" :couleur="$this->kpis['resultat'] >= 0 ? '#0E9F6E' : '#C8102E'" sub="CA facturé − charges" />
+        <x-kpi-card label="Résultat net — {{ $this->libellePerimetre }}" :value="ae($this->kpis['resultat'])" :couleur="$this->kpis['resultat'] >= 0 ? '#0E9F6E' : '#C8102E'" sub="CA facturé − charges" />
     </div>
 
     <div style="margin-bottom:20px;">

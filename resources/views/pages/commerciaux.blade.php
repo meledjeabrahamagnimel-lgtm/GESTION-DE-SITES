@@ -106,8 +106,8 @@ $graphique = computed(fn () => [
             :mecanique="$activiteFiltre ? null : ae($this->kpis['objectifMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['objectifSinistre'])" />
         <x-kpi-card label="Réalisation totale" :value="ae($this->kpis['realisation'])"
             :mecanique="$activiteFiltre ? null : ae($this->kpis['realisationMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['realisationSinistre'])" />
-        <x-kpi-card label="Écart global" :value="ae($this->kpis['ecart'])" :couleur="$this->kpis['ecart'] >= 0 ? '#0E9F6E' : '#C8102E'" />
-        <x-kpi-card label="Taux de Réalisation" :value="an($this->kpis['taux'])" />
+        <x-kpi-card label="Écart global — {{ $this->libellePerimetre }}" :value="ae($this->kpis['ecart'])" :couleur="$this->kpis['ecart'] >= 0 ? '#0E9F6E' : '#C8102E'" />
+        <x-kpi-card label="Taux de Réalisation — {{ $this->libellePerimetre }}" :value="an($this->kpis['taux'])" />
     </div>
 
     <div style="margin-bottom:20px;">

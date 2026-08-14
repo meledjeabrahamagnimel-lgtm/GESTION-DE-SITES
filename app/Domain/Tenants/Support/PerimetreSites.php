@@ -78,16 +78,24 @@ class PerimetreSites
     /**
      * Description courte du périmètre actuellement retenu, pour que les libellés de
      * KPI (« CA — … ») reflètent toujours ce qui est réellement affiché.
+     *
+     * L'activité doit apparaître même sans ville explicitement choisie : les rôles à
+     * ville unique (Responsable, Commercial, Caissier) n'ont jamais de villeFiltre à
+     * renseigner, et un « return » anticipé sur ce seul critère laissait le libellé
+     * bloqué sur « consolidé » quel que soit le choix Mécanique/Sinistre.
      */
     public static function libellePerimetre(User $utilisateur, ?string $villeFiltre, ?string $activiteFiltre = null): string
     {
-        if (! $villeFiltre) {
-            return $utilisateur->hasRole('gerant') ? 'toutes villes' : 'consolidé';
+        $nomVille = $villeFiltre ? (Ville::find($villeFiltre)?->nom ?? 'ville') : null;
+
+        if ($activiteFiltre) {
+            return $nomVille ? "{$nomVille} — {$activiteFiltre}" : $activiteFiltre;
         }
 
-        $ville = Ville::find($villeFiltre);
-        $nomVille = $ville?->nom ?? 'ville';
+        if ($nomVille) {
+            return "{$nomVille} — consolidé";
+        }
 
-        return $activiteFiltre ? "{$nomVille} — {$activiteFiltre}" : "{$nomVille} — consolidé";
+        return $utilisateur->hasRole('gerant') ? 'toutes villes' : 'consolidé';
     }
 }
