@@ -190,6 +190,7 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
             'entreprise_id' => $entreprise->id,
             'annee' => now()->year,
             'statut' => 'Ouvert',
+            'est_defaut' => true,
         ]);
     }
 }
