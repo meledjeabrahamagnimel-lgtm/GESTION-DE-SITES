@@ -12,6 +12,7 @@ class DatabaseSeeder extends Seeder
             SuperAdminSeeder::class,
             EntrepriseArtisanAutomobileSeeder::class,
             DonneesOperationnellesSeeder::class,
+            VillesBouakeSanPedroSeeder::class,
             MessagerieEtNotesSeeder::class,
         ]);
     }

@@ -65,8 +65,24 @@ class DonneesOperationnellesSeeder extends Seeder
             return;
         }
 
-        $debut = Carbon::now()->subDays(self::JOURS_HISTORIQUE);
         $sites = Site::where('entreprise_id', $entreprise->id)->get();
+
+        $this->genererPourSites($sites, $entreprise->id);
+    }
+
+    /**
+     * Génère l'historique complet (prospections → devis → factures → encaissements →
+     * charges, sur JOURS_HISTORIQUE jours) pour un ensemble de sites donné. Extrait de
+     * run() pour pouvoir être rejoué sur un sous-ensemble de sites — une ville ajoutée
+     * après coup, par exemple — sans toucher aux écritures déjà générées ailleurs : la
+     * calibration des charges (calibrerCharges) est elle-même bornée aux mêmes sites,
+     * pour ne jamais recalculer les montants d'une ville qui n'est pas concernée.
+     *
+     * @param  \Illuminate\Support\Collection<int, Site>  $sites
+     */
+    public function genererPourSites($sites, int $entrepriseId): void
+    {
+        $debut = Carbon::now()->subDays(self::JOURS_HISTORIQUE);
 
         foreach ($sites as $site) {
             $commerciaux = Commercial::where('site_id', $site->id)->where('est_spontane', false)->get();
@@ -94,10 +110,10 @@ class DonneesOperationnellesSeeder extends Seeder
                     $devisApresPassage = $passage && random_int(1, 100) <= 45;
 
                     $prospection = Prospection::create([
-                        'entreprise_id' => $entreprise->id,
+                        'entreprise_id' => $entrepriseId,
                         'site_id' => $site->id,
                         'commercial_id' => $commercial->id,
-                        'numero' => GenerateurNumero::suivant($entreprise->id, 'pro'),
+                        'numero' => GenerateurNumero::suivant($entrepriseId, 'pro'),
                         'date' => $date->toDateString(),
                         'client' => self::CLIENTS_DEMO[array_rand(self::CLIENTS_DEMO)],
                         'localisation' => self::LOCALISATIONS[array_rand(self::LOCALISATIONS)],
@@ -123,11 +139,11 @@ class DonneesOperationnellesSeeder extends Seeder
                     $montantValide = $statut === 'Validé' ? (int) round($montantDevis * (random_int(70, 98) / 100)) : null;
 
                     $devis = Devis::create([
-                        'entreprise_id' => $entreprise->id,
+                        'entreprise_id' => $entrepriseId,
                         'site_id' => $site->id,
                         'commercial_id' => $commercial->id,
                         'prospection_id' => $prospection->id,
-                        'numero' => GenerateurNumero::suivant($entreprise->id, 'dev'),
+                        'numero' => GenerateurNumero::suivant($entrepriseId, 'dev'),
                         'n_fiche_reception' => 'FR-'.$site->code.'-'.random_int(100, 999),
                         'date_reception' => $date->toDateString(),
                         'date_emission' => $date->copy()->addDays(random_int(0, 3))->toDateString(),
@@ -148,11 +164,11 @@ class DonneesOperationnellesSeeder extends Seeder
                     }
 
                     $facture = Facture::create([
-                        'entreprise_id' => $entreprise->id,
+                        'entreprise_id' => $entrepriseId,
                         'site_id' => $site->id,
                         'devis_id' => $devis->id,
                         'commercial_id' => $commercial->id,
-                        'numero' => GenerateurNumero::suivant($entreprise->id, 'fac'),
+                        'numero' => GenerateurNumero::suivant($entrepriseId, 'fac'),
                         'n_facture' => 'FAC-'.$site->code.'-'.random_int(1000, 9999),
                         'date' => $dateFacture->toDateString(),
                         'client' => $devis->client,
@@ -163,7 +179,7 @@ class DonneesOperationnellesSeeder extends Seeder
 
                     if (random_int(1, 100) <= 88) {
                         Encaissement::create([
-                            'entreprise_id' => $entreprise->id,
+                            'entreprise_id' => $entrepriseId,
                             'site_id' => $site->id,
                             'facture_id' => $facture->id,
                             'date' => $dateFacture->copy()->addDays(random_int(0, 4))->min(Carbon::now())->toDateString(),
@@ -175,12 +191,12 @@ class DonneesOperationnellesSeeder extends Seeder
                     }
                 }
 
-                $this->genererCharges($entreprise->id, $site->id, $date);
+                $this->genererCharges($entrepriseId, $site->id, $date);
             }
         }
 
-        $this->completerJoursRecents($entreprise->id, $sites);
-        $this->calibrerCharges($entreprise->id);
+        $this->completerJoursRecents($entrepriseId, $sites);
+        $this->calibrerCharges($sites->pluck('id')->all());
     }
 
     /**
@@ -418,10 +434,17 @@ class DonneesOperationnellesSeeder extends Seeder
      * facteur d'échelle unique pour viser une structure de coûts réaliste (~65 % du CA),
      * qui laisse un résultat net positif et lisible dans la démonstration.
      */
-    private function calibrerCharges(int $entrepriseId): void
+    /**
+     * Bornée aux sites passés (et non à toute l'entreprise) pour qu'un rejeu partiel —
+     * une ville ajoutée après coup — ne recalcule jamais les charges d'une ville déjà
+     * calibrée par un précédent passage.
+     *
+     * @param  array<int, int>  $siteIds
+     */
+    private function calibrerCharges(array $siteIds): void
     {
-        $ca = Facture::withoutGlobalScopes()->where('entreprise_id', $entrepriseId)->sum('montant');
-        $charges = Charge::withoutGlobalScopes()->where('entreprise_id', $entrepriseId)->sum('montant');
+        $ca = Facture::withoutGlobalScopes()->whereIn('site_id', $siteIds)->sum('montant');
+        $charges = Charge::withoutGlobalScopes()->whereIn('site_id', $siteIds)->sum('montant');
 
         if ($ca <= 0 || $charges <= 0) {
             return;
@@ -430,7 +453,7 @@ class DonneesOperationnellesSeeder extends Seeder
         $facteur = ($ca * self::PART_CHARGES) / $charges;
 
         Charge::withoutGlobalScopes()
-            ->where('entreprise_id', $entrepriseId)
+            ->whereIn('site_id', $siteIds)
             // ROUND() plutôt que CAST(... AS INTEGER) : ce type n'existe pas en MySQL,
             // qui attend SIGNED. ROUND est comprise à l'identique par MySQL et SQLite.
             ->update(['montant' => DB::raw('ROUND(montant * '.round($facteur, 4).')')]);
