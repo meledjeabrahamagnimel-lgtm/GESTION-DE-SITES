@@ -69,4 +69,22 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*'),
         );
+
+        /*
+         * Deux onglets du même navigateur partagent un seul cookie de session : se
+         * connecter à un second compte dans l'onglet B remplace aussi la session de
+         * l'onglet A, resté ouvert sur une page dont le rôle ne correspond plus à qui
+         * est réellement connecté. La prochaine action dans cet onglet A (rafraîchir,
+         * cliquer un lien) déclenche alors un 403 "User does not have the right roles"
+         * — techniquement correct, mais incompréhensible pour l'utilisateur, qui n'a
+         * rien fait de mal. On le renvoie plutôt vers l'espace du compte réellement
+         * connecté, comme le fait déjà /redirection après une connexion normale.
+         */
+        $exceptions->render(function (\Spatie\Permission\Exceptions\UnauthorizedException $e, Request $request) {
+            if ($request->expectsJson() || ! auth()->check()) {
+                return null;
+            }
+
+            return redirect()->route('redirection');
+        });
     })->create();
