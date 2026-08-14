@@ -31,11 +31,9 @@
                 <nav style="display:flex; gap:4px; flex-wrap:wrap;">
                     @foreach ($navigation as $item)
                         @if (isset($item['groupe']))
-                            <details class="nav-groupe">
+                            <details class="nav-groupe" name="nav-groupe">
                                 <summary class="{{ $item['actif'] ? 'nav-actif' : '' }}"
-                                   style="display:flex; align-items:center; gap:6px; padding:9px 14px; border-radius:7px; font-size:14.5px; font-weight:600; white-space:nowrap; cursor:pointer; list-style:none;
-                                          color:{{ $item['actif'] ? '#fff' : '#C7C9CF' }};
-                                          background:{{ $item['actif'] ? 'var(--th-accent, #C8102E)' : 'transparent' }};">
+                                   style="display:flex; align-items:center; gap:6px; padding:9px 14px; border-radius:7px; font-size:14.5px; font-weight:600; white-space:nowrap; cursor:pointer; list-style:none;">
                                     {{ $item['label'] }} <span style="font-size:10px;">▾</span>
                                 </summary>
                                 <div class="nav-groupe-panneau">

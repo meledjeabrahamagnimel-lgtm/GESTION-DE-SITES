@@ -50,9 +50,12 @@ $sitesRetenus = computed(function () {
     return Site::whereIn('id', $ids)->with('ville')->orderBy('nom')->get();
 });
 
-/** Commerciaux des sites retenus, pour le filtre qui apparaît une fois la ville connue. */
-$commerciaux = computed(fn () => Commercial::where('est_spontane', false)
-    ->whereIn('site_id', $this->sitesRetenus->pluck('id'))->orderBy('nom')->get());
+/**
+ * Commerciaux des sites retenus, pour le filtre qui apparaît une fois la ville connue —
+ * y compris les "Client spontané" : une vente sans commercial nommé reste un cas réel
+ * qu'on doit pouvoir isoler.
+ */
+$commerciaux = computed(fn () => Commercial::whereIn('site_id', $this->sitesRetenus->pluck('id'))->orderBy('est_spontane')->orderBy('nom')->get());
 
 $synthese = computed(function () {
     [$debut, $fin] = $this->plage;

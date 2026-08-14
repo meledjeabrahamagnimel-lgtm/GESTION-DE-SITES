@@ -55,8 +55,9 @@ $requeteBase = computed(function () {
     return $q;
 });
 
-$commerciaux = computed(fn () => Commercial::where('est_spontane', false)
-    ->whereIn('site_id', $this->idsSites)->orderBy('nom')->get());
+// Inclut les commerciaux "Client spontané" : une prospection sur un client venu de
+// lui-même, sans commercial nommé, reste un cas réel qu'on doit pouvoir filtrer.
+$commerciaux = computed(fn () => Commercial::whereIn('site_id', $this->idsSites)->orderBy('est_spontane')->orderBy('nom')->get());
 
 /** Répartition des prospections par commercial sur la période retenue. */
 $parCommercial = computed(function () {

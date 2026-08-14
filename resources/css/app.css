@@ -259,10 +259,19 @@ header nav a.nav-actif:hover { filter: brightness(1.12); }
    ouvert — seule la position et l'habillage du panneau sont à notre charge. */
 .nav-groupe { position: relative; display: flex; align-items: center; }
 .nav-groupe:not([open]) .nav-groupe-panneau { display: none; }
-.nav-groupe summary { transition: background-color .12s ease, filter .12s ease; }
+.nav-groupe summary { transition: background-color .12s ease, filter .12s ease; color: #C7C9CF; background: transparent; }
 .nav-groupe summary::-webkit-details-marker { display: none; }
 .nav-groupe summary::marker { content: ""; }
-.nav-groupe:not(:has(> summary.nav-actif)) summary:hover { background-color: rgba(255, 255, 255, .1); }
+/* Actif soit parce que la page en cours appartient au groupe, soit parce que le menu
+   est ouvert : le clic doit faire venir le rouge tout de suite, pas seulement une fois
+   sur une des pages du groupe. */
+.nav-groupe summary.nav-actif,
+.nav-groupe[open] summary {
+    color: #fff;
+    background: var(--th-accent, #C8102E);
+}
+.nav-groupe:not([open]):not(:has(> summary.nav-actif)) summary:hover { background-color: rgba(255, 255, 255, .1); }
+.nav-groupe[open] summary:hover,
 .nav-groupe:has(> summary.nav-actif) summary:hover { filter: brightness(1.12); }
 .nav-groupe-panneau {
     position: absolute;
