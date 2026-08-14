@@ -46,19 +46,40 @@ $caPeriode = computed(function () {
     return (int) Facture::whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin])->sum('montant');
 });
 
+$caPeriodeMecanique = computed(function () {
+    [$debut, $fin] = $this->plage;
+
+    return (int) Facture::whereIn('site_id', $this->idsSites)->where('activite', 'Mécanique')->whereBetween('date', [$debut, $fin])->sum('montant');
+});
+
+$caPeriodeSinistre = computed(function () {
+    [$debut, $fin] = $this->plage;
+
+    return (int) Facture::whereIn('site_id', $this->idsSites)->where('activite', 'Sinistre')->whereBetween('date', [$debut, $fin])->sum('montant');
+});
+
 $kpis = computed(function () {
     $lignes = (clone $this->requeteBase)->where('type_operation', 'Charges')->with('site:id,activite')->get();
     $total = (int) $lignes->sum('montant');
     $mecanique = (int) $lignes->filter(fn ($l) => $l->site?->activite === 'Mécanique')->sum('montant');
     $sinistre = (int) $lignes->filter(fn ($l) => $l->site?->activite === 'Sinistre')->sum('montant');
 
+    $parActivite = fn ($libelle, $activite) => (int) $lignes->where('libelle', $libelle)
+        ->filter(fn ($l) => $l->site?->activite === $activite)->sum('montant');
+
     return [
         'total' => $total,
         'totalMecanique' => $mecanique,
         'totalSinistre' => $sinistre,
         'pieces' => (int) $lignes->where('libelle', 'Achats pièces')->sum('montant'),
+        'piecesMecanique' => $parActivite('Achats pièces', 'Mécanique'),
+        'piecesSinistre' => $parActivite('Achats pièces', 'Sinistre'),
         'salaires' => (int) $lignes->where('libelle', 'Salaires & personnel')->sum('montant'),
+        'salairesMecanique' => $parActivite('Salaires & personnel', 'Mécanique'),
+        'salairesSinistre' => $parActivite('Salaires & personnel', 'Sinistre'),
         'resultat' => $this->caPeriode - $total,
+        'resultatMecanique' => $this->caPeriodeMecanique - $mecanique,
+        'resultatSinistre' => $this->caPeriodeSinistre - $sinistre,
     ];
 });
 
@@ -96,9 +117,12 @@ $detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('da
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="Total charges — {{ $this->libellePerimetre }}" :value="ae($this->kpis['total'])" sub="Hors transferts et décaissements DG"
             :mecanique="$activiteFiltre ? null : ae($this->kpis['totalMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['totalSinistre'])" />
-        <x-kpi-card label="Achats pièces" :value="ae($this->kpis['pieces'])" />
-        <x-kpi-card label="Salaires & personnel" :value="ae($this->kpis['salaires'])" />
-        <x-kpi-card label="Résultat net — {{ $this->libellePerimetre }}" :value="ae($this->kpis['resultat'])" :couleur="$this->kpis['resultat'] >= 0 ? '#0E9F6E' : '#C8102E'" sub="CA facturé − charges" />
+        <x-kpi-card label="Achats pièces" :value="ae($this->kpis['pieces'])"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['piecesMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['piecesSinistre'])" />
+        <x-kpi-card label="Salaires & personnel" :value="ae($this->kpis['salaires'])"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['salairesMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['salairesSinistre'])" />
+        <x-kpi-card label="Résultat net — {{ $this->libellePerimetre }}" :value="ae($this->kpis['resultat'])" :couleur="$this->kpis['resultat'] >= 0 ? '#0E9F6E' : '#C8102E'" sub="CA facturé − charges"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['resultatMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['resultatSinistre'])" />
     </div>
 
     <div style="margin-bottom:20px;">

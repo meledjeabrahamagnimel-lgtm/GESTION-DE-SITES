@@ -79,11 +79,24 @@ $parCommercial = computed(function () {
 
 $kpis = computed(function () {
     $lignes = (clone $this->requeteBase)->get();
+    $passages = $lignes->where('passage', true);
+    $passagesMecanique = $passages->where('activite', 'Mécanique');
+    $passagesSinistre = $passages->where('activite', 'Sinistre');
+    $devisApresMecanique = $passagesMecanique->where('devis_apres_passage', true)->count();
+    $devisApresSinistre = $passagesSinistre->where('devis_apres_passage', true)->count();
 
     return [
         'clients' => $lignes->count(),
-        'passages' => $lignes->where('passage', true)->count(),
+        'clientsMecanique' => $lignes->where('activite', 'Mécanique')->count(),
+        'clientsSinistre' => $lignes->where('activite', 'Sinistre')->count(),
+        'passages' => $passages->count(),
+        'passagesMecanique' => $passagesMecanique->count(),
+        'passagesSinistre' => $passagesSinistre->count(),
         'devisApres' => $lignes->where('devis_apres_passage', true)->count(),
+        'devisApresMecanique' => $devisApresMecanique,
+        'devisApresSinistre' => $devisApresSinistre,
+        'tauxMecanique' => $passagesMecanique->count() > 0 ? $devisApresMecanique / $passagesMecanique->count() : null,
+        'tauxSinistre' => $passagesSinistre->count() > 0 ? $devisApresSinistre / $passagesSinistre->count() : null,
     ];
 });
 
@@ -125,11 +138,15 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="Clients visités — {{ $this->libellePerimetre }}" :value="$this->kpis['clients']" />
-        <x-kpi-card label="Passages sur site — {{ $this->libellePerimetre }}" :value="$this->kpis['passages']" />
-        <x-kpi-card label="Devis après passage — {{ $this->libellePerimetre }}" :value="$this->kpis['devisApres']" />
-        <x-kpi-card label="Taux devis / passage"
-            :value="an($this->kpis['passages'] > 0 ? $this->kpis['devisApres'] / $this->kpis['passages'] : null)" />
+        <x-kpi-card label="Clients visités — {{ $this->libellePerimetre }}" :value="$this->kpis['clients']"
+            :mecanique="$activiteFiltre ? null : $this->kpis['clientsMecanique']" :sinistre="$activiteFiltre ? null : $this->kpis['clientsSinistre']" />
+        <x-kpi-card label="Passages sur site — {{ $this->libellePerimetre }}" :value="$this->kpis['passages']"
+            :mecanique="$activiteFiltre ? null : $this->kpis['passagesMecanique']" :sinistre="$activiteFiltre ? null : $this->kpis['passagesSinistre']" />
+        <x-kpi-card label="Devis après passage — {{ $this->libellePerimetre }}" :value="$this->kpis['devisApres']"
+            :mecanique="$activiteFiltre ? null : $this->kpis['devisApresMecanique']" :sinistre="$activiteFiltre ? null : $this->kpis['devisApresSinistre']" />
+        <x-kpi-card label="Taux devis / passage — {{ $this->libellePerimetre }}"
+            :value="an($this->kpis['passages'] > 0 ? $this->kpis['devisApres'] / $this->kpis['passages'] : null)"
+            :mecanique="$activiteFiltre ? null : an($this->kpis['tauxMecanique'])" :sinistre="$activiteFiltre ? null : an($this->kpis['tauxSinistre'])" />
     </div>
 
     <div style="margin-bottom:20px;">

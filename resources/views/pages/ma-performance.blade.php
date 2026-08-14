@@ -66,6 +66,10 @@ $kpis = computed(function () {
     };
 
     $caSite = (int) Facture::where('site_id', $this->commercial->site_id)->whereBetween('date', [$debut, $fin])->sum('montant');
+    $caSiteMecanique = (int) Facture::where('site_id', $this->commercial->site_id)->where('activite', 'Mécanique')->whereBetween('date', [$debut, $fin])->sum('montant');
+    $caSiteSinistre = (int) Facture::where('site_id', $this->commercial->site_id)->where('activite', 'Sinistre')->whereBetween('date', [$debut, $fin])->sum('montant');
+    $encaisseMecanique = (int) $this->factures->where('activite', 'Mécanique')->sum('encaissements_sum_montant');
+    $encaisseSinistre = (int) $this->factures->where('activite', 'Sinistre')->sum('encaissements_sum_montant');
 
     return [
         'objectif' => $objectif,
@@ -75,10 +79,20 @@ $kpis = computed(function () {
         'realisationMecanique' => $realisationMecanique,
         'realisationSinistre' => $realisationSinistre,
         'ecart' => $realisation - $objectif,
+        'ecartMecanique' => $realisationMecanique - $objectifMecanique,
+        'ecartSinistre' => $realisationSinistre - $objectifSinistre,
         'taux' => $objectif > 0 ? $realisation / $objectif : null,
+        'tauxMecanique' => $objectifMecanique > 0 ? $realisationMecanique / $objectifMecanique : null,
+        'tauxSinistre' => $objectifSinistre > 0 ? $realisationSinistre / $objectifSinistre : null,
         'contribution' => $caSite > 0 ? $realisation / $caSite : null,
+        'contributionMecanique' => $caSiteMecanique > 0 ? $realisationMecanique / $caSiteMecanique : null,
+        'contributionSinistre' => $caSiteSinistre > 0 ? $realisationSinistre / $caSiteSinistre : null,
         'encaisse' => $encaisse,
+        'encaisseMecanique' => $encaisseMecanique,
+        'encaisseSinistre' => $encaisseSinistre,
         'tauxRecouvrement' => $realisation > 0 ? $encaisse / $realisation : null,
+        'tauxRecouvrementMecanique' => $realisationMecanique > 0 ? $encaisseMecanique / $realisationMecanique : null,
+        'tauxRecouvrementSinistre' => $realisationSinistre > 0 ? $encaisseSinistre / $realisationSinistre : null,
     ];
 });
 
@@ -104,13 +118,18 @@ $kpis = computed(function () {
             <x-kpi-card label="Réalisation" :value="ae($this->kpis['realisation'])"
                 :mecanique="$activiteFiltre ? null : ae($this->kpis['realisationMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['realisationSinistre'])" />
             <x-kpi-card label="Écart" :value="ae($this->kpis['ecart'])"
-                :bon="$this->kpis['ecart'] >= 0" :accent="$this->kpis['ecart'] < 0" />
+                :bon="$this->kpis['ecart'] >= 0" :accent="$this->kpis['ecart'] < 0"
+                :mecanique="$activiteFiltre ? null : ae($this->kpis['ecartMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['ecartSinistre'])" />
             <x-kpi-card label="Taux de Réalisation" :value="an($this->kpis['taux'])"
-                :bon="($this->kpis['taux'] ?? 0) >= 1" :accent="($this->kpis['taux'] ?? 0) < 1" />
-            <x-kpi-card label="Montant encaissé" :value="ae($this->kpis['encaisse'])" couleur="#0E9F6E" />
+                :bon="($this->kpis['taux'] ?? 0) >= 1" :accent="($this->kpis['taux'] ?? 0) < 1"
+                :mecanique="$activiteFiltre ? null : an($this->kpis['tauxMecanique'])" :sinistre="$activiteFiltre ? null : an($this->kpis['tauxSinistre'])" />
+            <x-kpi-card label="Montant encaissé" :value="ae($this->kpis['encaisse'])" couleur="#0E9F6E"
+                :mecanique="$activiteFiltre ? null : ae($this->kpis['encaisseMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['encaisseSinistre'])" />
             <x-kpi-card label="Taux de recouvrement" :value="an($this->kpis['tauxRecouvrement'])"
-                sub="Encaissé ÷ facturé" :bon="($this->kpis['tauxRecouvrement'] ?? 0) >= 1" />
-            <x-kpi-card label="Contribution au CA du site" :value="an($this->kpis['contribution'])" />
+                sub="Encaissé ÷ facturé" :bon="($this->kpis['tauxRecouvrement'] ?? 0) >= 1"
+                :mecanique="$activiteFiltre ? null : an($this->kpis['tauxRecouvrementMecanique'])" :sinistre="$activiteFiltre ? null : an($this->kpis['tauxRecouvrementSinistre'])" />
+            <x-kpi-card label="Contribution au CA du site" :value="an($this->kpis['contribution'])"
+                :mecanique="$activiteFiltre ? null : an($this->kpis['contributionMecanique'])" :sinistre="$activiteFiltre ? null : an($this->kpis['contributionSinistre'])" />
         </div>
 
         <div class="carte">

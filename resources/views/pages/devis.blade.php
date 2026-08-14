@@ -92,16 +92,43 @@ $kpis = computed(function () {
         'montantValideMecanique' => (int) $valides->where('activite', 'Mécanique')->sum('montant_valide'),
         'montantValideSinistre' => (int) $valides->where('activite', 'Sinistre')->sum('montant_valide'),
         'refuses' => $refuses,
+        'refusesMecanique' => $lignes->where('statut', 'Refusé')->where('activite', 'Mécanique')->count(),
+        'refusesSinistre' => $lignes->where('statut', 'Refusé')->where('activite', 'Sinistre')->count(),
         'attente' => $attente,
+        'attenteMecanique' => $lignes->where('statut', 'En attente')->where('activite', 'Mécanique')->count(),
+        'attenteSinistre' => $lignes->where('statut', 'En attente')->where('activite', 'Sinistre')->count(),
         'tauxTransfo' => $emis > 0 ? $valides->count() / $emis : null,
+        'tauxTransfoMecanique' => $this->tauxTransfo($lignes, 'Mécanique'),
+        'tauxTransfoSinistre' => $this->tauxTransfo($lignes, 'Sinistre'),
         // Écart moyen entre le montant proposé et le montant réellement validé.
         'differenciation' => $valides->count() > 0
             ? (int) round($valides->sum('montant_devis') - $valides->sum('montant_valide')) / $valides->count()
             : null,
+        'differenciationMecanique' => $this->differenciationMoyenne($valides, 'Mécanique'),
+        'differenciationSinistre' => $this->differenciationMoyenne($valides, 'Sinistre'),
         // Délai moyen, en jours, entre la réception du véhicule et l'émission du devis.
         'delaiEnvoi' => $this->delaiMoyenEnvoi($lignes),
+        'delaiEnvoiMecanique' => $this->delaiMoyenEnvoi($lignes->where('activite', 'Mécanique')),
+        'delaiEnvoiSinistre' => $this->delaiMoyenEnvoi($lignes->where('activite', 'Sinistre')),
     ];
 });
+
+/** Taux de transformation (validés ÷ émis) restreint à une activité. */
+$tauxTransfo = function ($lignes, $activite) {
+    $lignesActivite = $lignes->where('activite', $activite);
+    $emis = $lignesActivite->count();
+
+    return $emis > 0 ? $lignesActivite->where('statut', 'Validé')->count() / $emis : null;
+};
+
+/** Écart moyen devis → validé restreint à une activité, parmi les devis déjà validés. */
+$differenciationMoyenne = function ($valides, $activite) {
+    $lignesActivite = $valides->where('activite', $activite);
+
+    return $lignesActivite->count() > 0
+        ? (int) round($lignesActivite->sum('montant_devis') - $lignesActivite->sum('montant_valide')) / $lignesActivite->count()
+        : null;
+};
 
 /** Délai moyen réception → émission, en jours entiers (null si aucune date de réception connue). */
 $delaiMoyenEnvoi = function ($lignes) {
@@ -174,14 +201,21 @@ $detail = computed(function () {
             :mecanique="$activiteFiltre ? null : ae($this->kpis['montantEmisMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['montantEmisSinistre'])" />
         <x-kpi-card label="Validés — {{ $this->libellePerimetre }}" :value="$this->kpis['valides']" :sub="ae($this->kpis['montantValide'])" couleur="#0E9F6E"
             :mecanique="$activiteFiltre ? null : ae($this->kpis['montantValideMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['montantValideSinistre'])" />
-        <x-kpi-card label="Refusés — {{ $this->libellePerimetre }}" :value="$this->kpis['refuses']" couleur="#C8102E" />
-        <x-kpi-card label="En attente — {{ $this->libellePerimetre }}" :value="$this->kpis['attente']" :accent="$this->kpis['attente'] > 0" />
-        <x-kpi-card label="Taux transfo (nb)" :value="an($this->kpis['tauxTransfo'])" />
-        <x-kpi-card label="Différenciation moyenne" :value="ae($this->kpis['differenciation'] !== null ? (int) $this->kpis['differenciation'] : null)"
-            sub="Écart moyen devis → validé" />
-        <x-kpi-card label="Délai moyen d'envoi"
+        <x-kpi-card label="Refusés — {{ $this->libellePerimetre }}" :value="$this->kpis['refuses']" couleur="#C8102E"
+            :mecanique="$activiteFiltre ? null : $this->kpis['refusesMecanique']" :sinistre="$activiteFiltre ? null : $this->kpis['refusesSinistre']" />
+        <x-kpi-card label="En attente — {{ $this->libellePerimetre }}" :value="$this->kpis['attente']" :accent="$this->kpis['attente'] > 0"
+            :mecanique="$activiteFiltre ? null : $this->kpis['attenteMecanique']" :sinistre="$activiteFiltre ? null : $this->kpis['attenteSinistre']" />
+        <x-kpi-card label="Taux transfo (nb) — {{ $this->libellePerimetre }}" :value="an($this->kpis['tauxTransfo'])"
+            :mecanique="$activiteFiltre ? null : an($this->kpis['tauxTransfoMecanique'])" :sinistre="$activiteFiltre ? null : an($this->kpis['tauxTransfoSinistre'])" />
+        <x-kpi-card label="Différenciation moyenne — {{ $this->libellePerimetre }}" :value="ae($this->kpis['differenciation'] !== null ? (int) $this->kpis['differenciation'] : null)"
+            sub="Écart moyen devis → validé"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['differenciationMecanique'] !== null ? (int) $this->kpis['differenciationMecanique'] : null)"
+            :sinistre="$activiteFiltre ? null : ae($this->kpis['differenciationSinistre'] !== null ? (int) $this->kpis['differenciationSinistre'] : null)" />
+        <x-kpi-card label="Délai moyen d'envoi — {{ $this->libellePerimetre }}"
             :value="$this->kpis['delaiEnvoi'] !== null ? $this->kpis['delaiEnvoi'].' j' : '—'"
-            sub="Réception → émission" />
+            sub="Réception → émission"
+            :mecanique="$activiteFiltre ? null : ($this->kpis['delaiEnvoiMecanique'] !== null ? $this->kpis['delaiEnvoiMecanique'].' j' : '—')"
+            :sinistre="$activiteFiltre ? null : ($this->kpis['delaiEnvoiSinistre'] !== null ? $this->kpis['delaiEnvoiSinistre'].' j' : '—')" />
     </div>
 
     <div style="margin-bottom:20px;">

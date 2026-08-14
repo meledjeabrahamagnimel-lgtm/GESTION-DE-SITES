@@ -79,17 +79,25 @@ $classement = computed(function () {
 $kpis = computed(function () {
     $objectifTotal = $this->classement->sum('objectif');
     $realisationTotal = $this->classement->sum('realisation');
+    $objectifMecanique = $this->classement->sum('objectifMecanique');
+    $objectifSinistre = $this->classement->sum('objectifSinistre');
+    $realisationMecanique = $this->classement->sum('realisationMecanique');
+    $realisationSinistre = $this->classement->sum('realisationSinistre');
 
     return [
         'nombre' => $this->classement->count(),
         'objectif' => $objectifTotal,
-        'objectifMecanique' => $this->classement->sum('objectifMecanique'),
-        'objectifSinistre' => $this->classement->sum('objectifSinistre'),
+        'objectifMecanique' => $objectifMecanique,
+        'objectifSinistre' => $objectifSinistre,
         'realisation' => $realisationTotal,
-        'realisationMecanique' => $this->classement->sum('realisationMecanique'),
-        'realisationSinistre' => $this->classement->sum('realisationSinistre'),
+        'realisationMecanique' => $realisationMecanique,
+        'realisationSinistre' => $realisationSinistre,
         'ecart' => $realisationTotal - $objectifTotal,
+        'ecartMecanique' => $realisationMecanique - $objectifMecanique,
+        'ecartSinistre' => $realisationSinistre - $objectifSinistre,
         'taux' => $objectifTotal > 0 ? $realisationTotal / $objectifTotal : null,
+        'tauxMecanique' => $objectifMecanique > 0 ? $realisationMecanique / $objectifMecanique : null,
+        'tauxSinistre' => $objectifSinistre > 0 ? $realisationSinistre / $objectifSinistre : null,
     ];
 });
 
@@ -114,8 +122,10 @@ $graphique = computed(fn () => [
             :mecanique="$activiteFiltre ? null : ae($this->kpis['objectifMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['objectifSinistre'])" />
         <x-kpi-card label="Réalisation totale" :value="ae($this->kpis['realisation'])"
             :mecanique="$activiteFiltre ? null : ae($this->kpis['realisationMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['realisationSinistre'])" />
-        <x-kpi-card label="Écart global — {{ $this->libellePerimetre }}" :value="ae($this->kpis['ecart'])" :couleur="$this->kpis['ecart'] >= 0 ? '#0E9F6E' : '#C8102E'" />
-        <x-kpi-card label="Taux de Réalisation — {{ $this->libellePerimetre }}" :value="an($this->kpis['taux'])" />
+        <x-kpi-card label="Écart global — {{ $this->libellePerimetre }}" :value="ae($this->kpis['ecart'])" :couleur="$this->kpis['ecart'] >= 0 ? '#0E9F6E' : '#C8102E'"
+            :mecanique="$activiteFiltre ? null : ae($this->kpis['ecartMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['ecartSinistre'])" />
+        <x-kpi-card label="Taux de Réalisation — {{ $this->libellePerimetre }}" :value="an($this->kpis['taux'])"
+            :mecanique="$activiteFiltre ? null : an($this->kpis['tauxMecanique'])" :sinistre="$activiteFiltre ? null : an($this->kpis['tauxSinistre'])" />
     </div>
 
     <div style="margin-bottom:20px;">
