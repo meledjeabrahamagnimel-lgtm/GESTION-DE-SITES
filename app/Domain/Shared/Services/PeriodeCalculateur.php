@@ -50,8 +50,12 @@ class PeriodeCalculateur
         $annee = $aujourdhui->year;
 
         if (! $moisFiltre) {
-            // « Tous les mois » : l'exercice depuis le 1er janvier jusqu'à aujourd'hui.
-            return [Carbon::create($annee, 1, 1)->startOfDay(), $aujourdhui->copy()->startOfDay()];
+            // « Tous les mois » : l'exercice complet (1er janvier au 31 décembre), pas
+            // seulement jusqu'à aujourd'hui — pour que l'objectif de la période reflète la
+            // cible annuelle complète (objectif mensuel × 12) et non un prorata figé sur la
+            // date du jour. Les requêtes sur des écritures réelles ne portent de toute façon
+            // jamais au-delà d'aujourd'hui : aucune ligne future n'existe pour les gonfler.
+            return [Carbon::create($annee, 1, 1)->startOfDay(), Carbon::create($annee, 12, 31)->startOfDay()];
         }
 
         $moisDebut = Carbon::create($annee, $moisFiltre, 1)->startOfMonth();

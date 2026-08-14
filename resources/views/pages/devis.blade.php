@@ -47,8 +47,8 @@ $requeteBase = computed(function () {
         $q->where('client', 'like', '%'.$this->recherche.'%');
     }
 
-    if ($this->commercialFiltre) {
-        $q->where('commercial_id', $this->commercialFiltre);
+    if ($this->idsCommercialFiltre !== null) {
+        $q->whereIn('commercial_id', $this->idsCommercialFiltre);
     }
 
     return $q;
@@ -57,6 +57,19 @@ $requeteBase = computed(function () {
 // Inclut les commerciaux "Client spontané" : un devis pour un client venu de lui-même,
 // sans commercial nommé, reste un cas réel qu'on doit pouvoir filtrer.
 $commerciaux = computed(fn () => Commercial::whereIn('site_id', $this->idsSites)->orderBy('est_spontane')->orderBy('nom')->get());
+
+/**
+ * Résout le filtre commercial en identifiants concrets : un site a un "Client
+ * spontané" distinct par activité (Mécanique et Sinistre), donc choisir "Client
+ * spontané" dans la liste doit filtrer sur les deux à la fois, pas sur un seul.
+ */
+$idsCommercialFiltre = computed(function () {
+    if ($this->commercialFiltre === 'spontane') {
+        return $this->commerciaux->where('est_spontane', true)->pluck('id')->all();
+    }
+
+    return $this->commercialFiltre ? [(int) $this->commercialFiltre] : null;
+});
 
 /** Répartition des devis par commercial sur la période retenue : nombre émis, validés et montant validé. */
 $parCommercial = computed(function () {

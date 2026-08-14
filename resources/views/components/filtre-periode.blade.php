@@ -70,9 +70,14 @@
     @if ($afficherCommercial)
         <select wire:model.live="commercialFiltre" class="champ" style="width:auto; font-weight:600; background:#fff;">
             <option value="">Tous les commerciaux</option>
-            @foreach ($commerciaux as $commercial)
+            @foreach ($commerciaux->where('est_spontane', false) as $commercial)
                 <option value="{{ $commercial->id }}">{{ $commercial->nom }}</option>
             @endforeach
+            {{-- Un « Client spontané » par site (Mécanique et Sinistre) : une seule entrée
+                 à l'écran, qui filtre sur l'ensemble d'entre eux à la fois. --}}
+            @if ($commerciaux->contains('est_spontane', true))
+                <option value="spontane">Client spontané</option>
+            @endif
         </select>
     @endif
 </div>

@@ -57,6 +57,19 @@ $sitesRetenus = computed(function () {
  */
 $commerciaux = computed(fn () => Commercial::whereIn('site_id', $this->sitesRetenus->pluck('id'))->orderBy('est_spontane')->orderBy('nom')->get());
 
+/**
+ * Résout le filtre commercial en identifiants concrets : un site a un "Client
+ * spontané" distinct par activité (Mécanique et Sinistre), donc choisir "Client
+ * spontané" dans la liste doit filtrer sur les deux à la fois, pas sur un seul.
+ */
+$idsCommercialFiltre = computed(function () {
+    if ($this->commercialFiltre === 'spontane') {
+        return $this->commerciaux->where('est_spontane', true)->pluck('id')->all();
+    }
+
+    return $this->commercialFiltre ? [(int) $this->commercialFiltre] : null;
+});
+
 $synthese = computed(function () {
     [$debut, $fin] = $this->plage;
 
@@ -65,12 +78,12 @@ $synthese = computed(function () {
         // base : seuls les devis et factures, rattachés à un commercial précis, peuvent
         // être restreints par le filtre.
         $caFacture = (int) Facture::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])
-            ->when($this->commercialFiltre, fn ($q) => $q->where('commercial_id', $this->commercialFiltre))->sum('montant');
+            ->when($this->idsCommercialFiltre !== null, fn ($q) => $q->whereIn('commercial_id', $this->idsCommercialFiltre))->sum('montant');
         $charges = (int) Charge::where('site_id', $site->id)->where('type_operation', 'Charges')->whereBetween('date', [$debut, $fin])->sum('montant');
         $encaisse = (int) Encaissement::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('montant');
         $decaisse = (int) Charge::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('montant');
         $devisAttente = Devis::where('site_id', $site->id)->where('statut', 'En attente')->whereBetween('date_emission', [$debut, $fin])
-            ->when($this->commercialFiltre, fn ($q) => $q->where('commercial_id', $this->commercialFiltre))->count();
+            ->when($this->idsCommercialFiltre !== null, fn ($q) => $q->whereIn('commercial_id', $this->idsCommercialFiltre))->count();
         $sansFacture = (int) SaisieJournaliere::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('vehicules_sans_facture');
 
         return [
@@ -91,7 +104,7 @@ $kpis = computed(function () {
     $idsSites = $this->sitesRetenus->pluck('id');
 
     $devisEmis = Devis::whereIn('site_id', $idsSites)->whereBetween('date_emission', [$debut, $fin])
-        ->when($this->commercialFiltre, fn ($q) => $q->where('commercial_id', $this->commercialFiltre));
+        ->when($this->idsCommercialFiltre !== null, fn ($q) => $q->whereIn('commercial_id', $this->idsCommercialFiltre));
     $nbEmis = (clone $devisEmis)->count();
     $nbValides = (clone $devisEmis)->where('statut', 'Validé')->count();
     $tauxTransfoActivite = function ($activite) use ($devisEmis) {
@@ -102,7 +115,7 @@ $kpis = computed(function () {
     };
 
     $facturesQ = Facture::whereIn('site_id', $idsSites)->whereBetween('date', [$debut, $fin])
-        ->when($this->commercialFiltre, fn ($q) => $q->where('commercial_id', $this->commercialFiltre));
+        ->when($this->idsCommercialFiltre !== null, fn ($q) => $q->whereIn('commercial_id', $this->idsCommercialFiltre));
 
     // Charges, encaissements, résultat et véhicules sans facture n'ont pas d'étiquette
     // Mécanique/Sinistre en base — ils ne sont rattachés qu'au site où ils sont
