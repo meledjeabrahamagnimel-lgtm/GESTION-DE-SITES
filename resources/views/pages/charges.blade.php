@@ -49,8 +49,7 @@ $caPeriode = computed(function () {
 /**
  * Les charges n'ont pas d'étiquette Mécanique/Sinistre en base — contrairement au CA
  * (chaque facture porte la sienne) : elles ne sont rattachées qu'au site où elles sont
- * enregistrées. Or un même site accueille souvent un commercial qui vend sur les deux
- * activités (voir la note de Commercial::activite « Mécanique/Sinistre »), si bien
+ * enregistrées. Or un même commercial vend sur les deux activités d'une ville, si bien
  * qu'une ventilation par activité du site afficherait « Sinistre : 0 F » même quand des
  * charges liées à cette activité existent bel et bien — trompeur plutôt qu'informatif.
  * Ces KPI restent donc consolidés, sans tenter une répartition que la base ne permet

@@ -4,7 +4,7 @@ namespace App\Domain\Operations\Models;
 
 use App\Domain\Shared\Concerns\AppartientAUneEntreprise;
 use App\Domain\Shared\Models\DonneeLibre;
-use App\Domain\Tenants\Models\Site;
+use App\Domain\Tenants\Models\Ville;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 #[Fillable([
-    'entreprise_id', 'site_id', 'user_id', 'numero', 'nom', 'activite',
+    'entreprise_id', 'ville_id', 'user_id', 'numero', 'nom',
     'objectif_mecanique', 'objectif_sinistre', 'objectif_mensuel', 'statut', 'est_spontane',
 ])]
 class Commercial extends Model
@@ -54,9 +54,9 @@ class Commercial extends Model
         return $this->objectif_mensuel * 12;
     }
 
-    public function site(): BelongsTo
+    public function ville(): BelongsTo
     {
-        return $this->belongsTo(Site::class);
+        return $this->belongsTo(Ville::class);
     }
 
     public function utilisateur(): BelongsTo

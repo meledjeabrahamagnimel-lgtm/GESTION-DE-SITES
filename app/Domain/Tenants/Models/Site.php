@@ -2,7 +2,6 @@
 
 namespace App\Domain\Tenants\Models;
 
-use App\Domain\Operations\Models\Commercial;
 use App\Domain\Shared\Concerns\AppartientAUneEntreprise;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -10,7 +9,6 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** Un site est l'endroit d'activité précis où l'entreprise opère (une ville, une activité). */
 #[Fillable(['entreprise_id', 'ville_id', 'activite', 'nom', 'responsable_id', 'est_actif'])]
@@ -37,11 +35,6 @@ class Site extends Model
     public function responsable(): BelongsTo
     {
         return $this->belongsTo(User::class, 'responsable_id');
-    }
-
-    public function commerciaux(): HasMany
-    {
-        return $this->hasMany(Commercial::class);
     }
 
     /** Vrai si $user est responsable de ce site, directement ou via sa ville. */

@@ -53,7 +53,7 @@ $requeteBase = computed(function () {
 });
 
 $commerciaux = computed(fn () => Commercial::where('est_spontane', false)
-    ->whereIn('site_id', $this->idsSites)->orderBy('nom')->get());
+    ->whereIn('ville_id', PerimetreSites::idsVillesRetenus(auth()->user(), $this->villeFiltre))->orderBy('nom')->get());
 
 $chargesPeriode = computed(function () {
     [$debut, $fin] = $this->plage;

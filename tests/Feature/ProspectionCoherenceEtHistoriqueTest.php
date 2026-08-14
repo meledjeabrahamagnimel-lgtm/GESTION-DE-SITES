@@ -49,8 +49,8 @@ class ProspectionCoherenceEtHistoriqueTest extends TestCase
         $this->site = Site::create(['entreprise_id' => $this->entreprise->id, 'ville_id' => $ville->id, 'nom' => 'Abidjan — Mécanique', 'activite' => 'Mécanique']);
 
         $this->commercial = Commercial::create([
-            'entreprise_id' => $this->entreprise->id, 'site_id' => $this->site->id,
-            'numero' => 'C-0001', 'nom' => 'Commercial Test', 'activite' => 'Mécanique',
+            'entreprise_id' => $this->entreprise->id, 'ville_id' => $ville->id,
+            'numero' => 'C-0001', 'nom' => 'Commercial Test',
         ]);
     }
 

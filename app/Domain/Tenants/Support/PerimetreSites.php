@@ -49,6 +49,22 @@ class PerimetreSites
     }
 
     /**
+     * Identifiants des villes à interroger pour les commerciaux : un commercial n'est
+     * pas rattaché à une activité mais à une ville entière, donc son périmètre ignore
+     * le niveau « activité » du filtre (une ville en fait déjà toujours partie ou pas).
+     */
+    public static function idsVillesRetenus(User $utilisateur, ?string $villeFiltre): array
+    {
+        $villes = self::villesVisibles($utilisateur);
+
+        if ($villeFiltre) {
+            $villes = $villes->where('id', (int) $villeFiltre);
+        }
+
+        return $villes->pluck('id')->all();
+    }
+
+    /**
      * Options du filtre Ville : toujours proposées au Gérant, dont le périmètre
      * s'étend structurellement à toute l'entreprise — même s'il n'a qu'une seule ville
      * aujourd'hui, il doit pouvoir la sélectionner explicitement pour en préciser

@@ -85,8 +85,8 @@ class DonneesOperationnellesSeeder extends Seeder
         $debut = Carbon::now()->subDays(self::JOURS_HISTORIQUE);
 
         foreach ($sites as $site) {
-            $commerciaux = Commercial::where('site_id', $site->id)->where('est_spontane', false)->get();
-            $spontane = Commercial::where('site_id', $site->id)->where('est_spontane', true)->first();
+            $commerciaux = Commercial::where('ville_id', $site->ville_id)->where('est_spontane', false)->get();
+            $spontane = Commercial::where('ville_id', $site->ville_id)->where('est_spontane', true)->first();
 
             if ($commerciaux->isEmpty()) {
                 continue;
@@ -118,7 +118,7 @@ class DonneesOperationnellesSeeder extends Seeder
                         'client' => self::CLIENTS_DEMO[array_rand(self::CLIENTS_DEMO)],
                         'localisation' => self::LOCALISATIONS[array_rand(self::LOCALISATIONS)],
                         'moyen' => ['RDV', 'Téléphone', 'Mail'][array_rand(['RDV', 'Téléphone', 'Mail'])],
-                        'activite' => $this->activitePourTransaction($commercial),
+                        'activite' => $site->activite,
                         'passage' => $passage,
                         'devis_apres_passage' => $devisApresPassage,
                         // Circuit de validation : l'essentiel est validé, mais les tout derniers
@@ -213,7 +213,7 @@ class DonneesOperationnellesSeeder extends Seeder
     private function completerJoursRecents(int $entrepriseId, $sites): void
     {
         foreach ($sites as $site) {
-            $commerciaux = Commercial::where('site_id', $site->id)->where('est_spontane', false)->get();
+            $commerciaux = Commercial::where('ville_id', $site->ville_id)->where('est_spontane', false)->get();
 
             if ($commerciaux->isEmpty()) {
                 continue;
@@ -360,7 +360,7 @@ class DonneesOperationnellesSeeder extends Seeder
     private function creerChaineComplete(int $entrepriseId, Site $site, Commercial $commercial, Carbon $date, string $statut): void
     {
         $client = self::CLIENTS_DEMO[array_rand(self::CLIENTS_DEMO)];
-        $activite = $this->activitePourTransaction($commercial);
+        $activite = $site->activite;
         $jour = $date->toDateString();
 
         $prospection = Prospection::create([
@@ -457,18 +457,6 @@ class DonneesOperationnellesSeeder extends Seeder
             // ROUND() plutôt que CAST(... AS INTEGER) : ce type n'existe pas en MySQL,
             // qui attend SIGNED. ROUND est comprise à l'identique par MySQL et SQLite.
             ->update(['montant' => DB::raw('ROUND(montant * '.round($facteur, 4).')')]);
-    }
-
-    /**
-     * Une prospection/un devis/une facture porte toujours une seule activité, jamais
-     * « Mécanique/Sinistre » (réservée aux commerciaux polyvalents) : on tire au sort
-     * pour ces commerciaux-là, et on reprend l'activité déclarée pour les autres.
-     */
-    private function activitePourTransaction(Commercial $commercial): string
-    {
-        return in_array($commercial->activite, ['Mécanique', 'Sinistre'], true)
-            ? $commercial->activite
-            : (random_int(0, 1) ? 'Mécanique' : 'Sinistre');
     }
 
     private function genererCharges(int $entrepriseId, int $siteId, Carbon $date): void

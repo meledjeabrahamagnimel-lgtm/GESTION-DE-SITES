@@ -55,7 +55,8 @@ $sitesRetenus = computed(function () {
  * y compris les "Client spontané" : une vente sans commercial nommé reste un cas réel
  * qu'on doit pouvoir isoler.
  */
-$commerciaux = computed(fn () => Commercial::whereIn('site_id', $this->sitesRetenus->pluck('id'))->orderBy('est_spontane')->orderBy('nom')->get());
+// Un commercial travaille pour toute une ville, jamais pour un seul de ses sites.
+$commerciaux = computed(fn () => Commercial::whereIn('ville_id', PerimetreSites::idsVillesRetenus(auth()->user(), $this->villeFiltre))->orderBy('est_spontane')->orderBy('nom')->get());
 
 /**
  * Résout le filtre commercial en identifiants concrets : un site a un "Client
@@ -218,8 +219,8 @@ $topCommerciaux = computed(function () {
     [$debut, $fin] = $this->plage;
 
     return Commercial::actifs()->where('est_spontane', false)
-        ->whereIn('site_id', $this->sitesRetenus->pluck('id'))
-        ->with('site')->get()
+        ->whereIn('ville_id', PerimetreSites::idsVillesRetenus(auth()->user(), $this->villeFiltre))
+        ->with('ville')->get()
         ->map(function ($c) use ($debut, $fin) {
             $realisation = (int) Facture::where('commercial_id', $c->id)->whereBetween('date', [$debut, $fin])->sum('montant');
             $objectif = (int) round(PeriodeCalculateur::objectifProrata((float) $c->objectif_mensuel, $debut, $fin));
@@ -319,7 +320,7 @@ $commentaires = computed(function () {
                     <div style="flex:1; min-width:0;">
                         <div style="font-weight:700; font-size:13.5px;">{{ $ligne['commercial']->nom }}</div>
                         <div style="font-size:11.5px; color:var(--th-gris,#6B6E76);">
-                            {{ $ligne['commercial']->site->nom }} · {{ $ligne['commercial']->activite }}
+                            {{ $ligne['commercial']->ville->nom }}
                         </div>
                         <div style="font-size:11.5px; color:var(--th-gris,#6B6E76);">
                             Réalisation {{ ae($ligne['realisation']) }} · atteinte

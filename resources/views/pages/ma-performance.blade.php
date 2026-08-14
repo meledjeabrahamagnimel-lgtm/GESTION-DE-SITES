@@ -3,6 +3,7 @@
 use App\Domain\Operations\Models\Commercial;
 use App\Domain\Operations\Models\Facture;
 use App\Domain\Shared\Services\PeriodeCalculateur;
+use App\Domain\Tenants\Models\Site;
 use function Livewire\Volt\{state, computed, mount};
 
 state([
@@ -24,9 +25,9 @@ mount(function () {
 $updatedMoisFiltre = function () { $this->semaineFiltre = ''; $this->jourFiltre = ''; };
 $updatedSemaineFiltre = function () { $this->jourFiltre = ''; };
 
-$commercial = computed(fn () => Commercial::where('user_id', auth()->id())->with('site.ville')->first());
+$commercial = computed(fn () => Commercial::where('user_id', auth()->id())->with('ville')->first());
 
-$villeUnique = computed(fn () => $this->commercial?->site?->ville);
+$villeUnique = computed(fn () => $this->commercial?->ville);
 
 $plage = computed(fn () => PeriodeCalculateur::plage(
     $this->periode, $this->dateDebut, $this->dateFin, $this->moisFiltre ?: null, $this->semaineFiltre ?: null, $this->jourFiltre ?: null
@@ -65,9 +66,12 @@ $kpis = computed(function () {
         default => (int) round(PeriodeCalculateur::objectifProrata((float) $this->commercial->objectif_mensuel, $debut, $fin)),
     };
 
-    $caSite = (int) Facture::where('site_id', $this->commercial->site_id)->whereBetween('date', [$debut, $fin])->sum('montant');
-    $caSiteMecanique = (int) Facture::where('site_id', $this->commercial->site_id)->where('activite', 'Mécanique')->whereBetween('date', [$debut, $fin])->sum('montant');
-    $caSiteSinistre = (int) Facture::where('site_id', $this->commercial->site_id)->where('activite', 'Sinistre')->whereBetween('date', [$debut, $fin])->sum('montant');
+    // Le commercial couvrant toute la ville, sa contribution se mesure au CA de la ville
+    // entière (ses deux sites), pas d'un seul site.
+    $idsSitesVille = Site::where('ville_id', $this->commercial->ville_id)->pluck('id');
+    $caSite = (int) Facture::whereIn('site_id', $idsSitesVille)->whereBetween('date', [$debut, $fin])->sum('montant');
+    $caSiteMecanique = (int) Facture::whereIn('site_id', $idsSitesVille)->where('activite', 'Mécanique')->whereBetween('date', [$debut, $fin])->sum('montant');
+    $caSiteSinistre = (int) Facture::whereIn('site_id', $idsSitesVille)->where('activite', 'Sinistre')->whereBetween('date', [$debut, $fin])->sum('montant');
     $encaisseMecanique = (int) $this->factures->where('activite', 'Mécanique')->sum('encaissements_sum_montant');
     $encaisseSinistre = (int) $this->factures->where('activite', 'Sinistre')->sum('encaissements_sum_montant');
 
@@ -104,7 +108,7 @@ $kpis = computed(function () {
     @else
         <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:22px; margin-bottom:20px;">
             <h1 style="font-size:22px; font-weight:800; margin:0 0 4px;">{{ $this->commercial->nom }}</h1>
-            <p style="color:#6B6E76; font-size:14.5px; margin:0;">{{ $this->commercial->site->nom }} · {{ $this->commercial->activite ?? '—' }}</p>
+            <p style="color:#6B6E76; font-size:14.5px; margin:0;">{{ $this->commercial->ville->nom }}</p>
         </div>
 
         <x-filtre-periode :periode="$periode" :ville-unique="$this->villeUnique" :activite-filtre="$activiteFiltre"
@@ -128,7 +132,7 @@ $kpis = computed(function () {
             <x-kpi-card label="Taux de recouvrement" :value="an($this->kpis['tauxRecouvrement'])"
                 sub="Encaissé ÷ facturé" :bon="($this->kpis['tauxRecouvrement'] ?? 0) >= 1"
                 :mecanique="$activiteFiltre ? null : an($this->kpis['tauxRecouvrementMecanique'])" :sinistre="$activiteFiltre ? null : an($this->kpis['tauxRecouvrementSinistre'])" />
-            <x-kpi-card label="Contribution au CA du site" :value="an($this->kpis['contribution'])"
+            <x-kpi-card label="Contribution au CA de la ville" :value="an($this->kpis['contribution'])"
                 :mecanique="$activiteFiltre ? null : an($this->kpis['contributionMecanique'])" :sinistre="$activiteFiltre ? null : an($this->kpis['contributionSinistre'])" />
         </div>
 

@@ -66,10 +66,9 @@ class CaissierEncaissementTest extends TestCase
 
         $this->commercial = Commercial::create([
             'entreprise_id' => $this->entreprise->id,
-            'site_id' => $this->site->id,
+            'ville_id' => $ville->id,
             'numero' => 'C-0001',
             'nom' => 'Commercial Test',
-            'activite' => 'Mécanique',
         ]);
     }
 

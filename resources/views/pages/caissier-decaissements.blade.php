@@ -107,7 +107,7 @@ $ajouterCharge = function () {
 
 <div>
     @if (! $this->site)
-        <x-a-venir titre="Aucun site assigné" description="Ce compte Caissier n'est rattaché à aucun site pour le moment. Contactez votre gérant ou votre responsable." />
+        <x-a-venir titre="Aucun site assigné" description="Ce compte Comptabilité n'est rattaché à aucun site pour le moment. Contactez votre gérant ou votre responsable." />
     @else
         <div class="carte">
             <div>

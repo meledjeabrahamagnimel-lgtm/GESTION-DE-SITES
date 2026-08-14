@@ -40,21 +40,21 @@ $monRole = computed(function () {
     }
 
     if (auth()->user()->hasRole('caissier')) {
-        return 'Caissier';
+        return 'Comptabilité';
     }
 
     return 'Commercial';
 });
 
-/** Site(s) sous la responsabilité de l'utilisateur : un seul pour un commercial, un ou deux pour un responsable ou un caissier. */
+/** Site(s) sous la responsabilité de l'utilisateur : les deux de sa ville pour un commercial, un ou deux pour un responsable ou un caissier. */
 $mesSites = computed(function () {
     if (auth()->user()->hasRole('responsable_site') || auth()->user()->hasRole('caissier')) {
         return Site::visiblesPour(auth()->user());
     }
 
-    $site = Commercial::where('user_id', auth()->id())->first()?->site;
+    $villeId = Commercial::where('user_id', auth()->id())->first()?->ville_id;
 
-    return $site ? collect([$site]) : collect();
+    return $villeId ? Site::where('ville_id', $villeId)->orderBy('activite')->get() : collect();
 });
 
 $maFicheCommerciale = computed(fn () => Commercial::where('user_id', auth()->id())->first());
@@ -66,7 +66,8 @@ $maFicheCommerciale = computed(fn () => Commercial::where('user_id', auth()->id(
 $estResponsable = computed(fn () => auth()->user()->hasRole('responsable_site'));
 
 $villes = computed(fn () => Ville::where('entreprise_id', auth()->user()->entreprise_id)
-    ->with(['sites' => fn ($q) => $q->withCount('commerciaux')])
+    ->withCount('commerciaux')
+    ->with('sites')
     ->orderBy('code')->get());
 
 $tousLesSites = computed(fn () => $this->villes
@@ -314,7 +315,7 @@ $enregistrerProfil = function (EnregistreurPhoto $enregistreur) {
                     <thead>
                         <tr>
                             <th>Code</th><th>Ville</th><th>Commune</th>
-                            <th>Téléphone</th><th>Responsable</th><th>Sites</th><th>Statut</th>
+                            <th>Téléphone</th><th>Responsable</th><th>Sites</th><th>Commerciaux</th><th>Statut</th>
                             <th style="text-align:right;">Actions</th>
                         </tr>
                     </thead>
@@ -327,6 +328,7 @@ $enregistrerProfil = function (EnregistreurPhoto $enregistreur) {
                                 <td>{{ $v->telephone ?? '—' }}</td>
                                 <td>{{ $v->responsable?->name ?? '—' }}</td>
                                 <td>{{ $v->sites->map->nom->implode(', ') ?: '—' }}</td>
+                                <td>{{ $v->commerciaux_count }}</td>
                                 <td>
                                     <span class="pastille {{ $v->est_actif ? 'pastille-vert' : 'pastille-ambre' }}">
                                         {{ $v->est_actif ? 'Active' : 'Inactive' }}
@@ -357,7 +359,7 @@ $enregistrerProfil = function (EnregistreurPhoto $enregistreur) {
                     <thead>
                         <tr>
                             <th>Ville</th><th>Site</th><th>Activité</th>
-                            <th>Responsable propre</th><th>Commerciaux</th><th>Statut</th>
+                            <th>Responsable propre</th><th>Statut</th>
                             <th style="text-align:right;">Actions</th>
                         </tr>
                     </thead>
@@ -368,7 +370,6 @@ $enregistrerProfil = function (EnregistreurPhoto $enregistreur) {
                                 <td style="font-weight:600;">{{ $s->nom }}</td>
                                 <td>{{ $s->activite }}</td>
                                 <td>{{ $s->responsable?->name ?? '— (hérite de la ville)' }}</td>
-                                <td>{{ $s->commerciaux_count }}</td>
                                 <td>
                                     <span class="pastille {{ $s->est_actif ? 'pastille-vert' : 'pastille-ambre' }}">
                                         {{ $s->est_actif ? 'Actif' : 'Inactif' }}

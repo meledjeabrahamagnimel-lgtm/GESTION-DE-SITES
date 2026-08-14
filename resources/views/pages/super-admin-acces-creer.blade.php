@@ -76,7 +76,7 @@ $rolesDisponibles = computed(fn () => [
     'gerant' => 'Gérant',
     'responsable_site' => 'Responsable de site',
     'commercial' => 'Commercial',
-    'caissier' => 'Caissier',
+    'caissier' => 'Comptabilité',
 ]);
 
 $objectifMecanique = computed(function () {

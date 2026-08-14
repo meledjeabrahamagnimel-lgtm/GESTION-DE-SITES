@@ -2,6 +2,7 @@
 
 namespace App\Domain\Tenants\Models;
 
+use App\Domain\Operations\Models\Commercial;
 use App\Domain\Shared\Concerns\AppartientAUneEntreprise;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -35,5 +36,10 @@ class Ville extends Model
     public function sites(): HasMany
     {
         return $this->hasMany(Site::class);
+    }
+
+    public function commerciaux(): HasMany
+    {
+        return $this->hasMany(Commercial::class);
     }
 }

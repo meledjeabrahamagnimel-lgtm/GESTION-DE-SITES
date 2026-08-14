@@ -129,35 +129,23 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
 
         Commercial::create([
             'entreprise_id' => $entreprise->id,
-            'site_id' => $siteMecanique->id,
+            'ville_id' => $ville->id,
             'user_id' => $commercial->id,
             'numero' => 'C-0001',
             'nom' => 'Koffi Yao',
-            'activite' => 'Mécanique/Sinistre',
             'objectif_mecanique' => 14_000_000,
             'objectif_sinistre' => 6_000_000,
             'statut' => 'Actif',
             'est_spontane' => false,
         ]);
 
-        // Vente sans commercial nommé : un par site, comme dans le reste de l'application.
+        // Vente sans commercial nommé : un seul par ville, celui-ci couvrant les deux
+        // activités comme tout commercial.
         Commercial::create([
             'entreprise_id' => $entreprise->id,
-            'site_id' => $siteMecanique->id,
+            'ville_id' => $ville->id,
             'numero' => 'SP-MEC',
             'nom' => 'Client spontané',
-            'activite' => null,
-            'objectif_mensuel' => 0,
-            'statut' => 'Actif',
-            'est_spontane' => true,
-        ]);
-
-        Commercial::create([
-            'entreprise_id' => $entreprise->id,
-            'site_id' => $siteSinistre->id,
-            'numero' => 'SP-SIN',
-            'nom' => 'Client spontané',
-            'activite' => null,
             'objectif_mensuel' => 0,
             'statut' => 'Actif',
             'est_spontane' => true,

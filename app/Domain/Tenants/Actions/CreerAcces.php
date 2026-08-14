@@ -46,17 +46,16 @@ class CreerAcces
             }
 
             if ($role === 'commercial') {
-                $site = Site::where('id', $donnees['site_id'])->where('entreprise_id', $entreprise->id)->firstOrFail();
+                $ville = Ville::where('id', $donnees['ville_id'])->where('entreprise_id', $entreprise->id)->firstOrFail();
                 $objectifMecanique = (int) ($donnees['objectif_mecanique'] ?? 0);
                 $objectifSinistre = (int) ($donnees['objectif_sinistre'] ?? 0);
 
                 Commercial::create([
                     'entreprise_id' => $entreprise->id,
-                    'site_id' => $site->id,
+                    'ville_id' => $ville->id,
                     'user_id' => $utilisateur->id,
                     'numero' => GenerateurNumero::suivant($entreprise->id, 'com'),
                     'nom' => $donnees['nom'],
-                    'activite' => $donnees['activite'] ?? 'Mécanique/Sinistre',
                     'objectif_mecanique' => $objectifMecanique,
                     'objectif_sinistre' => $objectifSinistre,
                     'statut' => 'Actif',

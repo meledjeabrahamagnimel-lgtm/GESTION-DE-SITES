@@ -18,7 +18,7 @@ $repartition = computed(function () {
         return [
             'site' => $site,
             'responsables' => \App\Models\User::where('entreprise_id', $this->entrepriseId)->whereHas('roles', fn ($q) => $q->where('name', 'responsable_site'))->where('id', $responsableId)->count(),
-            'commerciaux' => \App\Domain\Operations\Models\Commercial::where('site_id', $site->id)->where('est_spontane', false)->count(),
+            'commerciaux' => \App\Domain\Operations\Models\Commercial::where('ville_id', $site->ville_id)->where('est_spontane', false)->count(),
         ];
     });
 });

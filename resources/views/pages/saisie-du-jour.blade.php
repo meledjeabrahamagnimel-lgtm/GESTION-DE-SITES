@@ -21,7 +21,6 @@ uses([GereLesDonneesLibres::class]);
 
 state([
     'date' => null,
-    'siteActifId' => null,
 
     'prosClient' => '', 'prosLocalisation' => '', 'prosMoyen' => 'RDV', 'prosCommercialId' => '',
     'prosActivite' => 'Mécanique', 'prosPassage' => false, 'prosDatePassage' => null,
@@ -57,19 +56,11 @@ state([
 $mesSites = computed(fn () => Site::visiblesPour(auth()->user()));
 
 /**
- * Sites réellement pris en compte par l'écran : un seul (celui choisi), ou les deux
- * du périmètre si « Les deux » est sélectionné — auquel cas les tableaux consolident
- * les deux sites et l'Activité redevient libre dans chaque saisie.
+ * Sites pris en compte par l'écran : toujours l'ensemble du périmètre du Responsable
+ * (les deux sites de sa ville, ou le seul site dont il a la charge) — il n'y a plus de
+ * choix à faire, un commercial travaillant indifféremment sur les deux activités.
  */
-$sitesActifs = computed(function () {
-    if ($this->siteActifId === 'les-deux') {
-        return $this->mesSites;
-    }
-
-    $s = $this->siteActifId ? $this->mesSites->firstWhere('id', (int) $this->siteActifId) : $this->mesSites->first();
-
-    return $s ? collect([$s]) : collect();
-});
+$sitesActifs = computed(fn () => $this->mesSites);
 
 $siteIdsActifs = computed(fn () => $this->sitesActifs->pluck('id')->all());
 
@@ -99,7 +90,6 @@ $resoudreSiteId = function (string $activite) {
 mount(function () {
     $this->date = now()->toDateString();
     $this->chgDate = now()->toDateString();
-    $this->siteActifId = $this->mesSites->first()?->id;
     $this->prosActivite = $this->activiteVerrouillee ?? $this->prosActivite;
     $this->prosCommercialId = $this->commerciauxSelectables->keys()->first() ?? '';
     $this->chargerSaisieJournaliere();
@@ -109,19 +99,6 @@ $reinitialiserPagination = function () {
     $this->pageProsATraiter = $this->pageProsDuJour = $this->pageAttenteDevis = 1;
     $this->pageDevisDuJour = $this->pageDevisEnAttente = $this->pageValidesNonFactures = 1;
     $this->pageFacturesDuJour = $this->pageEncaissementsDuJour = $this->pageChargesDuJour = 1;
-};
-
-$updatedSiteActifId = function () {
-    $this->devisSelection = [];
-    $this->devisBrouillon = [];
-    $this->factureSelection = [];
-    $this->factureBrouillon = [];
-    $this->prosCommercialId = $this->commerciauxSelectables->keys()->first() ?? '';
-    if ($this->activiteVerrouillee) {
-        $this->prosActivite = $this->activiteVerrouillee;
-    }
-    $this->reinitialiserPagination();
-    $this->chargerSaisieJournaliere();
 };
 
 $chargerSaisieJournaliere = function () {
@@ -206,7 +183,9 @@ $dateLabel = computed(function () {
     return $jours[$d->dayOfWeek].' '.$d->format('d').' '.$mois[$d->month - 1].' '.$d->format('Y');
 });
 
-$commerciauxSelectables = computed(fn () => Commercial::whereIn('site_id', $this->siteIdsActifs)->where('statut', 'Actif')->orderBy('numero')->pluck('nom', 'id'));
+/** Un commercial travaille pour toute la ville, pas pour un site précis : on le
+ * retrouve donc via les villes couvertes par l'écran, pas via les sites eux-mêmes. */
+$commerciauxSelectables = computed(fn () => Commercial::whereIn('ville_id', $this->sitesActifs->pluck('ville_id')->unique())->where('statut', 'Actif')->orderBy('numero')->pluck('nom', 'id'));
 
 $prospectionsATraiter = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)
     ->aTraiter()->with('commercial')->orderBy('date')->get());
@@ -366,7 +345,7 @@ $ajouterProspection = function () {
         'prosClient' => ['required', 'string', 'max:255'],
         'prosLocalisation' => ['nullable', 'string', 'max:255'],
         'prosMoyen' => ['required', Rule::in(array_keys($this->optionsMoyenProspection))],
-        'prosCommercialId' => ['required', Rule::exists('commerciaux', 'id')->whereIn('site_id', $this->siteIdsActifs)],
+        'prosCommercialId' => ['required', Rule::exists('commerciaux', 'id')->whereIn('ville_id', $this->sitesActifs->pluck('ville_id')->unique())],
         'prosActivite' => ['required', Rule::in(array_keys($this->optionsActivite))],
         'prosDatePassage' => ['nullable', 'date'],
         'prosDateDevis' => ['nullable', 'date'],
@@ -454,7 +433,7 @@ $enregistrerEditionProspection = function () {
         'editionProsClient' => ['required', 'string', 'max:255'],
         'editionProsLocalisation' => ['nullable', 'string', 'max:255'],
         'editionProsMoyen' => ['required', Rule::in(array_keys($this->optionsMoyenProspection))],
-        'editionProsCommercialId' => ['required', Rule::exists('commerciaux', 'id')->whereIn('site_id', $this->siteIdsActifs)],
+        'editionProsCommercialId' => ['required', Rule::exists('commerciaux', 'id')->whereIn('ville_id', $this->sitesActifs->pluck('ville_id')->unique())],
         'editionProsActivite' => ['required', Rule::in(array_keys($this->optionsActivite))],
         'editionProsDatePassage' => ['nullable', 'date'],
         'editionProsDateDevis' => ['nullable', 'date'],
@@ -519,7 +498,7 @@ $validerDevis = function () {
 
     // Défense en profondeur : le brouillon est un tableau lié côté client, on revérifie
     // que chaque commercial/prospection référencé appartient bien à un site du Responsable.
-    $commerciauxDuSite = Commercial::whereIn('site_id', $this->siteIdsActifs)->pluck('id');
+    $commerciauxDuSite = Commercial::whereIn('ville_id', $this->sitesActifs->pluck('ville_id')->unique())->pluck('id');
     $prospectionsDuSite = Prospection::whereIn('site_id', $this->siteIdsActifs)->pluck('id');
 
     foreach ($this->devisBrouillon as $ligne) {
@@ -629,7 +608,7 @@ $validerFactures = function () {
 
     // Défense en profondeur : le brouillon est un tableau lié côté client, on revérifie
     // que chaque commercial/devis référencé appartient bien à un site du Responsable.
-    $commerciauxDuSite = Commercial::whereIn('site_id', $this->siteIdsActifs)->pluck('id');
+    $commerciauxDuSite = Commercial::whereIn('ville_id', $this->sitesActifs->pluck('ville_id')->unique())->pluck('id');
     $devisDuSite = Devis::whereIn('site_id', $this->siteIdsActifs)->pluck('id');
 
     foreach ($this->factureBrouillon as $ligne) {
@@ -790,17 +769,6 @@ $ajouterCharge = function () {
                 <p style="color:#6B6E76; font-size:14px; margin:0;">Chaque ligne est enregistrée immédiatement à l'ajout et alimente les tableaux de bord en temps réel.</p>
             </div>
             <div style="display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
-                @if ($this->mesSites->count() > 1)
-                    <div style="display:flex; flex-direction:column; gap:4px;">
-                        <label class="champ-libelle">Site</label>
-                        <select wire:model.live="siteActifId" class="champ" style="width:220px;">
-                            @foreach ($this->mesSites as $s)
-                                <option value="{{ $s->id }}">{{ $s->nom }} — {{ $s->activite }}</option>
-                            @endforeach
-                            <option value="les-deux">Les deux (Mécanique + Sinistre)</option>
-                        </select>
-                    </div>
-                @endif
                 <div style="display:flex; flex-direction:column; gap:4px;">
                     <label class="champ-libelle">Date de la journée (calendrier)</label>
                     <input type="date" wire:model.live="date" class="champ" style="width:158px;">

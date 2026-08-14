@@ -12,7 +12,7 @@ state([
     'email' => '',
     'motDePasse' => '',
     'perimetre' => '',
-    'siteChoix' => '',
+    'villeChoix' => '',
     'objectifGlobal' => Commercial::OBJECTIF_MENSUEL_DEFAUT,
     'pourcentageMecanique' => (int) (Commercial::PART_MECANIQUE_DEFAUT * 100),
     'confirmation' => null,
@@ -22,8 +22,8 @@ state([
 mount(function () {
     $this->roleActif = auth()->user()->hasRole('gerant') ? 'responsable_site' : 'commercial';
 
-    if (! auth()->user()->hasRole('gerant') && count($this->optionsSiteCommercial) === 1) {
-        $this->siteChoix = array_key_first($this->optionsSiteCommercial);
+    if (! auth()->user()->hasRole('gerant') && count($this->optionsVilleCommercial) === 1) {
+        $this->villeChoix = array_key_first($this->optionsVilleCommercial);
     }
 });
 
@@ -32,10 +32,10 @@ $rolesDisponibles = computed(function () {
     if (auth()->user()->hasRole('gerant')) {
         $roles['responsable_site'] = 'Responsable de site';
         $roles['commercial'] = 'Commercial';
-        $roles['caissier'] = 'Caissier';
+        $roles['caissier'] = 'Comptabilité';
     } elseif (auth()->user()->hasRole('responsable_site')) {
         $roles['commercial'] = 'Commercial';
-        $roles['caissier'] = 'Caissier';
+        $roles['caissier'] = 'Comptabilité';
     }
 
     return $roles;
@@ -57,59 +57,18 @@ $perimetres = computed(function () {
 });
 
 /**
- * Le site choisi définit à lui seul l'activité — inutile de faire saisir deux fois la
- * même information. Un seul contrôle propose, par ville, ses deux sites précis plus une
- * option "les deux" (valeur "ville:<id>") qui couvre les deux activités à la fois ; la
- * fiche Commercial garde un site_id obligatoire, ancré sur le site Mécanique de la ville
- * dans ce dernier cas, mais c'est bien le champ activite qui fait foi pour le filtrage.
+ * Un commercial n'est pas rattaché à une activité mais à une ville entière : il
+ * prospecte pour l'une ou l'autre selon le client, l'activité étant portée par chaque
+ * prospection et non par sa fiche.
  */
-$sitesPourCommercial = computed(fn () => auth()->user()->hasRole('gerant')
-    ? Site::where('entreprise_id', auth()->user()->entreprise_id)->where('est_actif', true)->with('ville')->orderBy('nom')->get()
-    : Site::visiblesPour(auth()->user())->load('ville'));
+$villesPourCommercial = computed(fn () => auth()->user()->hasRole('gerant')
+    ? Ville::where('entreprise_id', auth()->user()->entreprise_id)->where('est_actif', true)->orderBy('nom')->get()
+    : Ville::whereIn('id', Site::visiblesPour(auth()->user())->pluck('ville_id')->unique())->orderBy('nom')->get());
 
-$optionsSiteCommercial = computed(function () {
-    $options = [];
+$optionsVilleCommercial = computed(fn () => $this->villesPourCommercial->pluck('nom', 'id')->all());
 
-    foreach ($this->sitesPourCommercial->groupBy('ville_id') as $sitesDeLaVille) {
-        $ville = $sitesDeLaVille->first()->ville;
-
-        foreach ($sitesDeLaVille->sortBy('activite') as $site) {
-            $options['site:'.$site->id] = ($ville ? $ville->nom.' — ' : '').$site->activite;
-        }
-
-        if ($sitesDeLaVille->count() > 1) {
-            $options['ville:'.$ville?->id] = ($ville ? $ville->nom.' — ' : '').'Les deux (Mécanique + Sinistre)';
-        }
-    }
-
-    return $options;
-});
-
-/** Activité résolue à partir du choix de site : celle du site précis, ou combinée pour "les deux". */
-$activiteResolue = computed(function () {
-    if (str_starts_with((string) $this->siteChoix, 'ville:')) {
-        return 'Mécanique/Sinistre';
-    }
-
-    [$type, $id] = array_pad(explode(':', (string) $this->siteChoix, 2), 2, null);
-
-    return $type === 'site' ? $this->sitesPourCommercial->firstWhere('id', (int) $id)?->activite : null;
-});
-
-/**
- * Répartition Mécanique/Sinistre de l'objectif global : au pourcentage saisi quand le
- * commercial couvre les deux activités, entièrement sur la seule activité choisie sinon
- * — inutile de faire deviner un pourcentage à quelqu'un qui n'a qu'un seul site.
- */
-$objectifMecanique = computed(function () {
-    $global = (int) $this->objectifGlobal;
-
-    return match ($this->activiteResolue) {
-        'Mécanique' => $global,
-        'Sinistre' => 0,
-        default => (int) round($global * ((int) $this->pourcentageMecanique) / 100),
-    };
-});
+/** Répartition Mécanique/Sinistre de l'objectif global, au pourcentage saisi. */
+$objectifMecanique = computed(fn () => (int) round((int) $this->objectifGlobal * ((int) $this->pourcentageMecanique) / 100));
 
 $objectifSinistre = computed(fn () => (int) $this->objectifGlobal - $this->objectifMecanique);
 
@@ -121,7 +80,7 @@ $derniersAcces = computed(function () {
         ->get();
 
     $roles = \App\Models\User::nomsRolesParUtilisateur($utilisateurs->pluck('id'));
-    $fiches = Commercial::whereIn('user_id', $utilisateurs->pluck('id'))->with('site')->get()->keyBy('user_id');
+    $fiches = Commercial::whereIn('user_id', $utilisateurs->pluck('id'))->with('ville')->get()->keyBy('user_id');
 
     return $utilisateurs->map(fn ($u) => [
         'utilisateur' => $u,
@@ -159,7 +118,7 @@ $creer = function (CreerAcces $action) {
     }
 
     if ($this->roleActif === 'commercial') {
-        $regles['siteChoix'] = ['required', 'in:'.implode(',', array_keys($this->optionsSiteCommercial))];
+        $regles['villeChoix'] = ['required', 'in:'.implode(',', array_keys($this->optionsVilleCommercial))];
         $regles['objectifGlobal'] = ['required', 'numeric', 'min:0'];
         $regles['pourcentageMecanique'] = ['required', 'numeric', 'min:0', 'max:100'];
     }
@@ -169,33 +128,24 @@ $creer = function (CreerAcces $action) {
         'email' => 'adresse e-mail',
         'motDePasse' => 'mot de passe',
         'perimetre' => 'périmètre',
-        'siteChoix' => 'site',
+        'villeChoix' => 'ville',
         'objectifGlobal' => 'objectif mensuel',
         'pourcentageMecanique' => 'pourcentage Mécanique',
     ]);
-
-    $siteId = null;
-    if ($this->roleActif === 'commercial') {
-        [$type, $id] = explode(':', $donnees['siteChoix'], 2);
-        $siteId = $type === 'site'
-            ? (int) $id
-            : $this->sitesPourCommercial->where('ville_id', (int) $id)->sortBy('activite')->first()?->id;
-    }
 
     $action->executer(auth()->user()->entreprise, $this->roleActif, [
         'nom' => $donnees['nom'],
         'email' => $donnees['email'],
         'mot_de_passe' => $donnees['motDePasse'],
         'perimetre' => $donnees['perimetre'] ?? null,
-        'site_id' => $siteId,
-        'activite' => $this->activiteResolue,
+        'ville_id' => $donnees['villeChoix'] ?? null,
         'objectif_mecanique' => $this->objectifMecanique,
         'objectif_sinistre' => $this->objectifSinistre,
     ]);
 
     $this->reset(['nom', 'email', 'motDePasse']);
-    $this->siteChoix = (! auth()->user()->hasRole('gerant') && count($this->optionsSiteCommercial) === 1)
-        ? array_key_first($this->optionsSiteCommercial)
+    $this->villeChoix = (! auth()->user()->hasRole('gerant') && count($this->optionsVilleCommercial) === 1)
+        ? array_key_first($this->optionsVilleCommercial)
         : '';
     $this->objectifGlobal = Commercial::OBJECTIF_MENSUEL_DEFAUT;
     $this->pourcentageMecanique = (int) (Commercial::PART_MECANIQUE_DEFAUT * 100);
@@ -258,15 +208,15 @@ $creer = function (CreerAcces $action) {
             @endif
 
             @if ($roleActif === 'commercial')
-                @if (auth()->user()->hasRole('gerant') || count($this->optionsSiteCommercial) > 1)
-                    <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Site (définit l'activité)</label>
-                    <select wire:model.live="siteChoix" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
-                        <option value="">— Choisir un site —</option>
-                        @foreach ($this->optionsSiteCommercial as $valeur => $libelle)
-                            <option value="{{ $valeur }}">{{ $libelle }}</option>
+                @if (auth()->user()->hasRole('gerant') || count($this->optionsVilleCommercial) > 1)
+                    <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Ville</label>
+                    <select wire:model.live="villeChoix" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
+                        <option value="">— Choisir une ville —</option>
+                        @foreach ($this->optionsVilleCommercial as $id => $nom)
+                            <option value="{{ $id }}">{{ $nom }}</option>
                         @endforeach
                     </select>
-                    @error('siteChoix') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
+                    @error('villeChoix') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
                 @endif
 
                 <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:14px 0 6px;">Objectif mensuel global (FCFA)</label>
@@ -274,18 +224,16 @@ $creer = function (CreerAcces $action) {
                     style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
                 @error('objectifGlobal') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
 
-                @if ($this->activiteResolue === 'Mécanique/Sinistre')
-                    <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">
-                        Répartition — % Mécanique (le reste va au Sinistre)
-                    </label>
-                    <input type="number" wire:model.live="pourcentageMecanique" min="0" max="100"
-                        style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
-                    @error('pourcentageMecanique') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
-                @endif
+                <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">
+                    Répartition — % Mécanique (le reste va au Sinistre)
+                </label>
+                <input type="number" wire:model.live="pourcentageMecanique" min="0" max="100"
+                    style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
+                @error('pourcentageMecanique') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
 
                 <div style="display:flex; gap:16px; margin-top:10px; padding:10px 12px; background:#F9F9F7; border-radius:8px; font-size:13px; color:#4B4E55; flex-wrap:wrap;">
-                    <span>Mécanique : <b>{{ ae($this->objectifMecanique) }}</b>{{ $this->activiteResolue === 'Mécanique/Sinistre' ? ' ('.$pourcentageMecanique.'%)' : '' }}</span>
-                    <span>Sinistre : <b>{{ ae($this->objectifSinistre) }}</b>{{ $this->activiteResolue === 'Mécanique/Sinistre' ? ' ('.(100 - (int) $pourcentageMecanique).'%)' : '' }}</span>
+                    <span>Mécanique : <b>{{ ae($this->objectifMecanique) }}</b> ({{ $pourcentageMecanique }}%)</span>
+                    <span>Sinistre : <b>{{ ae($this->objectifSinistre) }}</b> ({{ 100 - (int) $pourcentageMecanique }}%)</span>
                     <span>Équivalent annuel : <b>{{ ae($this->objectifAnnuel) }}</b></span>
                 </div>
             @endif
@@ -306,9 +254,9 @@ $creer = function (CreerAcces $action) {
                         <th>Nom</th>
                         <th>E-mail</th>
                         <th>Rôle</th>
-                        <th>Site d'affectation</th>
+                        <th>Ville d'affectation</th>
                         <th>Objectif mensuel (FCFA)</th>
-                        <th>Objectif par site</th>
+                        <th>Objectif par activité</th>
                         <th>Statut</th>
                         <th>Action</th>
                     </tr>
@@ -319,7 +267,7 @@ $creer = function (CreerAcces $action) {
                             <td style="font-weight:600;">{{ $ligne['utilisateur']->name }}</td>
                             <td style="color:#6B6E76;">{{ $ligne['utilisateur']->email }}</td>
                             <td>{{ $ligne['role'] }}</td>
-                            <td>{{ $ligne['commercial']?->site?->nom ?? '—' }}</td>
+                            <td>{{ $ligne['commercial']?->ville?->nom ?? '—' }}</td>
                             <td style="font-variant-numeric:tabular-nums;">{{ $ligne['commercial'] ? ae($ligne['commercial']->objectif_mensuel) : '—' }}</td>
                             <td style="font-size:12.5px; color:#6B6E76;">
                                 @if ($ligne['commercial'])

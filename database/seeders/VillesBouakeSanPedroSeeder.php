@@ -143,36 +143,24 @@ class VillesBouakeSanPedroSeeder extends Seeder
 
         Commercial::create([
             'entreprise_id' => $entreprise->id,
-            'site_id' => $siteMecanique->id,
+            'ville_id' => $ville->id,
             'user_id' => $commercialUtilisateur->id,
             'numero' => GenerateurNumero::suivant($entreprise->id, 'com'),
             'nom' => $commercialNom,
-            'activite' => 'Mécanique/Sinistre',
             'objectif_mecanique' => (int) round(Commercial::OBJECTIF_MENSUEL_DEFAUT * Commercial::PART_MECANIQUE_DEFAUT),
             'objectif_sinistre' => (int) round(Commercial::OBJECTIF_MENSUEL_DEFAUT * Commercial::PART_SINISTRE_DEFAUT),
             'statut' => 'Actif',
             'est_spontane' => false,
         ]);
 
-        // Vente sans commercial nommé : un par site, comme pour Abidjan — numéros propres
-        // à la ville pour ne pas entrer en collision avec ceux d'Abidjan (SP-MEC/SP-SIN).
+        // Vente sans commercial nommé : un seul par ville (il couvre les deux activités,
+        // comme tout commercial) — numéro propre à la ville pour ne pas entrer en
+        // collision avec celui d'Abidjan (SP-MEC).
         Commercial::create([
             'entreprise_id' => $entreprise->id,
-            'site_id' => $siteMecanique->id,
-            'numero' => "SP-{$code}-MEC",
+            'ville_id' => $ville->id,
+            'numero' => "SP-{$code}",
             'nom' => 'Client spontané',
-            'activite' => null,
-            'objectif_mensuel' => 0,
-            'statut' => 'Actif',
-            'est_spontane' => true,
-        ]);
-
-        Commercial::create([
-            'entreprise_id' => $entreprise->id,
-            'site_id' => $siteSinistre->id,
-            'numero' => "SP-{$code}-SIN",
-            'nom' => 'Client spontané',
-            'activite' => null,
             'objectif_mensuel' => 0,
             'statut' => 'Actif',
             'est_spontane' => true,

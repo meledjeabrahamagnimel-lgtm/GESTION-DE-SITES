@@ -10,6 +10,7 @@ use App\Domain\Shared\Models\Note;
 use App\Domain\Shared\Models\NotificationApp;
 use App\Domain\Tenants\Models\Entreprise;
 use App\Domain\Tenants\Models\Site;
+use App\Domain\Tenants\Models\Ville;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -103,7 +104,7 @@ class MessagerieEtNotesSeeder extends Seeder
         return $utilisateurs->firstWhere('email', $email) ?? $utilisateurs->first();
     }
 
-    /** Responsable réellement en charge du site auquel ce commercial est rattaché. */
+    /** Responsable réellement en charge de la ville à laquelle ce commercial est rattaché. */
     private function responsableDuSite(?User $commercial, Collection $responsables): ?User
     {
         if (! $commercial) {
@@ -111,9 +112,9 @@ class MessagerieEtNotesSeeder extends Seeder
         }
 
         $fiche = Commercial::where('user_id', $commercial->id)->first();
-        $site = $fiche ? Site::find($fiche->site_id) : null;
+        $ville = $fiche ? Ville::find($fiche->ville_id) : null;
 
-        return $site?->responsable_id ? $responsables->firstWhere('id', $site->responsable_id) : null;
+        return $ville?->responsable_id ? $responsables->firstWhere('id', $ville->responsable_id) : null;
     }
 
     /**

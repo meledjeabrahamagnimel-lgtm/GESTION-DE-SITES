@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Operations\Models\Commercial;
 use App\Domain\Tenants\Models\Entreprise;
 use App\Domain\Tenants\Models\Exercice;
 use App\Domain\Tenants\Models\Site;
@@ -35,6 +36,9 @@ state([
     // Nouvel exercice
     'exerciceAnnee' => (int) date('Y'),
 
+    // Réaffectation d'un commercial à une nouvelle ville
+    'reaffectVilleId' => [],
+
     'pageVilles' => 1,
     'pagePersonnel' => 1,
 ]);
@@ -57,6 +61,10 @@ $personnel = computed(function () {
 
     return $utilisateurs->map(fn ($u) => ['utilisateur' => $u, 'role' => $roles[$u->id] ?? '—']);
 });
+
+/** Commerciaux nommés de l'entreprise, pour la réaffectation de ville (Gérant uniquement). */
+$commerciauxReaffectation = computed(fn () => Commercial::where('entreprise_id', auth()->user()->entreprise_id)
+    ->where('est_spontane', false)->with('ville')->orderBy('nom')->get());
 
 mount(function () {
     $e = $this->entreprise;
@@ -201,6 +209,30 @@ $ajouterVille = function () {
     $this->reset(['villeNom', 'villeCommune', 'villeTelephone', 'villeAdresse']);
     unset($this->villes, $this->sites);
     $this->message = 'Ville créée avec ses deux sites (Mécanique et Sinistre).';
+};
+
+/**
+ * Réaffecte un commercial à une nouvelle ville : un commercial travaille dans une
+ * ville, jamais figé sur une activité, et peut être déplacé au besoin (mutation,
+ * renfort d'une nouvelle ville…). Réservé au Gérant.
+ */
+$reaffecterCommercial = function (int $commercialId) {
+    if (! auth()->user()->hasRole('gerant')) {
+        return;
+    }
+
+    $nouvelleVilleId = $this->reaffectVilleId[$commercialId] ?? null;
+    if (! $nouvelleVilleId) {
+        return;
+    }
+
+    $commercial = Commercial::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($commercialId);
+    $ville = Ville::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($nouvelleVilleId);
+
+    $commercial->update(['ville_id' => $ville->id]);
+
+    unset($this->commerciauxReaffectation);
+    $this->message = "{$commercial->nom} réaffecté à {$ville->nom}.";
 };
 
 $creerExercice = function () {
@@ -420,7 +452,7 @@ $reouvrirExercice = function (int $exerciceId) {
     @if ($onglet === 'personnel')
         <x-carte-section titre="Personnel de l'entreprise">
             <p style="font-size:13px; color:var(--th-gris,#6B6E76); margin:0 0 14px;">
-                Pour créer un Responsable de site, un Commercial ou un Caissier, direction l'onglet
+                Pour créer un Responsable de site, un Commercial ou un accès Comptabilité, direction l'onglet
                 <button type="button" wire:click="$set('onglet', 'acces')" style="background:none; border:0; padding:0; color:var(--th-accent,#C8102E); font-weight:700; cursor:pointer; font-size:13px;">Ajouter un accès</button>.
             </p>
 
@@ -447,6 +479,42 @@ $reouvrirExercice = function (int $exerciceId) {
             </div>
             <x-pagination :page="$pagePersonnel" :total="$this->personnel->count()" prop="pagePersonnel" />
         </x-carte-section>
+
+        @if (auth()->user()->hasRole('gerant'))
+            <x-carte-section titre="Réaffecter un commercial">
+                <p style="font-size:13px; color:var(--th-gris,#6B6E76); margin:0 0 14px;">
+                    Un commercial travaille dans une ville entière, pas sur une seule activité : il peut être
+                    déplacé vers une autre ville à tout moment, par exemple en cas de mutation.
+                </p>
+                <div class="tableau-conteneur">
+                    <table class="tableau">
+                        <thead><tr><th>Commercial</th><th>Ville actuelle</th><th>Nouvelle ville</th><th></th></tr></thead>
+                        <tbody>
+                            @forelse ($this->commerciauxReaffectation as $commercial)
+                                <tr wire:key="reaffect-{{ $commercial->id }}">
+                                    <td style="font-weight:600;">{{ $commercial->numero }} — {{ $commercial->nom }}</td>
+                                    <td>{{ $commercial->ville->nom }}</td>
+                                    <td>
+                                        <select wire:model="reaffectVilleId.{{ $commercial->id }}" class="champ" style="width:auto;">
+                                            @foreach ($this->villesActives as $ville)
+                                                <option value="{{ $ville->id }}" @selected($ville->id === $commercial->ville_id)>{{ $ville->nom }}</option>
+                                            @endforeach
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <button type="button" wire:click="reaffecterCommercial({{ $commercial->id }})"
+                                            wire:confirm="Réaffecter {{ $commercial->nom }} à cette ville ?"
+                                            class="bouton bouton-secondaire bouton-petit">Réaffecter</button>
+                                    </td>
+                                </tr>
+                            @empty
+                                <x-table-vide :colspan="4" texte="Aucun commercial à réaffecter." />
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </x-carte-section>
+        @endif
     @endif
 
     {{-- ------------------------------------------------- Ajouter un accès --}}

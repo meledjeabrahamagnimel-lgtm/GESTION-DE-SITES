@@ -115,6 +115,35 @@ class Notificateur
             ->map(fn ($id) => (int) $id)
             ->all();
 
+        return self::responsablesActifsOuGerants($responsables, $entrepriseId);
+    }
+
+    /**
+     * Encadrement à prévenir pour une saisie d'un commercial : celui-ci travaillant
+     * pour une ville entière (les deux activités), on prévient le responsable de
+     * chacun de ses deux sites (ou celui de la ville à défaut), pas un site précis.
+     *
+     * @return array<int, int>
+     */
+    public static function encadrementDeVille(?int $villeId, int $entrepriseId): array
+    {
+        $responsables = DB::table('sites')
+            ->join('villes', 'villes.id', '=', 'sites.ville_id')
+            ->where('sites.entreprise_id', $entrepriseId)
+            ->when($villeId, fn ($q) => $q->where('villes.id', $villeId))
+            ->selectRaw('COALESCE(sites.responsable_id, villes.responsable_id) as responsable_id')
+            ->pluck('responsable_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        return self::responsablesActifsOuGerants($responsables, $entrepriseId);
+    }
+
+    /** @param  array<int, int>  $responsables
+     * @return array<int, int> */
+    private static function responsablesActifsOuGerants(array $responsables, int $entrepriseId): array
+    {
         $actifs = $responsables === []
             ? []
             : User::query()->whereIn('id', $responsables)->where('est_actif', true)->pluck('id')->all();

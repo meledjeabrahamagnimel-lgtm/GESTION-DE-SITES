@@ -56,8 +56,9 @@ $requeteBase = computed(function () {
 });
 
 // Inclut les commerciaux "Client spontané" : une prospection sur un client venu de
-// lui-même, sans commercial nommé, reste un cas réel qu'on doit pouvoir filtrer.
-$commerciaux = computed(fn () => Commercial::whereIn('site_id', $this->idsSites)->orderBy('est_spontane')->orderBy('nom')->get());
+// lui-même, sans commercial nommé, reste un cas réel qu'on doit pouvoir filtrer. Un
+// commercial travaillant pour toute une ville, le périmètre se résout par ville.
+$commerciaux = computed(fn () => Commercial::whereIn('ville_id', PerimetreSites::idsVillesRetenus(auth()->user(), $this->villeFiltre))->orderBy('est_spontane')->orderBy('nom')->get());
 
 /**
  * Résout le filtre commercial en identifiants concrets : un site a un "Client

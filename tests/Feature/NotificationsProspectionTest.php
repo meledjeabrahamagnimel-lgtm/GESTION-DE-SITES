@@ -64,11 +64,10 @@ class NotificationsProspectionTest extends TestCase
 
         $this->commercial = Commercial::create([
             'entreprise_id' => $this->entreprise->id,
-            'site_id' => $this->site->id,
+            'ville_id' => $ville->id,
             'user_id' => $this->commercialUser->id,
             'numero' => 'C001',
             'nom' => 'Commercial Un',
-            'activite' => 'Mécanique',
         ]);
     }
 

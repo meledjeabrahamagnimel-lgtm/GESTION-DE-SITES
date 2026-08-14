@@ -33,32 +33,36 @@ $plage = computed(fn () => PeriodeCalculateur::plage(
 $mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
 $villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
 $idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$idsVilles = computed(fn () => PerimetreSites::idsVillesRetenus(auth()->user(), $this->villeFiltre));
 $libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
 
 $optionsCommerciaux = computed(fn () => Commercial::actifs()->where('est_spontane', false)
-    ->whereIn('site_id', $this->idsSites)->orderBy('nom')->get());
+    ->whereIn('ville_id', $this->idsVilles)->orderBy('nom')->get());
 
 $classement = computed(function () {
     [$debut, $fin] = $this->plage;
 
-    $commerciaux = Commercial::actifs()->where('est_spontane', false)->with('site')
-        ->whereIn('site_id', $this->idsSites)
+    $commerciaux = Commercial::actifs()->where('est_spontane', false)->with('ville')
+        ->whereIn('ville_id', $this->idsVilles)
         ->when($this->commercialFiltre, fn ($q) => $q->where('id', $this->commercialFiltre))
         ->get();
 
-    // CA du site sur la période, pour exprimer la contribution de chaque commercial.
-    $caParSite = Facture::whereIn('site_id', $commerciaux->pluck('site_id')->unique())
-        ->whereBetween('date', [$debut, $fin])
-        ->selectRaw('site_id, SUM(montant) as total')
-        ->groupBy('site_id')
-        ->pluck('total', 'site_id');
+    // CA de la ville sur la période (ses deux sites), pour exprimer la contribution de
+    // chaque commercial — celui-ci travaillant pour la ville entière, pas un site précis.
+    $caParVille = Facture::query()
+        ->join('sites', 'sites.id', '=', 'factures.site_id')
+        ->whereIn('sites.ville_id', $commerciaux->pluck('ville_id')->unique())
+        ->whereBetween('factures.date', [$debut, $fin])
+        ->selectRaw('sites.ville_id, SUM(factures.montant) as total')
+        ->groupBy('sites.ville_id')
+        ->pluck('total', 'ville_id');
 
-    return $commerciaux->map(function ($commercial) use ($debut, $fin, $caParSite) {
+    return $commerciaux->map(function ($commercial) use ($debut, $fin, $caParVille) {
         $lignesFactures = Facture::where('commercial_id', $commercial->id)->whereBetween('date', [$debut, $fin])->get(['montant', 'activite']);
         $realisation = (int) $lignesFactures->sum('montant');
         $objectifProrata = (int) round(PeriodeCalculateur::objectifProrata((float) $commercial->objectif_mensuel, $debut, $fin));
         $ecart = $realisation - $objectifProrata;
-        $caSite = (int) ($caParSite[$commercial->site_id] ?? 0);
+        $caVille = (int) ($caParVille[$commercial->ville_id] ?? 0);
 
         return [
             'commercial' => $commercial,
@@ -71,7 +75,7 @@ $classement = computed(function () {
             'realisationSinistre' => (int) $lignesFactures->where('activite', 'Sinistre')->sum('montant'),
             'ecart' => $ecart,
             'taux' => $objectifProrata > 0 ? $realisation / $objectifProrata : null,
-            'contribution' => $caSite > 0 ? $realisation / $caSite : null,
+            'contribution' => $caVille > 0 ? $realisation / $caVille : null,
         ];
     })->sortByDesc(fn ($l) => $l['taux'] ?? -1)->values();
 });
@@ -143,17 +147,16 @@ $graphique = computed(fn () => [
                         <th>Rang</th>
                         <th>N°</th>
                         <th>Commercial</th>
-                        @if (! $activiteFiltre && count($this->idsSites) > 1)
-                            <th>Site</th>
+                        @if (count($this->idsVilles) > 1)
+                            <th>Ville</th>
                         @endif
-                        <th>Activité</th>
                         <th>Objectif mensuel</th>
                         <th>Objectif journalier (mensuel/30)</th>
                         <th>Objectif de la période</th>
                         <th>Réalisation</th>
                         <th>Écart</th>
                         <th>Taux de Réalisation</th>
-                        <th>Contribution au CA du site</th>
+                        <th>Contribution au CA de la ville</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -174,10 +177,9 @@ $graphique = computed(fn () => [
                             </td>
                             <td style="font-weight:700;">{{ $ligne['commercial']->numero }}</td>
                             <td style="font-weight:700;">{{ $ligne['commercial']->nom }}</td>
-                            @if (! $activiteFiltre && count($this->idsSites) > 1)
-                                <td>{{ $ligne['commercial']->site->nom }}</td>
+                            @if (count($this->idsVilles) > 1)
+                                <td>{{ $ligne['commercial']->ville->nom }}</td>
                             @endif
-                            <td>{{ $ligne['commercial']->activite }}</td>
                             <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['commercial']->objectif_mensuel) }}</td>
                             <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['objectifJournalier']) }}</td>
                             <td style="font-variant-numeric:tabular-nums;">{{ ae($ligne['objectif']) }}</td>
@@ -187,7 +189,7 @@ $graphique = computed(fn () => [
                             <td style="font-variant-numeric:tabular-nums;">{{ an($ligne['contribution']) }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 11 : 10" texte="Aucun commercial actif pour ce filtre." />
+                        <x-table-vide :colspan="count($this->idsVilles) > 1 ? 10 : 9" texte="Aucun commercial actif pour ce filtre." />
                     @endforelse
                 </tbody>
             </table>

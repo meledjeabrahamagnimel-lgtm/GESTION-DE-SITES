@@ -3,6 +3,7 @@
 use App\Domain\Operations\Models\Commercial;
 use App\Domain\Operations\Models\Prospection;
 use App\Domain\Operations\Services\GenerateurNumero;
+use App\Domain\Tenants\Models\Site;
 use App\Domain\Shared\Concerns\GereLesDonneesLibres;
 use App\Domain\Shared\Models\NotificationApp;
 use App\Domain\Shared\Models\Referentiel;
@@ -38,7 +39,7 @@ mount(function () {
     $this->activite = array_key_first($this->optionsActivite);
 });
 
-$commercial = computed(fn () => Commercial::where('user_id', auth()->id())->with('site')->first());
+$commercial = computed(fn () => Commercial::where('user_id', auth()->id())->with('ville')->first());
 
 $optionsActivite = computed(fn () => Referentiel::options(Referentiel::ACTIVITE));
 
@@ -161,9 +162,13 @@ $ajouter = function () {
         (bool) $this->devisApres, $donnees['dateDevis'],
     );
 
+    // Le commercial est rattaché à une ville, pas à une activité : le site (Mécanique
+    // ou Sinistre) se résout à partir de l'activité choisie pour cette prospection.
+    $siteId = Site::where('ville_id', $this->commercial->ville_id)->where('activite', $donnees['activite'])->value('id');
+
     Prospection::create([
         'entreprise_id' => auth()->user()->entreprise_id,
-        'site_id' => $this->commercial->site_id,
+        'site_id' => $siteId,
         'commercial_id' => $this->commercial->id,
         'numero' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'pro'),
         'date' => $donnees['date'],
@@ -209,7 +214,7 @@ $transmettreSelection = function () {
     // dormir plusieurs jours avant d'être arbitrée.
     if ($nombre > 0) {
         Notificateur::pourPlusieurs(
-            destinataires: Notificateur::encadrementDuSite($this->commercial?->site_id, auth()->user()->entreprise_id),
+            destinataires: Notificateur::encadrementDeVille($this->commercial?->ville_id, auth()->user()->entreprise_id),
             titre: $nombre.' prospection(s) à valider',
             corps: auth()->user()->name.' vient de transmettre '.$nombre.' prospection(s).',
             canal: NotificationApp::CANAL_GESTION,
@@ -239,7 +244,7 @@ $transmettreSelection = function () {
                         {{ $this->commercial->nom }}
                     </h1>
                     <p style="color:var(--th-gris,#6B6E76); font-size:12.5px; margin:2px 0 0;">
-                        {{ $this->commercial->site->nom }} · {{ $this->commercial->activite }} · N° {{ $this->commercial->numero }}
+                        {{ $this->commercial->ville->nom }} · N° {{ $this->commercial->numero }}
                     </p>
                 </div>
             </div>
