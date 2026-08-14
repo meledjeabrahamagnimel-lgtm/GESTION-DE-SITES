@@ -15,7 +15,6 @@ state([
     'semaineFiltre' => '',
     'jourFiltre' => '',
     'villeFiltre' => '',
-    'activiteFiltre' => '',
     'pageAttente' => 1,
     'pageOperations' => 1,
 ]);
@@ -33,8 +32,11 @@ $plage = computed(fn () => PeriodeCalculateur::plage(
 ));
 $mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
 $villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
-$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
-$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+// La comptabilité du caissier est toujours consolidée à l'échelle de la ville (ou du
+// site s'il n'en a qu'un) : contrairement aux autres interfaces, aucune précision
+// Mécanique/Sinistre n'est proposée ici.
+$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre));
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre));
 
 $facturesEnAttente = computed(fn () => Facture::whereIn('site_id', $this->idsSites)
     ->avecResteAEncaisser()
@@ -77,7 +79,7 @@ $dernieresOperations = computed(function () {
 
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
-        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
+        :ville-filtre="$villeFiltre" :masquer-activite="true"
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:20px;">

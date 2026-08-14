@@ -194,7 +194,8 @@ $detail = computed(function () {
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
         :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
-        :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
+        :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre"
+        :commerciaux="$this->commerciaux" :commercial-filtre="$commercialFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="Devis émis — {{ $this->libellePerimetre }}" :value="$this->kpis['emis']" :sub="ae($this->kpis['montantEmis'])"
@@ -258,12 +259,6 @@ $detail = computed(function () {
         <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
             <input type="text" wire:model.live.debounce.400ms="recherche" placeholder="Client / tiers…"
                 style="flex:1; min-width:200px; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px;">
-            <select wire:model.live="commercialFiltre" style="padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px;">
-                <option value="">Commercial : tous</option>
-                @foreach ($this->commerciaux as $commercial)
-                    <option value="{{ $commercial->id }}">{{ $commercial->nom }}</option>
-                @endforeach
-            </select>
             <select wire:model.live="statutFiltre" style="padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px;">
                 <option value="">Statut : tous</option>
                 <option value="En attente">En attente</option>

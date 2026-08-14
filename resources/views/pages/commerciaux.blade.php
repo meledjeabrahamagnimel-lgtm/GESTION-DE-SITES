@@ -36,7 +36,7 @@ $idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->
 $libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
 
 $optionsCommerciaux = computed(fn () => Commercial::actifs()->where('est_spontane', false)
-    ->whereIn('site_id', $this->idsSites)->orderBy('nom')->pluck('nom', 'id'));
+    ->whereIn('site_id', $this->idsSites)->orderBy('nom')->get());
 
 $classement = computed(function () {
     [$debut, $fin] = $this->plage;
@@ -114,7 +114,8 @@ $graphique = computed(fn () => [
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
         :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
-        :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
+        :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre"
+        :commerciaux="$this->optionsCommerciaux" :commercial-filtre="$commercialFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="Commerciaux — {{ $this->libellePerimetre }}" :value="$this->kpis['nombre']" />
@@ -135,14 +136,6 @@ $graphique = computed(fn () => [
 
     <div class="carte">
         <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Classement des commerciaux par performance</h3>
-        <div style="margin-bottom:14px;">
-            <select wire:model.live="commercialFiltre" style="padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px;">
-                <option value="">Commercial : tous</option>
-                @foreach ($this->optionsCommerciaux as $id => $nom)
-                    <option value="{{ $id }}">{{ $nom }}</option>
-                @endforeach
-            </select>
-        </div>
         <div class="tableau-conteneur">
             <table class="tableau">
                 <thead>

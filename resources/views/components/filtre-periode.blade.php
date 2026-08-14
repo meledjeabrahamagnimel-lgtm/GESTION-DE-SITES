@@ -1,6 +1,7 @@
 @props([
     'periode', 'villes' => null, 'villeUnique' => null, 'villeFiltre' => null, 'activiteFiltre' => null,
     'moisFiltre' => null, 'semaineFiltre' => null, 'jourFiltre' => null,
+    'masquerActivite' => false, 'commerciaux' => null, 'commercialFiltre' => null,
 ])
 
 @php
@@ -9,8 +10,14 @@
 
     // La précision Mécanique/Sinistre/Consolidé n'a de sens qu'une fois une ville
     // précise en contexte : soit l'utilisateur n'en a qu'une (fixe), soit le Gérant
-    // vient d'en choisir une dans la liste.
-    $afficherPrecision = $villeUnique !== null || ($villes !== null && $villeFiltre);
+    // vient d'en choisir une dans la liste. Le caissier fait exception : sa
+    // comptabilité reste toujours consolidée à l'échelle de la ville, jamais scindée
+    // par activité.
+    $afficherPrecision = ! $masquerActivite && ($villeUnique !== null || ($villes !== null && $villeFiltre));
+
+    // Le sélecteur de commercial suit la même logique : il n'apparaît qu'une fois la
+    // ville connue (fixe ou choisie), et seulement si la page en fournit la liste.
+    $afficherCommercial = $afficherPrecision && $commerciaux !== null;
 
     $mois = PeriodeCalculateur::moisDeLAnnee();
     $anneeEnCours = Carbon::today()->year;
@@ -57,6 +64,15 @@
             <option value="">Consolidé (les deux sites)</option>
             <option value="Mécanique">Mécanique</option>
             <option value="Sinistre">Sinistre</option>
+        </select>
+    @endif
+
+    @if ($afficherCommercial)
+        <select wire:model.live="commercialFiltre" class="champ" style="width:auto; font-weight:600; background:#fff;">
+            <option value="">Tous les commerciaux</option>
+            @foreach ($commerciaux as $commercial)
+                <option value="{{ $commercial->id }}">{{ $commercial->nom }}</option>
+            @endforeach
         </select>
     @endif
 </div>

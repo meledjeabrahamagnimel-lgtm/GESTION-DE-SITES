@@ -21,6 +21,7 @@ state([
     'jourFiltre' => '',
     'villeFiltre' => '',
     'activiteFiltre' => '',
+    'commercialFiltre' => '',
     'pageSynthese' => 1,
 ]);
 
@@ -49,15 +50,24 @@ $sitesRetenus = computed(function () {
     return Site::whereIn('id', $ids)->with('ville')->orderBy('nom')->get();
 });
 
+/** Commerciaux des sites retenus, pour le filtre qui apparaît une fois la ville connue. */
+$commerciaux = computed(fn () => Commercial::where('est_spontane', false)
+    ->whereIn('site_id', $this->sitesRetenus->pluck('id'))->orderBy('nom')->get());
+
 $synthese = computed(function () {
     [$debut, $fin] = $this->plage;
 
     return $this->sitesRetenus->map(function ($site) use ($debut, $fin) {
-        $caFacture = (int) Facture::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('montant');
+        // Charges, encaissements et véhicules sans facture ne portent aucun commercial en
+        // base : seuls les devis et factures, rattachés à un commercial précis, peuvent
+        // être restreints par le filtre.
+        $caFacture = (int) Facture::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])
+            ->when($this->commercialFiltre, fn ($q) => $q->where('commercial_id', $this->commercialFiltre))->sum('montant');
         $charges = (int) Charge::where('site_id', $site->id)->where('type_operation', 'Charges')->whereBetween('date', [$debut, $fin])->sum('montant');
         $encaisse = (int) Encaissement::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('montant');
         $decaisse = (int) Charge::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('montant');
-        $devisAttente = Devis::where('site_id', $site->id)->where('statut', 'En attente')->whereBetween('date_emission', [$debut, $fin])->count();
+        $devisAttente = Devis::where('site_id', $site->id)->where('statut', 'En attente')->whereBetween('date_emission', [$debut, $fin])
+            ->when($this->commercialFiltre, fn ($q) => $q->where('commercial_id', $this->commercialFiltre))->count();
         $sansFacture = (int) SaisieJournaliere::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('vehicules_sans_facture');
 
         return [
@@ -77,7 +87,8 @@ $kpis = computed(function () {
     [$debut, $fin] = $this->plage;
     $idsSites = $this->sitesRetenus->pluck('id');
 
-    $devisEmis = Devis::whereIn('site_id', $idsSites)->whereBetween('date_emission', [$debut, $fin]);
+    $devisEmis = Devis::whereIn('site_id', $idsSites)->whereBetween('date_emission', [$debut, $fin])
+        ->when($this->commercialFiltre, fn ($q) => $q->where('commercial_id', $this->commercialFiltre));
     $nbEmis = (clone $devisEmis)->count();
     $nbValides = (clone $devisEmis)->where('statut', 'Validé')->count();
     $tauxTransfoActivite = function ($activite) use ($devisEmis) {
@@ -87,7 +98,8 @@ $kpis = computed(function () {
         return $nb > 0 ? (clone $emis)->where('statut', 'Validé')->count() / $nb : null;
     };
 
-    $facturesQ = Facture::whereIn('site_id', $idsSites)->whereBetween('date', [$debut, $fin]);
+    $facturesQ = Facture::whereIn('site_id', $idsSites)->whereBetween('date', [$debut, $fin])
+        ->when($this->commercialFiltre, fn ($q) => $q->where('commercial_id', $this->commercialFiltre));
 
     $parActivite = fn ($cle, $activite) => (int) $this->synthese
         ->filter(fn ($l) => $l['site']->activite === $activite)->sum($cle);
@@ -242,7 +254,8 @@ $commentaires = computed(function () {
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
         :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
-        :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
+        :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre"
+        :commerciaux="$this->commerciaux" :commercial-filtre="$commercialFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="CA — {{ $this->libellePerimetre }}" :value="ae($this->kpis['ca'])"
