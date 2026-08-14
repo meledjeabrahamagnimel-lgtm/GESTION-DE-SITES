@@ -7,9 +7,12 @@ use App\Domain\Tenants\Support\PerimetreSites;
 use function Livewire\Volt\{state, computed, mount};
 
 state([
-    'periode' => 'periode',
+    'periode' => 'calendrier',
     'dateDebut' => null,
     'dateFin' => null,
+    'moisFiltre' => '',
+    'semaineFiltre' => '',
+    'jourFiltre' => '',
     'villeFiltre' => '',
     'activiteFiltre' => '',
     'commercialFiltre' => '',
@@ -17,11 +20,16 @@ state([
 ]);
 
 mount(function () {
-    $this->dateDebut ??= now()->startOfYear()->toDateString();
-    $this->dateFin ??= now()->toDateString();
+    $this->dateDebut ??= now()->startOfYear()->format('Y-m');
+    $this->dateFin ??= now()->format('Y-m');
 });
 
-$plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
+$updatedMoisFiltre = function () { $this->semaineFiltre = ''; $this->jourFiltre = ''; };
+$updatedSemaineFiltre = function () { $this->jourFiltre = ''; };
+
+$plage = computed(fn () => PeriodeCalculateur::plage(
+    $this->periode, $this->dateDebut, $this->dateFin, $this->moisFiltre ?: null, $this->semaineFiltre ?: null, $this->jourFiltre ?: null
+));
 $mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
 $villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
 $idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
@@ -32,7 +40,6 @@ $optionsCommerciaux = computed(fn () => Commercial::actifs()->where('est_spontan
 
 $classement = computed(function () {
     [$debut, $fin] = $this->plage;
-    $joursPeriode = PeriodeCalculateur::nombreDeJours($debut, $fin);
 
     $commerciaux = Commercial::actifs()->where('est_spontane', false)->with('site')
         ->whereIn('site_id', $this->idsSites)
@@ -46,18 +53,18 @@ $classement = computed(function () {
         ->groupBy('site_id')
         ->pluck('total', 'site_id');
 
-    return $commerciaux->map(function ($commercial) use ($debut, $fin, $joursPeriode, $caParSite) {
+    return $commerciaux->map(function ($commercial) use ($debut, $fin, $caParSite) {
         $lignesFactures = Facture::where('commercial_id', $commercial->id)->whereBetween('date', [$debut, $fin])->get(['montant', 'activite']);
         $realisation = (int) $lignesFactures->sum('montant');
-        $objectifProrata = (int) round($commercial->objectif_mensuel / 30 * $joursPeriode);
+        $objectifProrata = (int) round(PeriodeCalculateur::objectifProrata((float) $commercial->objectif_mensuel, $debut, $fin));
         $ecart = $realisation - $objectifProrata;
         $caSite = (int) ($caParSite[$commercial->site_id] ?? 0);
 
         return [
             'commercial' => $commercial,
             'objectif' => $objectifProrata,
-            'objectifMecanique' => (int) round($commercial->objectif_mecanique / 30 * $joursPeriode),
-            'objectifSinistre' => (int) round($commercial->objectif_sinistre / 30 * $joursPeriode),
+            'objectifMecanique' => (int) round(PeriodeCalculateur::objectifProrata((float) $commercial->objectif_mecanique, $debut, $fin)),
+            'objectifSinistre' => (int) round(PeriodeCalculateur::objectifProrata((float) $commercial->objectif_sinistre, $debut, $fin)),
             'objectifJournalier' => (int) round($commercial->objectif_mensuel / 30),
             'realisation' => $realisation,
             'realisationMecanique' => (int) $lignesFactures->where('activite', 'Mécanique')->sum('montant'),
@@ -98,7 +105,8 @@ $graphique = computed(fn () => [
 
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
-        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre" />
+        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
+        :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="Commerciaux — {{ $this->libellePerimetre }}" :value="$this->kpis['nombre']" />

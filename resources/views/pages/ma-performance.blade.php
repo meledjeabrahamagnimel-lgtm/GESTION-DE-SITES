@@ -6,23 +6,31 @@ use App\Domain\Shared\Services\PeriodeCalculateur;
 use function Livewire\Volt\{state, computed, mount};
 
 state([
-    'periode' => 'periode',
+    'periode' => 'calendrier',
     'dateDebut' => null,
     'dateFin' => null,
+    'moisFiltre' => '',
+    'semaineFiltre' => '',
+    'jourFiltre' => '',
     'activiteFiltre' => '',
     'pageFactures' => 1,
 ]);
 
 mount(function () {
-    $this->dateDebut ??= now()->startOfYear()->toDateString();
-    $this->dateFin ??= now()->toDateString();
+    $this->dateDebut ??= now()->startOfYear()->format('Y-m');
+    $this->dateFin ??= now()->format('Y-m');
 });
+
+$updatedMoisFiltre = function () { $this->semaineFiltre = ''; $this->jourFiltre = ''; };
+$updatedSemaineFiltre = function () { $this->jourFiltre = ''; };
 
 $commercial = computed(fn () => Commercial::where('user_id', auth()->id())->with('site.ville')->first());
 
 $villeUnique = computed(fn () => $this->commercial?->site?->ville);
 
-$plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
+$plage = computed(fn () => PeriodeCalculateur::plage(
+    $this->periode, $this->dateDebut, $this->dateFin, $this->moisFiltre ?: null, $this->semaineFiltre ?: null, $this->jourFiltre ?: null
+));
 
 $factures = computed(function () {
     if (! $this->commercial) {
@@ -45,17 +53,16 @@ $kpis = computed(function () {
         return null;
     }
     [$debut, $fin] = $this->plage;
-    $joursPeriode = PeriodeCalculateur::nombreDeJours($debut, $fin);
     $realisation = (int) $this->factures->sum('montant');
     $realisationMecanique = (int) $this->factures->where('activite', 'Mécanique')->sum('montant');
     $realisationSinistre = (int) $this->factures->where('activite', 'Sinistre')->sum('montant');
     $encaisse = (int) $this->factures->sum('encaissements_sum_montant');
-    $objectifMecanique = (int) round($this->commercial->objectif_mecanique / 30 * $joursPeriode);
-    $objectifSinistre = (int) round($this->commercial->objectif_sinistre / 30 * $joursPeriode);
+    $objectifMecanique = (int) round(PeriodeCalculateur::objectifProrata((float) $this->commercial->objectif_mecanique, $debut, $fin));
+    $objectifSinistre = (int) round(PeriodeCalculateur::objectifProrata((float) $this->commercial->objectif_sinistre, $debut, $fin));
     $objectif = match ($this->activiteFiltre) {
         'Mécanique' => $objectifMecanique,
         'Sinistre' => $objectifSinistre,
-        default => (int) round($this->commercial->objectif_mensuel / 30 * $joursPeriode),
+        default => (int) round(PeriodeCalculateur::objectifProrata((float) $this->commercial->objectif_mensuel, $debut, $fin)),
     };
 
     $caSite = (int) Facture::where('site_id', $this->commercial->site_id)->whereBetween('date', [$debut, $fin])->sum('montant');
@@ -86,7 +93,8 @@ $kpis = computed(function () {
             <p style="color:#6B6E76; font-size:14.5px; margin:0;">{{ $this->commercial->site->nom }} · {{ $this->commercial->activite ?? '—' }}</p>
         </div>
 
-        <x-filtre-periode :periode="$periode" :ville-unique="$this->villeUnique" :activite-filtre="$activiteFiltre" />
+        <x-filtre-periode :periode="$periode" :ville-unique="$this->villeUnique" :activite-filtre="$activiteFiltre"
+            :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
             <x-kpi-card label="Objectif mensuel" :value="ae($this->commercial->objectif_mensuel)"

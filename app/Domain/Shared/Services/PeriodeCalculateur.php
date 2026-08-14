@@ -5,35 +5,148 @@ namespace App\Domain\Shared\Services;
 use Carbon\Carbon;
 
 /**
- * Calcule la plage de dates [début, fin] pour les filtres Jour/Semaine/Mois/Période
- * partagés par le tableau de bord et les onglets de consultation.
+ * Calcule la plage de dates [début, fin] pour les filtres partagés par le tableau de
+ * bord et les onglets de consultation. Deux modes : « calendrier » (Mois → Semaine →
+ * Jour, en cascade, année de l'exercice en cours) et « période » (un intervalle de mois
+ * choisi librement, année en cours).
  */
 class PeriodeCalculateur
 {
-    public static function plage(string $periode, ?string $debutPersonnalise = null, ?string $finPersonnalisee = null): array
-    {
+    /**
+     * @param  string  $periode  'calendrier' ou 'periode'.
+     * @param  string|null  $debutPersonnalise  Mois de début au format "Y-m" (mode période).
+     * @param  string|null  $finPersonnalisee  Mois de fin au format "Y-m" (mode période).
+     * @param  int|null  $moisFiltre  Mois choisi (1-12) en mode calendrier, ou null pour « tous les mois ».
+     * @param  int|null  $semaineFiltre  Numéro de semaine dans le mois choisi, ou null pour « toutes les semaines ».
+     * @param  int|null  $jourFiltre  Jour du mois (ou de la semaine si elle est précisée), ou null pour « tous les jours ».
+     */
+    public static function plage(
+        string $periode,
+        ?string $debutPersonnalise = null,
+        ?string $finPersonnalisee = null,
+        ?int $moisFiltre = null,
+        ?int $semaineFiltre = null,
+        ?int $jourFiltre = null,
+    ): array {
         $aujourdhui = Carbon::today();
 
-        [$debut, $fin] = match ($periode) {
-            'jour' => [$aujourdhui->copy(), $aujourdhui->copy()],
-            'semaine' => [$aujourdhui->copy()->startOfWeek(), $aujourdhui->copy()->endOfWeek()],
-            'mois' => [$aujourdhui->copy()->startOfMonth(), $aujourdhui->copy()->endOfMonth()],
-            'periode' => [
-                $debutPersonnalise ? Carbon::parse($debutPersonnalise) : $aujourdhui->copy()->subDays(29),
-                $finPersonnalisee ? Carbon::parse($finPersonnalisee) : $aujourdhui->copy(),
-            ],
-            default => [$aujourdhui->copy()->startOfWeek(), $aujourdhui->copy()->endOfWeek()],
-        };
+        if ($periode === 'periode') {
+            $debut = $debutPersonnalise
+                ? Carbon::createFromFormat('Y-m', $debutPersonnalise)->startOfMonth()
+                : $aujourdhui->copy()->startOfYear();
+            $fin = $finPersonnalisee
+                ? Carbon::createFromFormat('Y-m', $finPersonnalisee)->endOfMonth()
+                : $aujourdhui->copy()->endOfMonth();
 
-        // endOfWeek()/endOfMonth() renvoient 23:59:59.999999 : sans normalisation, un
-        // diffInDays() donne 6,9999 au lieu de 7 et fausse tous les objectifs au prorata.
-        return [$debut->startOfDay(), $fin->startOfDay()];
+            // Un intervalle de mois inversé (fin avant début) n'a pas de sens à interroger.
+            if ($fin->lessThan($debut)) {
+                $fin = $debut->copy()->endOfMonth();
+            }
+
+            return [$debut->startOfDay(), $fin->startOfDay()];
+        }
+
+        // Mode « calendrier » : Mois → Semaine → Jour, en cascade, sur l'année en cours.
+        $annee = $aujourdhui->year;
+
+        if (! $moisFiltre) {
+            // « Tous les mois » : l'exercice depuis le 1er janvier jusqu'à aujourd'hui.
+            return [Carbon::create($annee, 1, 1)->startOfDay(), $aujourdhui->copy()->startOfDay()];
+        }
+
+        $moisDebut = Carbon::create($annee, $moisFiltre, 1)->startOfMonth();
+        $moisFin = $moisDebut->copy()->endOfMonth();
+
+        if (! $semaineFiltre) {
+            if (! $jourFiltre) {
+                return [$moisDebut->startOfDay(), $moisFin->startOfDay()];
+            }
+
+            $jour = $moisDebut->copy()->day(min($jourFiltre, $moisFin->day));
+
+            return [$jour->startOfDay(), $jour->copy()->startOfDay()];
+        }
+
+        $semaines = self::semainesDuMois($moisDebut);
+        $semaine = $semaines[$semaineFiltre - 1] ?? $semaines[0];
+
+        if (! $jourFiltre) {
+            return [$semaine['debut']->copy()->startOfDay(), $semaine['fin']->copy()->startOfDay()];
+        }
+
+        $jour = $semaine['debut']->copy()->addDays(min($jourFiltre, 7) - 1)->min($semaine['fin']);
+
+        return [$jour->startOfDay(), $jour->copy()->startOfDay()];
     }
 
-    /** Nombre de jours calendaires inclus dans la plage (1 pour une journée). */
+    /** Les douze mois de l'année en cours, pour peupler le sélecteur « Mois ». */
+    public static function moisDeLAnnee(): array
+    {
+        $annee = Carbon::today()->year;
+
+        return collect(range(1, 12))
+            ->mapWithKeys(fn ($m) => [$m => ucfirst(Carbon::create($annee, $m, 1)->translatedFormat('F'))])
+            ->all();
+    }
+
+    /**
+     * Découpe un mois en semaines calendaires (1 à 6 selon l'alignement des jours),
+     * chacune bornée aux limites du mois. Sert à la fois au sélecteur « Semaine » et
+     * à la résolution de la plage quand une semaine précise est choisie.
+     */
+    public static function semainesDuMois(Carbon $moisDebut): array
+    {
+        $moisDebut = $moisDebut->copy()->startOfMonth();
+        $moisFin = $moisDebut->copy()->endOfMonth();
+        $semaines = [];
+        $curseur = $moisDebut->copy()->startOfWeek();
+        $i = 1;
+
+        while ($curseur->lessThanOrEqualTo($moisFin)) {
+            $finSemaine = $curseur->copy()->endOfWeek();
+            $semaines[] = [
+                'numero' => $i,
+                'debut' => $curseur->copy()->max($moisDebut)->startOfDay(),
+                'fin' => $finSemaine->copy()->min($moisFin)->startOfDay(),
+            ];
+            $curseur->addWeek();
+            $i++;
+        }
+
+        return $semaines;
+    }
+
+    /** Nombre calendaires inclus dans la plage (1 pour une journée). */
     public static function nombreDeJours(Carbon $debut, Carbon $fin): int
     {
         return (int) $debut->copy()->startOfDay()->diffInDays($fin->copy()->startOfDay()) + 1;
+    }
+
+    /**
+     * Prorata exact d'un objectif mensuel sur une plage de dates, mois par mois : un
+     * mois plein rend l'objectif exact (jamais 103 % pour un mois de 31 jours comme le
+     * ferait un prorata naïf sur 30 jours), une plage partielle ou à cheval sur
+     * plusieurs mois additionne le prorata réel de chacun.
+     */
+    public static function objectifProrata(float $objectifMensuel, Carbon $debut, Carbon $fin): float
+    {
+        if ($objectifMensuel <= 0) {
+            return 0;
+        }
+
+        $total = 0.0;
+        $curseur = $debut->copy()->startOfMonth();
+
+        while ($curseur->lessThanOrEqualTo($fin)) {
+            $finMois = $curseur->copy()->endOfMonth();
+            $borneDebut = $curseur->copy()->max($debut);
+            $borneFin = $finMois->copy()->min($fin);
+            $joursDansCeMois = self::nombreDeJours($borneDebut, $borneFin);
+            $total += $objectifMensuel * ($joursDansCeMois / $curseur->daysInMonth);
+            $curseur->addMonthNoOverflow()->startOfMonth();
+        }
+
+        return $total;
     }
 
     /**

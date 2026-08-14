@@ -13,20 +13,28 @@ use App\Domain\Tenants\Support\PerimetreSites;
 use function Livewire\Volt\{state, computed, mount};
 
 state([
-    'periode' => 'periode',
+    'periode' => 'calendrier',
     'dateDebut' => null,
     'dateFin' => null,
+    'moisFiltre' => '',
+    'semaineFiltre' => '',
+    'jourFiltre' => '',
     'villeFiltre' => '',
     'activiteFiltre' => '',
     'pageSynthese' => 1,
 ]);
 
 mount(function () {
-    $this->dateDebut ??= now()->startOfYear()->toDateString();
-    $this->dateFin ??= now()->toDateString();
+    $this->dateDebut ??= now()->startOfYear()->format('Y-m');
+    $this->dateFin ??= now()->format('Y-m');
 });
 
-$plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
+$updatedMoisFiltre = function () { $this->semaineFiltre = ''; $this->jourFiltre = ''; };
+$updatedSemaineFiltre = function () { $this->jourFiltre = ''; };
+
+$plage = computed(fn () => PeriodeCalculateur::plage(
+    $this->periode, $this->dateDebut, $this->dateFin, $this->moisFiltre ?: null, $this->semaineFiltre ?: null, $this->jourFiltre ?: null
+));
 
 $mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
 
@@ -165,14 +173,13 @@ $alertes = computed(function () {
 /** Classement des commerciaux du groupe par taux de réalisation de leur objectif au prorata. */
 $topCommerciaux = computed(function () {
     [$debut, $fin] = $this->plage;
-    $jours = PeriodeCalculateur::nombreDeJours($debut, $fin);
 
     return Commercial::actifs()->where('est_spontane', false)
         ->whereIn('site_id', $this->sitesRetenus->pluck('id'))
         ->with('site')->get()
-        ->map(function ($c) use ($debut, $fin, $jours) {
+        ->map(function ($c) use ($debut, $fin) {
             $realisation = (int) Facture::where('commercial_id', $c->id)->whereBetween('date', [$debut, $fin])->sum('montant');
-            $objectif = (int) round($c->objectif_mensuel / 30 * $jours);
+            $objectif = (int) round(PeriodeCalculateur::objectifProrata((float) $c->objectif_mensuel, $debut, $fin));
 
             return [
                 'commercial' => $c,
@@ -210,7 +217,8 @@ $commentaires = computed(function () {
 
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
-        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre" />
+        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
+        :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="CA — {{ $this->libellePerimetre }}" :value="ae($this->kpis['ca'])"

@@ -1,21 +1,42 @@
-@props(['periode', 'villes' => null, 'villeUnique' => null, 'villeFiltre' => null, 'activiteFiltre' => null])
+@props([
+    'periode', 'villes' => null, 'villeUnique' => null, 'villeFiltre' => null, 'activiteFiltre' => null,
+    'moisFiltre' => null, 'semaineFiltre' => null, 'jourFiltre' => null,
+])
 
 @php
-    $onglets = ['jour' => 'Jour', 'semaine' => 'Semaine', 'mois' => 'Mois', 'periode' => 'Période'];
+    use App\Domain\Shared\Services\PeriodeCalculateur;
+    use Carbon\Carbon;
+
     // La précision Mécanique/Sinistre/Consolidé n'a de sens qu'une fois une ville
     // précise en contexte : soit l'utilisateur n'en a qu'une (fixe), soit le Gérant
     // vient d'en choisir une dans la liste.
     $afficherPrecision = $villeUnique !== null || ($villes !== null && $villeFiltre);
+
+    $mois = PeriodeCalculateur::moisDeLAnnee();
+    $anneeEnCours = Carbon::today()->year;
+
+    $semainesDuMois = $moisFiltre
+        ? PeriodeCalculateur::semainesDuMois(Carbon::create($anneeEnCours, (int) $moisFiltre, 1))
+        : [];
+
+    $joursOptions = [];
+    if ($semaineFiltre && $semainesDuMois) {
+        $semaineChoisie = $semainesDuMois[(int) $semaineFiltre - 1] ?? null;
+        if ($semaineChoisie) {
+            $nb = $semaineChoisie['debut']->diffInDays($semaineChoisie['fin']) + 1;
+            $joursOptions = range(1, $nb);
+        }
+    } elseif ($moisFiltre) {
+        $joursOptions = range(1, Carbon::create($anneeEnCours, (int) $moisFiltre, 1)->daysInMonth);
+    }
 @endphp
 
-<div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:20px;">
+<div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
     <div style="display:flex; gap:6px;">
-        @foreach ($onglets as $cle => $libelle)
-            <button type="button" wire:click="$set('periode', '{{ $cle }}')"
-                class="onglet {{ $periode === $cle ? 'est-actif' : '' }}">
-                {{ $libelle }}
-            </button>
-        @endforeach
+        <button type="button" wire:click="$set('periode', 'calendrier')"
+            class="onglet {{ $periode === 'calendrier' ? 'est-actif' : '' }}">Calendrier</button>
+        <button type="button" wire:click="$set('periode', 'periode')"
+            class="onglet {{ $periode === 'periode' ? 'est-actif' : '' }}">Période</button>
     </div>
 
     @if ($villeUnique)
@@ -40,11 +61,38 @@
     @endif
 </div>
 
-@if ($periode === 'periode')
-    <div style="display:flex; gap:12px; align-items:center; margin:-8px 0 20px; font-size:14px;">
-        <label style="color:var(--th-gris); font-weight:600;">Du</label>
-        <input type="date" wire:model.live="dateDebut" class="champ" style="width:auto;">
-        <label style="color:var(--th-gris); font-weight:600;">Au</label>
-        <input type="date" wire:model.live="dateFin" class="champ" style="width:auto;">
+@if ($periode === 'calendrier')
+    <div style="display:flex; gap:12px; align-items:center; margin:-4px 0 20px; font-size:14px; flex-wrap:wrap;">
+        <span style="color:var(--th-gris,#6B6E76); font-weight:600;">Exercice {{ $anneeEnCours }}</span>
+
+        <select wire:model.live="moisFiltre" class="champ" style="width:auto;">
+            <option value="">Tous les mois</option>
+            @foreach ($mois as $numero => $libelle)
+                <option value="{{ $numero }}">{{ $libelle }}</option>
+            @endforeach
+        </select>
+
+        <select wire:model.live="semaineFiltre" class="champ" style="width:auto;" @if (! $moisFiltre) disabled @endif>
+            <option value="">Toutes les semaines</option>
+            @foreach ($semainesDuMois as $semaine)
+                <option value="{{ $semaine['numero'] }}">
+                    Semaine {{ $semaine['numero'] }} ({{ $semaine['debut']->format('d/m') }} – {{ $semaine['fin']->format('d/m') }})
+                </option>
+            @endforeach
+        </select>
+
+        <select wire:model.live="jourFiltre" class="champ" style="width:auto;" @if (! $moisFiltre) disabled @endif>
+            <option value="">Tous les jours</option>
+            @foreach ($joursOptions as $j)
+                <option value="{{ $j }}">Jour {{ $j }}</option>
+            @endforeach
+        </select>
+    </div>
+@else
+    <div style="display:flex; gap:12px; align-items:center; margin:-4px 0 20px; font-size:14px;">
+        <label style="color:var(--th-gris,#6B6E76); font-weight:600;">Du</label>
+        <input type="month" wire:model.live="dateDebut" min="{{ $anneeEnCours }}-01" max="{{ $anneeEnCours }}-12" class="champ" style="width:auto;">
+        <label style="color:var(--th-gris,#6B6E76); font-weight:600;">Au</label>
+        <input type="month" wire:model.live="dateFin" min="{{ $anneeEnCours }}-01" max="{{ $anneeEnCours }}-12" class="champ" style="width:auto;">
     </div>
 @endif

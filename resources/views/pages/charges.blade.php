@@ -7,20 +7,28 @@ use App\Domain\Tenants\Support\PerimetreSites;
 use function Livewire\Volt\{state, computed, mount};
 
 state([
-    'periode' => 'periode',
+    'periode' => 'calendrier',
     'dateDebut' => null,
     'dateFin' => null,
+    'moisFiltre' => '',
+    'semaineFiltre' => '',
+    'jourFiltre' => '',
     'villeFiltre' => '',
     'activiteFiltre' => '',
     'pageDetail' => 1,
 ]);
 
 mount(function () {
-    $this->dateDebut ??= now()->startOfYear()->toDateString();
-    $this->dateFin ??= now()->toDateString();
+    $this->dateDebut ??= now()->startOfYear()->format('Y-m');
+    $this->dateFin ??= now()->format('Y-m');
 });
 
-$plage = computed(fn () => PeriodeCalculateur::plage($this->periode, $this->dateDebut, $this->dateFin));
+$updatedMoisFiltre = function () { $this->semaineFiltre = ''; $this->jourFiltre = ''; };
+$updatedSemaineFiltre = function () { $this->jourFiltre = ''; };
+
+$plage = computed(fn () => PeriodeCalculateur::plage(
+    $this->periode, $this->dateDebut, $this->dateFin, $this->moisFiltre ?: null, $this->semaineFiltre ?: null, $this->jourFiltre ?: null
+));
 $mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
 $villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
 $idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
@@ -82,7 +90,8 @@ $detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('da
 
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
-        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre" />
+        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
+        :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
         <x-kpi-card label="Total charges — {{ $this->libellePerimetre }}" :value="ae($this->kpis['total'])" sub="Hors transferts et décaissements DG"
