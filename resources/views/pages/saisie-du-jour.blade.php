@@ -531,7 +531,7 @@ $validerDevis = function () {
             continue;
         }
 
-        Devis::create([
+        $devis = Devis::create([
             'entreprise_id' => auth()->user()->entreprise_id,
             'site_id' => $this->resoudreSiteId($ligne['activite']) ?? $this->site->id,
             'commercial_id' => $ligne['commercial_id'],
@@ -548,6 +548,24 @@ $validerDevis = function () {
             'observations' => $ligne['observations'] ?: null,
             'cree_par' => auth()->id(),
         ]);
+
+        // Délai réception → émission supérieur à 24h : alerte le responsable du site
+        // (à défaut le gérant), pour que le retard soit visible sans attendre qu'un
+        // gérant tombe dessus en consultant la page Devis.
+        if ($devis->date_reception) {
+            $heures = $devis->date_reception->diffInHours($devis->date_emission);
+
+            if ($heures > 24) {
+                Notificateur::pourPlusieurs(
+                    destinataires: Notificateur::encadrementDuSite($devis->site_id, auth()->user()->entreprise_id),
+                    titre: 'Délai de devis dépassé',
+                    corps: 'Le devis '.$devis->numero.' ('.$devis->client.') a un délai réception → émission de '.$heures.' h, au-delà des 24h attendues.',
+                    canal: NotificationApp::CANAL_GESTION,
+                    niveau: NotificationApp::NIVEAU_ALERTE,
+                    lien: route('devis'),
+                );
+            }
+        }
     }
 
     $this->devisBrouillon = [];

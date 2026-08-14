@@ -55,39 +55,64 @@ class MenuNavigation
 
         $onglets = [];
 
-        $suffixe = [];
+        $parametres = 'mon-espace';
 
         if ($utilisateur->hasRole('gerant')) {
             $onglets[] = ['label' => 'Tableau de bord', 'route' => 'tableau-de-bord'];
-            $suffixe[] = ['label' => 'Paramètres', 'route' => 'parametres'];
+            $parametres = 'parametres';
         }
 
         if ($utilisateur->hasRole('responsable_site')) {
             $onglets[] = ['label' => 'Saisie du jour', 'route' => 'saisie-du-jour'];
-            $suffixe[] = ['label' => 'Paramètres', 'route' => 'mon-espace'];
         }
 
-        return self::construire([
-            ...$onglets,
-            ['label' => 'Prospects', 'route' => 'prospects'],
-            ['label' => 'Devis', 'route' => 'devis'],
-            ['label' => "Chiffre d'affaires", 'route' => 'chiffre-affaires'],
-            ['label' => 'Charges', 'route' => 'charges'],
-            ['label' => 'Trésorerie', 'route' => 'tresorerie'],
-            ['label' => 'Commerciaux', 'route' => 'commerciaux'],
-            ['label' => 'Ajouter un accès', 'route' => 'acces.creer'],
-            ['label' => 'Messages', 'route' => 'messages'],
-            ['label' => 'Notifications', 'route' => 'mes-notifications'],
-            ...$suffixe,
-        ]);
+        $onglets[] = [
+            'label' => 'Indicateur',
+            'groupe' => [
+                ['label' => 'Prospects', 'route' => 'prospects'],
+                ['label' => 'Devis', 'route' => 'devis'],
+                ['label' => "Chiffre d'affaires", 'route' => 'chiffre-affaires'],
+                ['label' => 'Charges', 'route' => 'charges'],
+                ['label' => 'Trésorerie', 'route' => 'tresorerie'],
+                ['label' => 'Commerciaux', 'route' => 'commerciaux'],
+            ],
+        ];
+
+        $onglets[] = [
+            'label' => 'Général',
+            'groupe' => [
+                ['label' => 'Ajouter un accès', 'route' => 'acces.creer'],
+                ['label' => 'Messages', 'route' => 'messages'],
+                ['label' => 'Notifications', 'route' => 'mes-notifications'],
+                ['label' => 'Paramètres', 'route' => $parametres],
+            ],
+        ];
+
+        return self::construire($onglets);
     }
 
     private static function construire(array $onglets): array
     {
-        return array_map(fn ($onglet) => [
-            'label' => $onglet['label'],
-            'route' => route($onglet['route']),
-            'actif' => request()->routeIs(($onglet['actifPattern'] ?? $onglet['route']).'*'),
-        ], $onglets);
+        return array_map(function ($onglet) {
+            if (isset($onglet['groupe'])) {
+                $items = array_map(fn ($item) => [
+                    'label' => $item['label'],
+                    'route' => route($item['route']),
+                    'actif' => request()->routeIs(($item['actifPattern'] ?? $item['route']).'*'),
+                ], $onglet['groupe']);
+
+                return [
+                    'label' => $onglet['label'],
+                    'groupe' => $items,
+                    'actif' => collect($items)->contains('actif', true),
+                ];
+            }
+
+            return [
+                'label' => $onglet['label'],
+                'route' => route($onglet['route']),
+                'actif' => request()->routeIs(($onglet['actifPattern'] ?? $onglet['route']).'*'),
+            ];
+        }, $onglets);
     }
 }

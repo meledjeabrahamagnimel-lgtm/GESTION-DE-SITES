@@ -284,6 +284,7 @@ $detail = computed(function () {
                         <th>N° fiche de réception</th>
                         <th>Client</th>
                         <th>Date d'émission</th>
+                        <th>Délai moyen</th>
                         <th>Commercial</th>
                         @if (! $activiteFiltre && count($this->idsSites) > 1)
                             <th>Site</th>
@@ -302,6 +303,8 @@ $detail = computed(function () {
                             $montantFacture = $ligne->facture?->montant ?? 0;
                             $montantRestant = $ligne->montant_valide !== null ? $ligne->montant_valide - $montantFacture : null;
                             $couleurRestant = $montantRestant === null ? 'inherit' : ($montantRestant > $montantFacture ? '#C8102E' : '#0E9F6E');
+                            $delaiHeures = $ligne->date_reception ? $ligne->date_reception->diffInHours($ligne->date_emission) : null;
+                            $delaiDepasse = $delaiHeures !== null && $delaiHeures > 24;
                         @endphp
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td style="font-weight:700;">{{ $ligne->numero }}</td>
@@ -309,6 +312,16 @@ $detail = computed(function () {
                             <td>{{ $ligne->n_fiche_reception ?? '—' }}</td>
                             <td>{{ $ligne->client }}</td>
                             <td>{{ $ligne->date_emission->format('d/m/Y') }}</td>
+                            <td style="font-weight:700; color:{{ $delaiHeures === null ? 'inherit' : ($delaiDepasse ? '#C8102E' : '#0E9F6E') }};">
+                                @if ($delaiHeures === null)
+                                    —
+                                @else
+                                    {{ $delaiHeures }} h
+                                    @if ($delaiDepasse)
+                                        <span title="Délai supérieur à 24h" style="margin-left:3px;">⚠</span>
+                                    @endif
+                                @endif
+                            </td>
                             <td>{{ $ligne->commercial->nom }}</td>
                             @if (! $activiteFiltre && count($this->idsSites) > 1)
                                 <td>{{ $ligne->site->nom }}</td>
@@ -323,7 +336,7 @@ $detail = computed(function () {
                             <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 13 : 12" texte="Aucun devis enregistré sur cette période." />
+                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 14 : 13" texte="Aucun devis enregistré sur cette période." />
                     @endforelse
                 </tbody>
             </table>

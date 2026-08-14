@@ -30,12 +30,32 @@
                 </a>
                 <nav style="display:flex; gap:4px; flex-wrap:wrap;">
                     @foreach ($navigation as $item)
-                        <a href="{{ $item['route'] }}" wire:navigate class="{{ $item['actif'] ? 'nav-actif' : '' }}"
-                           style="display:flex; align-items:center; gap:6px; padding:9px 14px; border-radius:7px; font-size:14.5px; font-weight:600; text-decoration:none; white-space:nowrap;
-                                  color:{{ $item['actif'] ? '#fff' : '#C7C9CF' }};
-                                  background:{{ $item['actif'] ? 'var(--th-accent, #C8102E)' : 'transparent' }};">
-                            {{ $item['label'] }}
-                        </a>
+                        @if (isset($item['groupe']))
+                            <details class="nav-groupe">
+                                <summary class="{{ $item['actif'] ? 'nav-actif' : '' }}"
+                                   style="display:flex; align-items:center; gap:6px; padding:9px 14px; border-radius:7px; font-size:14.5px; font-weight:600; white-space:nowrap; cursor:pointer; list-style:none;
+                                          color:{{ $item['actif'] ? '#fff' : '#C7C9CF' }};
+                                          background:{{ $item['actif'] ? 'var(--th-accent, #C8102E)' : 'transparent' }};">
+                                    {{ $item['label'] }} <span style="font-size:10px;">▾</span>
+                                </summary>
+                                <div class="nav-groupe-panneau">
+                                    @foreach ($item['groupe'] as $sousItem)
+                                        <a href="{{ $sousItem['route'] }}" wire:navigate class="{{ $sousItem['actif'] ? 'nav-actif' : '' }}"
+                                           style="display:block; padding:9px 14px; font-size:14px; font-weight:600; text-decoration:none; white-space:nowrap;
+                                                  color:{{ $sousItem['actif'] ? 'var(--th-accent, #C8102E)' : 'var(--th-ink, #191B20)' }};">
+                                            {{ $sousItem['label'] }}
+                                        </a>
+                                    @endforeach
+                                </div>
+                            </details>
+                        @else
+                            <a href="{{ $item['route'] }}" wire:navigate class="{{ $item['actif'] ? 'nav-actif' : '' }}"
+                               style="display:flex; align-items:center; gap:6px; padding:9px 14px; border-radius:7px; font-size:14.5px; font-weight:600; text-decoration:none; white-space:nowrap;
+                                      color:{{ $item['actif'] ? '#fff' : '#C7C9CF' }};
+                                      background:{{ $item['actif'] ? 'var(--th-accent, #C8102E)' : 'transparent' }};">
+                                {{ $item['label'] }}
+                            </a>
+                        @endif
                     @endforeach
                 </nav>
             </div>
@@ -71,7 +91,7 @@
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit" style="background:transparent; border:1px solid #4B4E55; color:#fff; border-radius:7px; padding:8px 16px; font-size:13.5px; font-weight:600; cursor:pointer;">
-                        Quitter
+                        Déconnexion
                     </button>
                 </form>
             </div>

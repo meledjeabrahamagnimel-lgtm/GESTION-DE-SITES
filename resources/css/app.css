@@ -253,6 +253,31 @@ header nav a { transition: background-color .12s ease, filter .12s ease; }
 header nav a:not(.nav-actif):hover { background-color: rgba(255, 255, 255, .1) !important; }
 header nav a.nav-actif:hover { filter: brightness(1.12); }
 
+/* Groupes de navigation repliables (Indicateur / Général) : <details> natif, sans JS,
+   pour rester cohérent avec le reste de l'application (Alpine a été retiré). Le
+   contenu est masqué automatiquement par le navigateur tant que <details> n'est pas
+   ouvert — seule la position et l'habillage du panneau sont à notre charge. */
+.nav-groupe { position: relative; }
+.nav-groupe summary { transition: background-color .12s ease, filter .12s ease; }
+.nav-groupe summary::-webkit-details-marker { display: none; }
+.nav-groupe summary::marker { content: ""; }
+.nav-groupe:not(:has(> summary.nav-actif)) summary:hover { background-color: rgba(255, 255, 255, .1); }
+.nav-groupe:has(> summary.nav-actif) summary:hover { filter: brightness(1.12); }
+.nav-groupe-panneau {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 200px;
+    background: #fff;
+    border: 1px solid var(--th-ligne, #E2E0D8);
+    border-radius: 9px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.16);
+    padding: 6px;
+    z-index: 40;
+}
+.nav-groupe-panneau a { border-radius: 6px; transition: background-color .12s ease; }
+.nav-groupe-panneau a:not(.nav-actif):hover { background-color: var(--th-paper, #F4F3EF); }
+
 /* Onglets de période (Jour / Semaine / Mois / Période). */
 .onglet {
     padding: 7px 14px;
