@@ -67,7 +67,7 @@ class MenuNavigation
         }
 
         $onglets[] = [
-            'label' => 'Indicateur',
+            'label' => 'Indicateurs',
             'groupe' => [
                 ['label' => 'Prospects', 'route' => 'prospects'],
                 ['label' => 'Devis', 'route' => 'devis'],
