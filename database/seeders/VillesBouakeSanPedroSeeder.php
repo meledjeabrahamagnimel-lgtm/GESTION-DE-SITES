@@ -48,8 +48,8 @@ class VillesBouakeSanPedroSeeder extends Seeder
             commune: 'Bouaké',
             slugCompte: 'bouake',
             couleur: '#0E9F6E',
-            gerantNom: 'Adama Coulibaly',
             responsableNom: 'Aminata Koné',
+            comptableNom: 'Adama Coulibaly',
             commercialNom: 'Ibrahim Traoré',
         ));
 
@@ -60,8 +60,8 @@ class VillesBouakeSanPedroSeeder extends Seeder
             commune: 'San Pedro',
             slugCompte: 'sanpedro',
             couleur: '#D97706',
-            gerantNom: 'Serge Gnahoré',
             responsableNom: 'Chantal Bamba',
+            comptableNom: 'Serge Gnahoré',
             commercialNom: 'Paul Zadi',
         ));
 
@@ -70,7 +70,7 @@ class VillesBouakeSanPedroSeeder extends Seeder
         (new DonneesOperationnellesSeeder())->genererPourSites($nouveauxSites, $entreprise->id);
     }
 
-    /** @return Collection<int, Site> les deux sites (Mécanique + Sinistre) de la ville créée. */
+    /** @return Collection<int, Site> le lieu unique de la ville créée. */
     private function creerVille(
         Entreprise $entreprise,
         string $code,
@@ -78,27 +78,16 @@ class VillesBouakeSanPedroSeeder extends Seeder
         string $commune,
         string $slugCompte,
         string $couleur,
-        string $gerantNom,
         string $responsableNom,
+        string $comptableNom,
         string $commercialNom,
     ): Collection {
-        // Un compte gérant par ville, pour disposer d'un accès de test par site — étant
-        // entendu que le rôle gérant porte structurellement sur toute l'entreprise : ce
-        // compte verra donc, comme gerant@gmail.com, l'ensemble des villes (y compris
-        // Abidjan), pas seulement celle-ci.
-        $gerant = User::create([
-            'entreprise_id' => $entreprise->id,
-            'name' => $gerantNom,
-            'email' => "gerant{$slugCompte}@gmail.com",
-            'password' => 'password',
-            'email_verified_at' => now(),
-        ]);
-        $gerant->assignRole('gerant');
-
+        // Pas de gérant par ville : le rôle porte structurellement sur toute l'entreprise,
+        // et un seul compte (gerant@gmail.com) suffit donc à en couvrir les trois.
         $responsable = User::create([
             'entreprise_id' => $entreprise->id,
             'name' => $responsableNom,
-            'email' => "responsable{$slugCompte}@gmail.com",
+            'email' => "superviseur{$slugCompte}@gmail.com",
             'password' => 'password',
             'email_verified_at' => now(),
         ]);
@@ -135,6 +124,11 @@ class VillesBouakeSanPedroSeeder extends Seeder
         ]);
         $commercialUtilisateur->assignRole('commercial');
 
+        // Le rattachement est porté par le compte lui-même, pas seulement par la fiche :
+        // c'est ce qui permet de le retrouver après une purge des données.
+        $commercialUtilisateur->update(['ville_id' => $ville->id]);
+        $responsable->update(['ville_id' => $ville->id]);
+
         Commercial::create([
             'entreprise_id' => $entreprise->id,
             'ville_id' => $ville->id,
@@ -160,7 +154,18 @@ class VillesBouakeSanPedroSeeder extends Seeder
             'est_spontane' => true,
         ]);
 
-        // Le responsable de ville prospecte lui aussi : il figure donc parmi les commerciaux.
+        // La comptabilité couvre la ville entière, jamais un lieu : une seule caisse par ville.
+        $comptable = User::create([
+            'entreprise_id' => $entreprise->id,
+            'ville_id' => $ville->id,
+            'name' => $comptableNom,
+            'email' => "comptabilite{$slugCompte}@gmail.com",
+            'password' => 'password',
+            'email_verified_at' => now(),
+        ]);
+        $comptable->assignRole('caissier');
+
+        // Le superviseur de ville prospecte lui aussi : il figure donc parmi les commerciaux.
         Commercial::create([
             'entreprise_id' => $entreprise->id,
             'ville_id' => $ville->id,

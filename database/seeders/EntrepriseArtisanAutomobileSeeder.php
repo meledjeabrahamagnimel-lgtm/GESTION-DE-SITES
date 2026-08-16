@@ -14,10 +14,13 @@ use Illuminate\Database\Seeder;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
- * Entreprise pilote « L'Artisan Automobile » : un jeu de démonstration volontairement
- * minimal — une seule ville (Abidjan) avec ses deux sites d'activité (Mécanique et
- * Sinistre) et un seul compte par rôle — pour permettre des tests rapides de bout en
- * bout sur les quatre interfaces (Gérant, Responsable, Commercial, Caissier).
+ * Entreprise pilote « L'Artisan Automobile », volet Abidjan : la seule ville à compter
+ * deux lieux distincts, ce qui en fait le terrain de test complet — un superviseur de
+ * ville qui couvre les deux, un responsable nommé sur le premier seulement, une
+ * comptabilité pour toute la ville, un commercial, et le gérant de l'entreprise.
+ *
+ * Bouaké et San Pedro, à un seul lieu chacune, sont installées ensuite par
+ * VillesBouakeSanPedroSeeder.
  */
 class EntrepriseArtisanAutomobileSeeder extends Seeder
 {
@@ -83,18 +86,18 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
         $responsable = User::create([
             'entreprise_id' => $entreprise->id,
             'name' => 'Marie-Claire Aya',
-            'email' => 'responsable@gmail.com',
+            'email' => 'superviseurabidjan@gmail.com',
             'password' => 'password',
             'email_verified_at' => now(),
         ]);
         $responsable->assignRole('responsable_ville');
 
-        // Abidjan comptant deux lieux, son second site a son propre responsable, qui ne
-        // répond que de lui — le responsable de ville, lui, couvre les deux.
+        // Abidjan comptant deux lieux, son premier site a son propre responsable, qui ne
+        // répond que de lui — le superviseur de ville, lui, couvre les deux.
         $responsableSite = User::create([
             'entreprise_id' => $entreprise->id,
             'name' => 'Sylvain Kouassi',
-            'email' => 'responsable.site2@gmail.com',
+            'email' => 'responsableabidjansite1@gmail.com',
             'password' => 'password',
             'email_verified_at' => now(),
         ]);
@@ -120,26 +123,34 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
             'ville_id' => $ville->id,
             'code' => 'ABJ-1',
             'nom' => 'Abidjan — Site 1',
+            'responsable_id' => $responsableSite->id,
             'est_actif' => true,
         ]);
 
+        // Le second site n'a pas de responsable propre : il relève directement du
+        // superviseur de la ville, ce qui permet de tester les deux cas de figure.
         $siteDeux = Site::create([
             'entreprise_id' => $entreprise->id,
             'ville_id' => $ville->id,
             'code' => 'ABJ-2',
             'nom' => 'Abidjan — Site 2',
-            'responsable_id' => $responsableSite->id,
             'est_actif' => true,
         ]);
 
         $commercial = User::create([
             'entreprise_id' => $entreprise->id,
             'name' => 'Koffi Yao',
-            'email' => 'commercial@gmail.com',
+            'email' => 'commercialabidjan@gmail.com',
             'password' => 'password',
             'email_verified_at' => now(),
         ]);
         $commercial->assignRole('commercial');
+
+        // Le rattachement est porté par le compte lui-même, pas seulement par la fiche :
+        // c'est ce qui permet de le retrouver après une purge des données.
+        $commercial->update(['ville_id' => $ville->id]);
+        $responsable->update(['ville_id' => $ville->id]);
+        $responsableSite->update(['ville_id' => $ville->id, 'site_id' => $siteUn->id]);
 
         Commercial::create([
             'entreprise_id' => $entreprise->id,
@@ -188,7 +199,7 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
             'entreprise_id' => $entreprise->id,
             'ville_id' => $ville->id,
             'name' => 'Fatou Diabaté',
-            'email' => 'caissier@gmail.com',
+            'email' => 'comptabiliteabidjansite2@gmail.com',
             'password' => 'password',
             'email_verified_at' => now(),
         ]);

@@ -1,0 +1,185 @@
+================================================================================
+GESTION-DE-SITES — ACCES DE TEST ET DONNEES DE DEMONSTRATION
+Entreprise : L'Artisan Automobile   —   Mot de passe de TOUS les comptes : password
+================================================================================
+
+IMPORTANT : toutes les adresses sont en @gmail.com (et non @gamil.com). Elles
+sont ecrites ci-dessous exactement telles qu'il faut les saisir a la connexion.
+
+
+================================================================================
+1. LES COMPTES
+================================================================================
+
+PLATEFORME
+--------------------------------------------------------------------------------
+superadmin@gmail.com                    Super Admin (gere l'application)
+support@gmail.com                       Super Admin secondaire (habilitations reduites)
+
+DIRECTION
+--------------------------------------------------------------------------------
+gerant@gmail.com                        Gerant — voit les 3 villes, ne saisit pas
+
+ABIDJAN (2 sites)
+--------------------------------------------------------------------------------
+superviseurabidjan@gmail.com            Superviseur de ville — voit et saisit sur
+                                        Abidjan Site 1 ET Abidjan Site 2
+responsableabidjansite1@gmail.com       Responsable de site — voit et saisit
+                                        UNIQUEMENT sur Abidjan Site 1
+comptabiliteabidjansite2@gmail.com      Comptabilite — toute la ville d'Abidjan
+commercialabidjan@gmail.com             Commercial — prospecte pour Abidjan
+
+BOUAKE (1 site, confondu avec la ville)
+--------------------------------------------------------------------------------
+superviseurbouake@gmail.com             Superviseur de ville
+comptabilitebouake@gmail.com            Comptabilite
+commercialbouake@gmail.com              Commercial
+
+SAN PEDRO (1 site, confondu avec la ville)
+--------------------------------------------------------------------------------
+superviseursanpedro@gmail.com           Superviseur de ville
+comptabilitesanpedro@gmail.com          Comptabilite
+commercialsanpedro@gmail.com            Commercial
+
+
+DEUX PRECISIONS SUR CETTE LISTE
+--------------------------------------------------------------------------------
+a) « comptabiliteabidjansite2 » est rattache a la VILLE d'Abidjan, pas au site 2.
+   La comptabilite couvre une ville entiere : une seule caisse par ville, quel que
+   soit le nombre de sites. Le nom du compte a ete conserve tel que demande.
+
+b) Abidjan Site 2 n'a volontairement PAS de responsable propre : il releve
+   directement du superviseur de la ville. C'est le cas normal, et cela permet de
+   tester les deux situations cote a cote — un site avec responsable nomme
+   (Site 1), un site sans (Site 2).
+
+
+================================================================================
+2. QUI VOIT QUOI — A VERIFIER EN VOUS CONNECTANT
+================================================================================
+
+gerant@gmail.com
+  Filtre Ville : les 3 villes.
+  En choisissant Abidjan  -> le champ SITE apparait (Site 1 / Site 2)
+                             + le champ ACTIVITE + le champ COMMERCIAL
+  En choisissant Bouake   -> pas de champ Site (la ville n'a qu'un lieu)
+                             + le champ ACTIVITE + le champ COMMERCIAL
+  Pas d'ecran de saisie : le gerant consulte, il ne saisit pas.
+
+superviseurabidjan@gmail.com
+  Saisie du jour : un selecteur « Site de saisie » propose Site 1 et Site 2.
+  Indicateurs : le champ Site apparait (ses deux lieux).
+
+responsableabidjansite1@gmail.com
+  Saisie du jour : aucun selecteur de site, il n'en a qu'un.
+  Indicateurs : aucun champ Site — il ne voit QUE Site 1.
+
+superviseurbouake@gmail.com / superviseursanpedro@gmail.com
+  Aucun champ Site (leur ville n'a qu'un lieu), mais le champ Activite est la.
+
+commercial*@gmail.com
+  Mes prospections : saisie de prospections, avec choix de l'activite a chaque
+  ligne. Le commercial n'appartient a aucune activite : il travaille pour sa ville.
+
+comptabilite*@gmail.com
+  Encaissements et decaissements de toute sa ville.
+
+
+================================================================================
+3. LES DONNEES DE DEMONSTRATION (environ 60 jours d'historique)
+================================================================================
+
+VILLE        SITES  COMMERCIAUX  PROSPECTIONS  DEVIS  FACTURES  ENCAISS.  CHARGES
+--------------------------------------------------------------------------------
+Abidjan        2         4            282       109      40        39        99
+Bouake         1         3            128        54      26        24        52
+San Pedro      1         3            128        55      25        21        52
+
+Le detail des commerciaux :
+  Abidjan   : Koffi Yao, Marie-Claire Aya (superviseur), Sylvain Kouassi
+              (responsable Site 1), Client spontane
+  Bouake    : Ibrahim Traore, Aminata Kone (superviseur), Client spontane
+  San Pedro : Paul Zadi, Chantal Bamba (superviseur), Client spontane
+
+Les superviseurs et responsables de site figurent parmi les commerciaux : ils
+prospectent eux aussi, et leur chiffre d'affaires doit leur etre rattachable.
+Le « Client spontane » recueille les ventes sans commercial nomme.
+
+Les chiffres varient legerement a chaque installation : l'historique est genere
+aleatoirement sur 60 jours.
+
+
+================================================================================
+4. INSTALLER CE JEU DE TEST SUR LE SERVEUR (LWS / cPanel)
+================================================================================
+
+Se placer dans le dossier de l'application, puis :
+
+  cd ~/gestionsites            # ou le chemin reel de votre installation
+  git pull
+  php artisan migrate --force
+
+  # ATTENTION : la commande suivante EFFACE TOUTE LA BASE avant de la recreer.
+  # A n'utiliser que sur une base de test, jamais sur des donnees reelles.
+  php artisan migrate:fresh --seed --force
+
+  php artisan optimize:clear
+
+Si la base contient deja des donnees que vous voulez garder, n'utilisez PAS
+migrate:fresh. Utilisez seulement :
+
+  php artisan migrate --force
+  php artisan db:seed --force      # n'ajoute que ce qui manque, ne recree rien
+
+
+================================================================================
+5. SUPPRIMER LES DONNEES APRES LES TESTS
+================================================================================
+
+Deux facons, au choix.
+
+A. DEPUIS L'APPLICATION (recommande) — verifie et teste
+--------------------------------------------------------------------------------
+  1. Se connecter avec superadmin@gmail.com
+  2. Menu « Maintenance »
+  3. Choisir l'entreprise « L'Artisan Automobile »
+  4. Cocher « Purger aussi les commerciaux » si vous voulez repartir de zero
+  5. Saisir EXACTEMENT le nom de l'entreprise pour confirmer :
+         L'Artisan Automobile
+  6. Cliquer sur « Purger definitivement les donnees »
+
+  CE QUI EST EFFACE : prospections, devis, factures, encaissements, charges,
+  saisies journalieres, et la numerotation (qui repart a P-0001, D-0001, F-0001).
+
+  CE QUI EST CONSERVE : l'entreprise, les villes, les sites, tous les comptes
+  et leurs roles.
+
+  SI VOUS COCHEZ « purger aussi les commerciaux » : les fiches sont supprimees
+  PUIS RECREEES automatiquement — un « Client spontane » par ville, et une fiche
+  par superviseur / responsable de site / commercial, avec objectifs remis a zero.
+  Sans cela, l'application serait inutilisable apres la purge : la liste
+  deroulante « Commercial » serait vide et plus aucune saisie ne serait possible.
+
+  Le bouton refuse d'agir si le nom saisi ne correspond pas exactement : c'est
+  volontaire, et c'est teste.
+
+B. TOUT RECOMMENCER A ZERO (base de test uniquement)
+--------------------------------------------------------------------------------
+  php artisan migrate:fresh --seed --force
+
+  Cette commande detruit la base entiere et la reconstruit avec les 12 comptes
+  ci-dessus et 60 jours d'historique. Ne jamais l'utiliser en production.
+
+
+================================================================================
+6. AVANT LA MISE EN SERVICE REELLE
+================================================================================
+
+  1. Purger les donnees (section 5.A, en cochant « purger aussi les commerciaux »).
+  2. Se connecter en gerant@gmail.com et, dans « Ajouter un acces », creer les
+     vrais comptes de l'entreprise.
+  3. Revoquer les comptes de test depuis la meme page (bouton « Revoquer »).
+  4. Changer le mot de passe du compte superadmin@gmail.com.
+
+  Ne laissez JAMAIS le mot de passe « password » sur un compte accessible en
+  production : il est public dans ce fichier.

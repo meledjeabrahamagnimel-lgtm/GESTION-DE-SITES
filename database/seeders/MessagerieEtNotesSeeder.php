@@ -55,13 +55,13 @@ class MessagerieEtNotesSeeder extends Seeder
 
         // Comptes mis en avant partout ailleurs (identifiants de connexion communiqués) :
         // c'est avec eux que la démonstration doit avoir du contenu visible en premier.
-        $commercialPrincipal = $this->parEmailOuPremier($commerciaux, 'k-aya@artisan-automobile.ci');
-        $responsablePrincipal = $this->parEmailOuPremier($responsables, 'david.k@artisan-automobile.ci');
+        $commercialPrincipal = $this->parEmailOuPremier($commerciaux, 'commercialabidjan@gmail.com');
+        $responsablePrincipal = $this->parEmailOuPremier($responsables, 'superviseurabidjan@gmail.com');
 
-        // Le responsable RÉEL du commercial principal, via la fiche site — et non un
-        // responsable choisi au hasard : K. Aya est rattachée à Abidjan — Site 1, pas
-        // au site de David K. (Bouaké). S'adresser au mauvais responsable rendrait la
-        // démonstration incohérente avec le circuit de validation déjà en place.
+        // Le responsable RÉEL du commercial principal, via sa ville — et non un responsable
+        // choisi au hasard : le commercial d'Abidjan dépend du superviseur d'Abidjan, pas
+        // de celui de Bouaké. S'adresser au mauvais responsable rendrait la démonstration
+        // incohérente avec le circuit de validation déjà en place.
         $responsableDuCommercial = $this->responsableDuSite($commercialPrincipal, $responsables) ?? $responsablePrincipal;
 
         $this->genererMessagerie($entreprise->id, $gerant, $responsables, $commerciaux, $superAdmin, $responsablePrincipal, $commercialPrincipal, $responsableDuCommercial);
@@ -97,10 +97,9 @@ class MessagerieEtNotesSeeder extends Seeder
     /**
      * L'utilisateur portant cette adresse dans la collection, ou à défaut le premier.
      *
-     * Sert à cibler délibérément les comptes de démonstration mis en avant partout
-     * ailleurs (k-aya@…, david.k@…) plutôt que le premier de la liste par identifiant,
-     * qui serait un compte encore « à nommer » sans lien avec ce que l'utilisateur
-     * a l'habitude de tester.
+     * Sert à cibler délibérément les comptes de test communiqués (superviseurabidjan@…,
+     * commercialabidjan@…) plutôt que le premier de la liste par identifiant, qui serait
+     * un compte sans lien avec ce que l'utilisateur a l'habitude de tester.
      */
     private function parEmailOuPremier(Collection $utilisateurs, string $email): ?User
     {
@@ -284,14 +283,14 @@ class MessagerieEtNotesSeeder extends Seeder
     {
         $fondateur = User::whereNull('entreprise_id')->where('est_fondateur', true)->first();
 
-        if (! $fondateur || User::where('email', 'support@plateforme.local')->exists()) {
+        if (! $fondateur || User::where('email', 'support@gmail.com')->exists()) {
             return;
         }
 
         $secondaire = User::create([
             'entreprise_id' => null,
             'name' => 'Support Plateforme',
-            'email' => 'support@plateforme.local',
+            'email' => 'support@gmail.com',
             'password' => 'password',
             'email_verified_at' => now(),
             'cree_par_id' => $fondateur->id,

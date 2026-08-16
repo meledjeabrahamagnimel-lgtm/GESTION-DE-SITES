@@ -129,7 +129,7 @@ class AnnuaireMessagerie
         return match (true) {
             str_contains($roles, 'super_admin') => 'Plateforme',
             str_contains($roles, 'gerant') => 'Direction',
-            str_contains($roles, 'responsable_ville') => 'Responsables de ville',
+            str_contains($roles, 'responsable_ville') => 'Superviseurs de ville',
             str_contains($roles, 'responsable_site') => 'Responsables de site',
             str_contains($roles, 'commercial') => 'Commerciaux',
             default => 'Autres',

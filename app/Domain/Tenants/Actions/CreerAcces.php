@@ -67,6 +67,7 @@ class CreerAcces
         if ($role === 'responsable_site') {
             $site = Site::where('id', $donnees['site_id'] ?? null)->where('entreprise_id', $entreprise->id)->firstOrFail();
             $site->update(['responsable_id' => $utilisateur->id]);
+            $utilisateur->update(['ville_id' => $site->ville_id, 'site_id' => $site->id]);
 
             return $site->ville;
         }
@@ -81,9 +82,10 @@ class CreerAcces
             $ville->update(['responsable_id' => $utilisateur->id]);
         }
 
-        if ($role === 'caissier') {
-            $utilisateur->update(['ville_id' => $ville->id, 'site_id' => null]);
-        }
+        // Le rattachement est porté par le compte lui-même, pas seulement par la fiche
+        // commercial ou la colonne responsable_id : c'est ce qui permet de le retrouver
+        // même après une purge des données, et de ne jamais réaffecter quelqu'un par défaut.
+        $utilisateur->update(['ville_id' => $ville->id, 'site_id' => null]);
 
         return $ville;
     }

@@ -51,9 +51,9 @@ class Site extends Model
     /**
      * Sites que $user peut voir, selon son rôle :
      * - Gérant : tous les sites de son entreprise.
-     * - Responsable de ville : tous les lieux des villes dont il répond.
+     * - Superviseur de ville : tous les lieux des villes dont il répond.
      * - Responsable de site : le ou les lieux qui lui sont nommément confiés.
-     * - Caissier : son site de rattachement, ou tous les sites de sa ville s'il est rattaché à une ville entière.
+     * - Comptabilité : son site de rattachement, ou tous les sites de sa ville s'il est rattaché à une ville entière.
      */
     public static function visiblesPour(User $user): Collection
     {
