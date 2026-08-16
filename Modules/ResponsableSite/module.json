@@ -1,0 +1,11 @@
+{
+    "name": "ResponsableSite",
+    "alias": "responsablesite",
+    "description": "Responsable de site : la saisie du jour d'un lieu.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\ResponsableSite\\Providers\\ResponsableSiteServiceProvider"
+    ],
+    "files": []
+}

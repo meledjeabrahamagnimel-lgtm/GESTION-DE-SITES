@@ -1,0 +1,11 @@
+{
+    "name": "Superviseur",
+    "alias": "superviseur",
+    "description": "Superviseur de ville : les indicateurs de pilotage et la nomination des acces.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Superviseur\\Providers\\SuperviseurServiceProvider"
+    ],
+    "files": []
+}

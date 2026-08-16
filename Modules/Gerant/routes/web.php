@@ -9,7 +9,7 @@ use Livewire\Volt\Volt;
 |--------------------------------------------------------------------------
 | Deux écrans qui lui sont propres. Les indicateurs qu'il consulte par ailleurs
 | (Prospects, Devis, CA, Charges, Trésorerie, Commerciaux) sont déclarés par le
-| module Encadrement, qui les partage avec les superviseurs et les responsables
+| module Superviseur, qui les partage avec le gérant et les responsables
 | de site : un même écran, un même code, trois rôles qui le lisent.
 */
 

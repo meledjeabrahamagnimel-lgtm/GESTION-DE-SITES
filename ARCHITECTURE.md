@@ -10,7 +10,8 @@ Modules/
 ├── Noyau/           le socle : modèles, migrations, services, écrans communs
 ├── SuperAdmin/      la plateforme
 ├── Gerant/          la direction
-├── Encadrement/     superviseur de ville + responsable de site
+├── Superviseur/     la ville : le pilotage
+├── ResponsableSite/ le lieu : la saisie du jour
 ├── Comptabilite/    la caisse d'une ville
 └── Commercial/      le terrain
 ```
@@ -29,10 +30,10 @@ d'eux**. Les modules de rôle, eux, ne se connaissent pas entre eux. C'est cette
 et elle seule — qui empêche les dépendances circulaires.
 
 ```
-   SuperAdmin   Gerant   Encadrement   Comptabilite   Commercial
-        \         |          |              |            /
-         \        |          |              |           /
-          ─────────────► Noyau ◄────────────────────────
+ SuperAdmin  Gerant  Superviseur  ResponsableSite  Comptabilite  Commercial
+      \        |          |              |              |           /
+       \       |          |              |              |          /
+        ──────────────────► Noyau ◄─────────────────────────────────
 ```
 
 **La règle à respecter :** un module de rôle peut appeler le Noyau. Il ne doit jamais
@@ -72,40 +73,54 @@ ordre d'exécution difficile à suivre.
 |---|---|---|
 | `SuperAdmin` | tableau de bord, entreprises, accès, administrateurs, journal, maintenance | `super_admin` |
 | `Gerant` | tableau de bord, paramètres | `gerant` |
-| `Encadrement` | `saisie/` : saisie du jour, fiche prospection<br>`pilotage/` : prospects, devis, CA, charges, trésorerie, commerciaux, création d'accès | `responsable_ville`, `responsable_site` |
+| `Superviseur` | `pilotage/` : prospects, devis, CA, charges, trésorerie, commerciaux, création d'accès | `responsable_ville` (lus aussi par `gerant` et `responsable_site`) |
+| `ResponsableSite` | `saisie/` : saisie du jour, fiche prospection | `responsable_site` (partagé avec `responsable_ville`) |
 | `Comptabilite` | tableau de bord, encaissements, décaissements | `caissier` |
 | `Commercial` | mes prospections, ma performance, mes notes | `commercial` |
 
-### Pourquoi Superviseur et Responsable de site partagent un module
+### Où passe la frontière entre Superviseur et ResponsableSite
 
-Les deux rôles atteignent **exactement les mêmes écrans**. Ce qui les distingue n'est
-pas ce qu'ils voient, mais jusqu'où : le superviseur couvre tous les lieux de sa ville,
-le responsable de site le sien seulement. Ce périmètre est résolu une fois pour toutes
-par `Site::visiblesPour()`, jamais dans les écrans.
+Les deux rôles atteignent les mêmes écrans : ce qui les distingue n'est pas ce qu'ils
+voient, mais jusqu'où — le superviseur couvre tous les lieux de sa ville, le responsable
+de site le sien seulement. Ce périmètre est résolu une fois pour toutes par
+`Site::visiblesPour()`, jamais dans les écrans.
 
-Deux dossiers auraient donc contenu deux fois les mêmes fichiers. Le module
-`Encadrement` les réunit, et son fichier de routes sépare clairement ce qui relève de
-la saisie (les deux rôles) de ce qui relève du pilotage (les deux rôles **et** le gérant).
+Les deux modules ne sont donc pas séparés par *qui regarde*, mais par **le métier à qui
+l'écran appartient** :
 
-### Pourquoi les indicateurs sont dans Encadrement et pas dans Gerant
+- la **saisie du jour** est ancrée sur un lieu — c'est là que la journée d'atelier se
+  déroule. Elle appartient à `ResponsableSite`. Le superviseur y accède aussi : quand sa
+  ville n'a qu'un seul lieu, c'est lui qui la tient.
+- le **pilotage** couvre une ville entière — lire les indicateurs et nommer les accès
+  sous soi est le métier du superviseur. Il appartient à `Superviseur`. Le gérant et le
+  responsable de site les lisent, chacun dans son périmètre.
 
-Prospects, Devis, CA, Charges, Trésorerie et Commerciaux sont lus par trois rôles. Ils
-sont déclarés une fois, dans `Encadrement`, avec le middleware
-`role:gerant|responsable_ville|responsable_site`. Les dupliquer dans `Gerant` aurait
-créé deux fois la même route sur la même URL — seule la dernière déclarée aurait
-survécu.
+Ce découpage évite la seule chose qu'il fallait éviter : **deux copies du même fichier**.
+Un écran n'existe qu'à un seul endroit ; ouvrir `Modules/ResponsableSite/`, c'est voir
+la saisie et rien d'autre.
+
+### Pourquoi une route n'est jamais déclarée deux fois
+
+Une URL ne peut porter qu'une seule route : si `Gerant` et `Superviseur` déclaraient tous
+deux `/prospects`, seule la dernière chargée survivrait, en silence. Chaque route est
+donc déclarée **une fois, dans le module dont c'est le métier**, et son middleware nomme
+les rôles admis — `role:gerant|responsable_ville|responsable_site` pour le pilotage,
+`role:responsable_ville|responsable_site` pour la saisie.
+
+C'est le middleware, et non l'emplacement du fichier, qui décide de l'accès.
 
 ## Les routes
 
 `routes/web.php` à la racine est **vide**. Chaque module déclare les siennes :
 
 ```
-Modules/Noyau/routes/web.php         écrans communs à tous les rôles
-Modules/SuperAdmin/routes/web.php    plateforme
-Modules/Gerant/routes/web.php        direction
-Modules/Encadrement/routes/web.php   superviseur + responsable de site
-Modules/Comptabilite/routes/web.php  caisse
-Modules/Commercial/routes/web.php    terrain
+Modules/Noyau/routes/web.php             écrans communs à tous les rôles
+Modules/SuperAdmin/routes/web.php        plateforme
+Modules/Gerant/routes/web.php            direction
+Modules/Superviseur/routes/web.php       pilotage d'une ville
+Modules/ResponsableSite/routes/web.php   saisie du jour d'un lieu
+Modules/Comptabilite/routes/web.php      caisse
+Modules/Commercial/routes/web.php        terrain
 ```
 
 Chaque fichier est chargé par le fournisseur de son module, **dans le groupe de
@@ -119,7 +134,7 @@ relatif à ce dossier :
 
 | Fichier | Nom Volt |
 |---|---|
-| `Modules/Encadrement/resources/views/saisie/saisie-du-jour.blade.php` | `saisie.saisie-du-jour` |
+| `Modules/ResponsableSite/resources/views/saisie/saisie-du-jour.blade.php` | `saisie.saisie-du-jour` |
 | `Modules/Gerant/resources/views/gerant/tableau-de-bord.blade.php` | `gerant.tableau-de-bord` |
 | `Modules/Noyau/resources/views/commun/messages.blade.php` | `commun.messages` |
 
@@ -155,7 +170,7 @@ chaque mise à jour. Toutes les tables métier, elles, sont en français.
 ## Vérifier que tout tient debout
 
 ```bash
-php artisan module:list      # les 6 modules doivent être « Enabled »
+php artisan module:list      # les 7 modules doivent être « Enabled »
 php artisan route:list       # toutes les routes doivent apparaître
 php artisan test             # la suite complète
 ```

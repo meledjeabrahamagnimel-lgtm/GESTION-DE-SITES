@@ -2,7 +2,8 @@
     "Noyau": true,
     "SuperAdmin": true,
     "Gerant": true,
-    "Encadrement": true,
+    "Superviseur": true,
+    "ResponsableSite": true,
     "Comptabilite": true,
     "Commercial": true
 }
