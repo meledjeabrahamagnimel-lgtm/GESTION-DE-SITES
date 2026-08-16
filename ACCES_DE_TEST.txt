@@ -26,6 +26,8 @@ superviseurabidjan@gmail.com            Superviseur de ville — voit et saisit 
                                         Abidjan Site 1 ET Abidjan Site 2
 responsableabidjansite1@gmail.com       Responsable de site — voit et saisit
                                         UNIQUEMENT sur Abidjan Site 1
+responsableabidjansite2@gmail.com       Responsable de site — voit et saisit
+                                        UNIQUEMENT sur Abidjan Site 2
 comptabiliteabidjansite2@gmail.com      Comptabilite — toute la ville d'Abidjan
 commercialabidjan@gmail.com             Commercial — prospecte pour Abidjan
 
@@ -48,10 +50,9 @@ a) « comptabiliteabidjansite2 » est rattache a la VILLE d'Abidjan, pas au site
    La comptabilite couvre une ville entiere : une seule caisse par ville, quel que
    soit le nombre de sites. Le nom du compte a ete conserve tel que demande.
 
-b) Abidjan Site 2 n'a volontairement PAS de responsable propre : il releve
-   directement du superviseur de la ville. C'est le cas normal, et cela permet de
-   tester les deux situations cote a cote — un site avec responsable nomme
-   (Site 1), un site sans (Site 2).
+b) Chacun des deux sites d'Abidjan a son propre responsable. Le superviseur de la
+   ville, lui, couvre les deux : c'est la difference a verifier en vous connectant
+   avec l'un puis l'autre.
 
 
 ================================================================================
@@ -70,9 +71,11 @@ superviseurabidjan@gmail.com
   Saisie du jour : un selecteur « Site de saisie » propose Site 1 et Site 2.
   Indicateurs : le champ Site apparait (ses deux lieux).
 
-responsableabidjansite1@gmail.com
-  Saisie du jour : aucun selecteur de site, il n'en a qu'un.
-  Indicateurs : aucun champ Site — il ne voit QUE Site 1.
+responsableabidjansite1@gmail.com  /  responsableabidjansite2@gmail.com
+  Saisie du jour : aucun selecteur de site, chacun n'en a qu'un.
+  Indicateurs : aucun champ Site — chacun ne voit QUE le sien.
+  C'est la verification la plus parlante : les chiffres du Site 1 et ceux du
+  Site 2 doivent differer, et leur somme doit egaler ce que voit le superviseur.
 
 superviseurbouake@gmail.com / superviseursanpedro@gmail.com
   Aucun champ Site (leur ville n'a qu'un lieu), mais le champ Activite est la.
@@ -91,13 +94,14 @@ comptabilite*@gmail.com
 
 VILLE        SITES  COMMERCIAUX  PROSPECTIONS  DEVIS  FACTURES  ENCAISS.  CHARGES
 --------------------------------------------------------------------------------
-Abidjan        2         4            282       109      40        39        99
+Abidjan        2         5            282       109      40        39        99
 Bouake         1         3            128        54      26        24        52
 San Pedro      1         3            128        55      25        21        52
 
 Le detail des commerciaux :
   Abidjan   : Koffi Yao, Marie-Claire Aya (superviseur), Sylvain Kouassi
-              (responsable Site 1), Client spontane
+              (responsable Site 1), Estelle Kacou (responsable Site 2),
+              Client spontane
   Bouake    : Ibrahim Traore, Aminata Kone (superviseur), Client spontane
   San Pedro : Paul Zadi, Chantal Bamba (superviseur), Client spontane
 

@@ -16,8 +16,8 @@ use Spatie\Permission\PermissionRegistrar;
 /**
  * Entreprise pilote « L'Artisan Automobile », volet Abidjan : la seule ville à compter
  * deux lieux distincts, ce qui en fait le terrain de test complet — un superviseur de
- * ville qui couvre les deux, un responsable nommé sur le premier seulement, une
- * comptabilité pour toute la ville, un commercial, et le gérant de l'entreprise.
+ * ville qui couvre les deux, un responsable nommé sur chacun d'eux, une comptabilité
+ * pour toute la ville, un commercial, et le gérant de l'entreprise.
  *
  * Bouaké et San Pedro, à un seul lieu chacune, sont installées ensuite par
  * VillesBouakeSanPedroSeeder.
@@ -92,16 +92,25 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
         ]);
         $responsable->assignRole('responsable_ville');
 
-        // Abidjan comptant deux lieux, son premier site a son propre responsable, qui ne
-        // répond que de lui — le superviseur de ville, lui, couvre les deux.
-        $responsableSite = User::create([
+        // Abidjan comptant deux lieux, chacun a son propre responsable, qui ne répond que
+        // du sien — le superviseur de ville, lui, couvre les deux.
+        $responsableSiteUn = User::create([
             'entreprise_id' => $entreprise->id,
             'name' => 'Sylvain Kouassi',
             'email' => 'responsableabidjansite1@gmail.com',
             'password' => 'password',
             'email_verified_at' => now(),
         ]);
-        $responsableSite->assignRole('responsable_site');
+        $responsableSiteUn->assignRole('responsable_site');
+
+        $responsableSiteDeux = User::create([
+            'entreprise_id' => $entreprise->id,
+            'name' => 'Estelle Kacou',
+            'email' => 'responsableabidjansite2@gmail.com',
+            'password' => 'password',
+            'email_verified_at' => now(),
+        ]);
+        $responsableSiteDeux->assignRole('responsable_site');
 
         // La ville Abidjan : le responsable de ville en a la charge entière, donc de ses deux lieux.
         $ville = Ville::create([
@@ -123,17 +132,16 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
             'ville_id' => $ville->id,
             'code' => 'ABJ-1',
             'nom' => 'Abidjan — Site 1',
-            'responsable_id' => $responsableSite->id,
+            'responsable_id' => $responsableSiteUn->id,
             'est_actif' => true,
         ]);
 
-        // Le second site n'a pas de responsable propre : il relève directement du
-        // superviseur de la ville, ce qui permet de tester les deux cas de figure.
         $siteDeux = Site::create([
             'entreprise_id' => $entreprise->id,
             'ville_id' => $ville->id,
             'code' => 'ABJ-2',
             'nom' => 'Abidjan — Site 2',
+            'responsable_id' => $responsableSiteDeux->id,
             'est_actif' => true,
         ]);
 
@@ -150,7 +158,8 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
         // c'est ce qui permet de le retrouver après une purge des données.
         $commercial->update(['ville_id' => $ville->id]);
         $responsable->update(['ville_id' => $ville->id]);
-        $responsableSite->update(['ville_id' => $ville->id, 'site_id' => $siteUn->id]);
+        $responsableSiteUn->update(['ville_id' => $ville->id, 'site_id' => $siteUn->id]);
+        $responsableSiteDeux->update(['ville_id' => $ville->id, 'site_id' => $siteDeux->id]);
 
         Commercial::create([
             'entreprise_id' => $entreprise->id,
@@ -167,7 +176,11 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
         // Les responsables prospectent eux aussi : ils doivent donc figurer parmi les
         // commerciaux, sans quoi ni leurs prospections ni leur chiffre d'affaires ne
         // seraient rattachables à quiconque.
-        foreach ([['C-0002', $responsable, 9_000_000, 4_000_000], ['C-0003', $responsableSite, 7_000_000, 3_000_000]] as [$numero, $encadrant, $mecanique, $sinistre]) {
+        foreach ([
+            ['C-0002', $responsable, 9_000_000, 4_000_000],
+            ['C-0003', $responsableSiteUn, 7_000_000, 3_000_000],
+            ['C-0004', $responsableSiteDeux, 7_000_000, 3_000_000],
+        ] as [$numero, $encadrant, $mecanique, $sinistre]) {
             Commercial::create([
                 'entreprise_id' => $entreprise->id,
                 'ville_id' => $ville->id,
@@ -211,7 +224,7 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
         CompteurDocument::create([
             'entreprise_id' => $entreprise->id,
             'type' => 'com',
-            'dernier_numero' => 3,
+            'dernier_numero' => 4,
         ]);
 
         // L'exercice de l'année en cours, ouvert : sans lui, le badge d'en-tête reste
