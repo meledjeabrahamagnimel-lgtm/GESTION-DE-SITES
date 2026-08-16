@@ -1,0 +1,11 @@
+{
+    "name": "Gerant",
+    "alias": "gerant",
+    "description": "Direction : tableau de bord a 360 sur toutes les villes, et parametres de l'entreprise.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Gerant\\Providers\\GerantServiceProvider"
+    ],
+    "files": []
+}

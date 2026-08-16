@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Domain\Shared\Models\DossierNote;
-use App\Domain\Shared\Models\Note;
-use App\Domain\Tenants\Models\Entreprise;
+use Modules\Noyau\Commun\Modeles\DossierNote;
+use Modules\Noyau\Commun\Modeles\Note;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
@@ -45,7 +45,7 @@ class NotesTest extends TestCase
     {
         $this->actingAs($this->commercial);
 
-        $composant = Volt::test('mes-notes')
+        $composant = Volt::test('commercial.mes-notes')
             ->set('nouveauDossier', 'Relances')
             ->call('creerDossier')
             ->assertHasNoErrors();
@@ -77,7 +77,7 @@ class NotesTest extends TestCase
 
         $this->actingAs($this->commercial);
 
-        Volt::test('mes-notes')
+        Volt::test('commercial.mes-notes')
             ->set('titre', 'Ma note')
             ->set('dossierNote', (string) $dossierDuCollegue->id)
             ->call('enregistrerNote')
@@ -97,7 +97,7 @@ class NotesTest extends TestCase
 
         $this->actingAs($this->commercial);
 
-        Volt::test('mes-notes')->call('supprimerNote', $note->id);
+        Volt::test('commercial.mes-notes')->call('supprimerNote', $note->id);
 
         $this->assertDatabaseHas('notes', ['id' => $note->id]);
     }
@@ -113,7 +113,7 @@ class NotesTest extends TestCase
             'titre' => 'À conserver',
         ]);
 
-        Volt::test('mes-notes')->call('supprimerDossier', $dossier->id);
+        Volt::test('commercial.mes-notes')->call('supprimerDossier', $dossier->id);
 
         $this->assertDatabaseMissing('dossiers_notes', ['id' => $dossier->id]);
         $this->assertDatabaseHas('notes', ['id' => $note->id, 'dossier_note_id' => null]);
@@ -126,7 +126,7 @@ class NotesTest extends TestCase
         Note::create(['user_id' => $this->commercial->id, 'titre' => 'Garage Koffi']);
         Note::create(['user_id' => $this->commercial->id, 'titre' => 'Transport Diarra']);
 
-        Volt::test('mes-notes')
+        Volt::test('commercial.mes-notes')
             ->set('recherche', 'Koffi')
             ->assertSee('Garage Koffi')
             ->assertDontSee('Transport Diarra');

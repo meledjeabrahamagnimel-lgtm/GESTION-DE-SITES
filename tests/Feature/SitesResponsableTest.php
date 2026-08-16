@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Domain\Tenants\Models\Entreprise;
-use App\Domain\Tenants\Models\Site;
-use App\Domain\Tenants\Models\Ville;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Site;
+use Modules\Noyau\Entreprises\Modeles\Ville;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -66,7 +66,7 @@ class SitesResponsableTest extends TestCase
     {
         $this->actingAs($this->responsable);
 
-        Volt::test('mon-espace')
+        Volt::test('commun.mon-espace')
             ->assertSet('estResponsable', true)
             ->set('villeNom', 'Abidjan')
             ->set('villeCommune', 'Cocody')
@@ -92,7 +92,7 @@ class SitesResponsableTest extends TestCase
     {
         $this->actingAs($this->responsable);
 
-        Volt::test('mon-espace')
+        Volt::test('commun.mon-espace')
             ->call('enregistrerVille')
             ->assertHasErrors(['villeNom' => 'required']);
 
@@ -109,7 +109,7 @@ class SitesResponsableTest extends TestCase
 
         $this->actingAs($this->responsable);
 
-        Volt::test('mon-espace')
+        Volt::test('commun.mon-espace')
             ->call('editerVille', $ville->id)
             ->assertSet('villeNom', 'Ancien nom')
             ->set('villeNom', 'Nouveau nom')
@@ -134,14 +134,14 @@ class SitesResponsableTest extends TestCase
         // ne trouve tout simplement pas la ligne, et rien n'est modifiable.
         $this->expectException(ModelNotFoundException::class);
 
-        Volt::test('mon-espace')->call('editerVille', $villeEtrangere->id);
+        Volt::test('commun.mon-espace')->call('editerVille', $villeEtrangere->id);
     }
 
     public function test_un_commercial_ne_peut_pas_creer_de_ville(): void
     {
         $this->actingAs($this->commercial);
 
-        Volt::test('mon-espace')
+        Volt::test('commun.mon-espace')
             ->assertSet('estResponsable', false)
             ->set('villeNom', 'Ville pirate')
             ->call('enregistrerVille')
@@ -160,10 +160,10 @@ class SitesResponsableTest extends TestCase
 
         $this->actingAs($this->responsable);
 
-        Volt::test('mon-espace')->call('basculerVille', $ville->id);
+        Volt::test('commun.mon-espace')->call('basculerVille', $ville->id);
         $this->assertFalse($ville->fresh()->est_actif);
 
-        Volt::test('mon-espace')->call('basculerVille', $ville->id);
+        Volt::test('commun.mon-espace')->call('basculerVille', $ville->id);
         $this->assertTrue($ville->fresh()->est_actif);
     }
 
@@ -178,10 +178,10 @@ class SitesResponsableTest extends TestCase
 
         $this->actingAs($this->responsable);
 
-        Volt::test('mon-espace')->call('basculerSite', $site->id);
+        Volt::test('commun.mon-espace')->call('basculerSite', $site->id);
         $this->assertFalse($site->fresh()->est_actif);
 
-        Volt::test('mon-espace')->call('basculerSite', $site->id);
+        Volt::test('commun.mon-espace')->call('basculerSite', $site->id);
         $this->assertTrue($site->fresh()->est_actif);
     }
 }

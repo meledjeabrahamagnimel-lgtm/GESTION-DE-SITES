@@ -2,11 +2,11 @@
 
 namespace Tests\Feature;
 
-use App\Domain\Messagerie\Models\Conversation;
-use App\Domain\Messagerie\Services\AnnuaireMessagerie;
-use App\Domain\Messagerie\Services\Messagerie;
-use App\Domain\Shared\Models\NotificationApp;
-use App\Domain\Tenants\Models\Entreprise;
+use Modules\Noyau\Messagerie\Modeles\Conversation;
+use Modules\Noyau\Messagerie\Services\AnnuaireMessagerie;
+use Modules\Noyau\Messagerie\Services\Messagerie;
+use Modules\Noyau\Commun\Modeles\NotificationApp;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
@@ -178,7 +178,7 @@ class MessagerieTest extends TestCase
         app(PermissionRegistrar::class)->setPermissionsTeamId($this->alpha->id);
         $this->actingAs($commercial);
 
-        Volt::test('messages')
+        Volt::test('commun.messages')
             ->call('nouvelleConversation')
             ->set('destinataires', [$responsable->id])
             ->set('corpsNouveau', 'Premier message')

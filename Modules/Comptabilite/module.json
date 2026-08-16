@@ -1,0 +1,11 @@
+{
+    "name": "Comptabilite",
+    "alias": "comptabilite",
+    "description": "Comptabilite d'une ville : encaissements et decaissements.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Comptabilite\\Providers\\ComptabiliteServiceProvider"
+    ],
+    "files": []
+}

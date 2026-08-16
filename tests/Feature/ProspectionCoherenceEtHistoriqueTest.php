@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
-use App\Domain\Operations\Models\Commercial;
-use App\Domain\Operations\Models\Prospection;
-use App\Domain\Tenants\Models\Entreprise;
-use App\Domain\Tenants\Models\Site;
-use App\Domain\Tenants\Models\Ville;
-use App\Domain\Tenants\Services\ProvisionneurEntreprise;
+use Modules\Noyau\Exploitation\Modeles\Commercial;
+use Modules\Noyau\Exploitation\Modeles\Prospection;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Site;
+use Modules\Noyau\Entreprises\Modeles\Ville;
+use Modules\Noyau\Entreprises\Services\ProvisionneurEntreprise;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
@@ -58,7 +58,7 @@ class ProspectionCoherenceEtHistoriqueTest extends TestCase
     {
         $this->actingAs($this->responsable);
 
-        Volt::test('saisie-du-jour')
+        Volt::test('saisie.saisie-du-jour')
             ->set('prosClient', 'Garage X')
             ->set('prosCommercialId', $this->commercial->id)
             ->set('prosDevisApres', true)
@@ -86,7 +86,7 @@ class ProspectionCoherenceEtHistoriqueTest extends TestCase
 
         $this->actingAs($this->responsable);
 
-        Volt::test('saisie-du-jour')
+        Volt::test('saisie.saisie-du-jour')
             ->call('modifierProspection', $p->id)
             ->set('editionProsClient', 'Nouveau client')
             ->call('enregistrerEditionProspection')

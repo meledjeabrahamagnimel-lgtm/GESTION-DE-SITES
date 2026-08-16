@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Domain\Tenants\Models\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;

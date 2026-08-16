@@ -2,13 +2,13 @@
 
 namespace Database\Seeders;
 
-use App\Domain\Operations\Models\Commercial;
-use App\Domain\Operations\Models\CompteurDocument;
-use App\Domain\Tenants\Models\Entreprise;
-use App\Domain\Tenants\Models\Exercice;
-use App\Domain\Tenants\Models\Site;
-use App\Domain\Tenants\Models\Ville;
-use App\Domain\Tenants\Services\ProvisionneurEntreprise;
+use Modules\Noyau\Exploitation\Modeles\Commercial;
+use Modules\Noyau\Exploitation\Modeles\CompteurDocument;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Exercice;
+use Modules\Noyau\Entreprises\Modeles\Site;
+use Modules\Noyau\Entreprises\Modeles\Ville;
+use Modules\Noyau\Entreprises\Services\ProvisionneurEntreprise;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\PermissionRegistrar;

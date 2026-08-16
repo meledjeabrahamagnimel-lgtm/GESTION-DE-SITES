@@ -28,3 +28,6 @@ Thumbs.db
 # Les assets compiles (public/build) sont volontairement versionnes : l'application est
 # deployee et executee sans etape de build, un « git pull » doit suffire a obtenir
 # une interface a jour sans avoir a relancer « npm run build ».
+
+# Notes et captures de travail, hors dépôt (noms de fichiers trop longs pour Git).
+PLAN/

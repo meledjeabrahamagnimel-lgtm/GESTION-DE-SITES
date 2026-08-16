@@ -1,4 +1,4 @@
-@php $entreprise = \App\Domain\Tenants\Models\Entreprise::query()->where('est_active', true)->first(); @endphp
+@php $entreprise = \Modules\Noyau\Entreprises\Modeles\Entreprise::query()->where('est_active', true)->first(); @endphp
 <x-coquille-auth :entreprise="$entreprise" titre="Mot de passe oublié" sous-titre="Nous vous enverrons un lien de réinitialisation.">
     @if (session('status'))
         <div class="encart encart-succes">{{ session('status') }}</div>

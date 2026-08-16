@@ -63,7 +63,7 @@ class SuperAdminsSecondairesTest extends TestCase
     {
         $secondaire = $this->superAdmin('Secondaire', habilitations: ['entreprises']);
 
-        $libelles = collect(\App\Domain\Shared\Services\MenuNavigation::pour($secondaire))->pluck('label');
+        $libelles = collect(\Modules\Noyau\Commun\Services\MenuNavigation::pour($secondaire))->pluck('label');
 
         $this->assertContains('Entreprises', $libelles);
         $this->assertNotContains('Maintenance', $libelles);
@@ -101,13 +101,13 @@ class SuperAdminsSecondairesTest extends TestCase
 
         $this->actingAs($alice);
 
-        Volt::test('super-admin-administrateurs')
+        Volt::test('superadmin.administrateurs')
             ->call('supprimer', $hors->id)
             ->assertSet('erreur', "Le compte fondateur et les comptes créés par d'autres ne peuvent pas être supprimés.");
 
         $this->assertDatabaseHas('users', ['id' => $hors->id]);
 
-        Volt::test('super-admin-administrateurs')->call('supprimer', $fondateur->id);
+        Volt::test('superadmin.administrateurs')->call('supprimer', $fondateur->id);
         $this->assertDatabaseHas('users', ['id' => $fondateur->id]);
     }
 
@@ -116,7 +116,7 @@ class SuperAdminsSecondairesTest extends TestCase
         $fondateur = $this->superAdmin('Fondateur', fondateur: true);
         $this->actingAs($fondateur);
 
-        Volt::test('super-admin-administrateurs')
+        Volt::test('superadmin.administrateurs')
             ->set('nom', 'Nouvel Admin')
             ->set('email', 'nouvel.admin@plateforme.test')
             ->set('motDePasse', 'mot-de-passe-solide')
@@ -139,7 +139,7 @@ class SuperAdminsSecondairesTest extends TestCase
         $fondateur = $this->superAdmin('Fondateur', fondateur: true);
         $this->actingAs($fondateur);
 
-        Volt::test('super-admin-administrateurs')
+        Volt::test('superadmin.administrateurs')
             ->set('nom', 'Curieux')
             ->set('email', 'curieux@plateforme.test')
             ->set('motDePasse', 'mot-de-passe-solide')

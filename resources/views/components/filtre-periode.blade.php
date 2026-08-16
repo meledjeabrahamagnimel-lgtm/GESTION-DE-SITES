@@ -6,7 +6,7 @@
 ])
 
 @php
-    use App\Domain\Shared\Services\PeriodeCalculateur;
+    use Modules\Noyau\Commun\Services\PeriodeCalculateur;
     use Carbon\Carbon;
 
     // La précision Mécanique/Sinistre/Consolidé n'a de sens qu'une fois une ville

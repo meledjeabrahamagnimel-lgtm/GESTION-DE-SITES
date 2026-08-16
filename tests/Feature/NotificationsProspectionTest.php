@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
-use App\Domain\Operations\Models\Commercial;
-use App\Domain\Operations\Models\Prospection;
-use App\Domain\Shared\Models\NotificationApp;
-use App\Domain\Tenants\Models\Entreprise;
-use App\Domain\Tenants\Models\Site;
-use App\Domain\Tenants\Models\Ville;
+use Modules\Noyau\Exploitation\Modeles\Commercial;
+use Modules\Noyau\Exploitation\Modeles\Prospection;
+use Modules\Noyau\Commun\Modeles\NotificationApp;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Site;
+use Modules\Noyau\Entreprises\Modeles\Ville;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
@@ -109,7 +109,7 @@ class NotificationsProspectionTest extends TestCase
 
         $this->actingAs($this->commercialUser);
 
-        Volt::test('mes-prospections')
+        Volt::test('commercial.mes-prospections')
             ->set('selection', [$prospection->id => true])
             ->call('transmettreSelection');
 
@@ -132,7 +132,7 @@ class NotificationsProspectionTest extends TestCase
 
         $this->actingAs($this->responsable);
 
-        Volt::test('saisie-du-jour')->call('validerProspection', $prospection->id);
+        Volt::test('saisie.saisie-du-jour')->call('validerProspection', $prospection->id);
 
         $this->assertSame('Validée', $prospection->fresh()->statut_validation);
 
@@ -150,7 +150,7 @@ class NotificationsProspectionTest extends TestCase
 
         $this->actingAs($this->responsable);
 
-        Volt::test('saisie-du-jour')
+        Volt::test('saisie.saisie-du-jour')
             ->set('motifRefus', [$prospection->id => 'Client déjà démarché'])
             ->call('refuserProspection', $prospection->id);
 
@@ -173,7 +173,7 @@ class NotificationsProspectionTest extends TestCase
 
         $this->actingAs($this->responsable);
 
-        Volt::test('saisie-du-jour')->call('validerToutesProspections');
+        Volt::test('saisie.saisie-du-jour')->call('validerToutesProspections');
 
         $this->assertSame(0, Prospection::where('statut_validation', 'Transmise')->count());
         $this->assertSame(1, NotificationApp::where('user_id', $this->commercialUser->id)->count());

@@ -1,8 +1,8 @@
 <?php
 
-use App\Domain\Shared\Models\AbonnementPush;
-use App\Domain\Shared\Models\NotificationApp;
-use App\Domain\Shared\Services\WebPush\EnvoyeurPush;
+use Modules\Noyau\Commun\Modeles\AbonnementPush;
+use Modules\Noyau\Commun\Modeles\NotificationApp;
+use Modules\Noyau\Commun\Services\WebPush\EnvoyeurPush;
 use function Livewire\Volt\{computed, mount, on, state};
 
 /*

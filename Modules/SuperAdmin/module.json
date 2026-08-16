@@ -1,0 +1,11 @@
+{
+    "name": "SuperAdmin",
+    "alias": "superadmin",
+    "description": "Plateforme : gestion des entreprises clientes, des acces, du journal et de la maintenance.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\SuperAdmin\\Providers\\SuperAdminServiceProvider"
+    ],
+    "files": []
+}

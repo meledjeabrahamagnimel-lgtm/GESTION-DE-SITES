@@ -2,15 +2,15 @@
 
 namespace Database\Seeders;
 
-use App\Domain\Messagerie\Models\Conversation;
-use App\Domain\Messagerie\Models\Message;
-use App\Domain\Operations\Models\Commercial;
-use App\Domain\Shared\Models\DossierNote;
-use App\Domain\Shared\Models\Note;
-use App\Domain\Shared\Models\NotificationApp;
-use App\Domain\Tenants\Models\Entreprise;
-use App\Domain\Tenants\Models\Site;
-use App\Domain\Tenants\Models\Ville;
+use Modules\Noyau\Messagerie\Modeles\Conversation;
+use Modules\Noyau\Messagerie\Modeles\Message;
+use Modules\Noyau\Exploitation\Modeles\Commercial;
+use Modules\Noyau\Commun\Modeles\DossierNote;
+use Modules\Noyau\Commun\Modeles\Note;
+use Modules\Noyau\Commun\Modeles\NotificationApp;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Site;
+use Modules\Noyau\Entreprises\Modeles\Ville;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;

@@ -1,4 +1,4 @@
-@php $entreprise = \App\Domain\Tenants\Models\Entreprise::query()->where('est_active', true)->first(); @endphp
+@php $entreprise = \Modules\Noyau\Entreprises\Modeles\Entreprise::query()->where('est_active', true)->first(); @endphp
 <x-coquille-auth :entreprise="$entreprise" titre="Nouveau mot de passe" sous-titre="Choisissez un mot de passe d'au moins 8 caractères.">
     @if ($errors->any())
         <div class="encart encart-alerte">@foreach ($errors->all() as $e)<div>{{ $e }}</div>@endforeach</div>

@@ -1,7 +1,7 @@
 @php
-    $navigation = auth()->user() ? \App\Domain\Shared\Services\MenuNavigation::pour(auth()->user()) : [];
+    $navigation = auth()->user() ? \Modules\Noyau\Commun\Services\MenuNavigation::pour(auth()->user()) : [];
     $exerciceActuel = auth()->user()?->entreprise_id
-        ? \App\Domain\Tenants\Models\Exercice::actuel(auth()->user()->entreprise_id)
+        ? \Modules\Noyau\Entreprises\Modeles\Exercice::actuel(auth()->user()->entreprise_id)
         : null;
 @endphp
 <!DOCTYPE html>

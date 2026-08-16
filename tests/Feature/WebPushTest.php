@@ -2,11 +2,11 @@
 
 namespace Tests\Feature;
 
-use App\Domain\Shared\Models\AbonnementPush;
-use App\Domain\Shared\Services\Notificateur;
-use App\Domain\Shared\Services\WebPush\ChiffrementWebPush;
-use App\Domain\Shared\Services\WebPush\CleEc;
-use App\Domain\Shared\Services\WebPush\EnvoyeurPush;
+use Modules\Noyau\Commun\Modeles\AbonnementPush;
+use Modules\Noyau\Commun\Services\Notificateur;
+use Modules\Noyau\Commun\Services\WebPush\ChiffrementWebPush;
+use Modules\Noyau\Commun\Services\WebPush\CleEc;
+use Modules\Noyau\Commun\Services\WebPush\EnvoyeurPush;
 use App\Jobs\EnvoyerNotificationPush;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -185,7 +185,7 @@ class WebPushTest extends TestCase
 
         $endpoint = 'https://fcm.googleapis.com/fcm/send/appareil-un';
 
-        $composant = \Livewire\Volt\Volt::test('mes-notifications')
+        $composant = \Livewire\Volt\Volt::test('commun.mes-notifications')
             ->call('enregistrerAbonnement', $endpoint, 'p256dh', 'auth', 'Chrome sur Android')
             ->assertHasNoErrors()
             ->assertSee('Chrome sur Android');
@@ -212,7 +212,7 @@ class WebPushTest extends TestCase
 
         $this->actingAs($moi);
 
-        \Livewire\Volt\Volt::test('mes-notifications')->call('oublierAppareil', $sien->id);
+        \Livewire\Volt\Volt::test('commun.mes-notifications')->call('oublierAppareil', $sien->id);
 
         $this->assertDatabaseHas('abonnements_push', ['id' => $sien->id]);
     }

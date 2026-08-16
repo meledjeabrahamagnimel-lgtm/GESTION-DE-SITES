@@ -2,17 +2,17 @@
 
 namespace Tests\Feature;
 
-use App\Domain\Operations\Models\Charge;
-use App\Domain\Operations\Models\Commercial;
-use App\Domain\Operations\Models\Devis;
-use App\Domain\Operations\Models\Encaissement;
-use App\Domain\Operations\Models\Facture;
-use App\Domain\Operations\Models\Prospection;
-use App\Domain\Tenants\Actions\PurgerDonneesEntreprise;
-use App\Domain\Tenants\Models\Entreprise;
-use App\Domain\Tenants\Models\Site;
-use App\Domain\Tenants\Models\Ville;
-use App\Domain\Tenants\Services\ProvisionneurEntreprise;
+use Modules\Noyau\Exploitation\Modeles\Charge;
+use Modules\Noyau\Exploitation\Modeles\Commercial;
+use Modules\Noyau\Exploitation\Modeles\Devis;
+use Modules\Noyau\Exploitation\Modeles\Encaissement;
+use Modules\Noyau\Exploitation\Modeles\Facture;
+use Modules\Noyau\Exploitation\Modeles\Prospection;
+use Modules\Noyau\Entreprises\Actions\PurgerDonneesEntreprise;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Site;
+use Modules\Noyau\Entreprises\Modeles\Ville;
+use Modules\Noyau\Entreprises\Services\ProvisionneurEntreprise;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\PermissionRegistrar;

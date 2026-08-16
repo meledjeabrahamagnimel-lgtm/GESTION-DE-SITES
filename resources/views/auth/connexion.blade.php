@@ -1,5 +1,5 @@
 @php
-    $entreprise = \App\Domain\Tenants\Models\Entreprise::query()->where('est_active', true)->first();
+    $entreprise = \Modules\Noyau\Entreprises\Modeles\Entreprise::query()->where('est_active', true)->first();
 @endphp
 <!DOCTYPE html>
 <html lang="fr" style="{{ collect($entreprise?->theme() ?? [])->map(fn ($v, $k) => "$k:$v")->implode(';') }}">

@@ -2,15 +2,15 @@
 
 namespace Database\Seeders;
 
-use App\Domain\Operations\Models\Charge;
-use App\Domain\Operations\Models\Commercial;
-use App\Domain\Operations\Models\Devis;
-use App\Domain\Operations\Models\Encaissement;
-use App\Domain\Operations\Models\Facture;
-use App\Domain\Operations\Models\Prospection;
-use App\Domain\Operations\Services\GenerateurNumero;
-use App\Domain\Tenants\Models\Entreprise;
-use App\Domain\Tenants\Models\Site;
+use Modules\Noyau\Exploitation\Modeles\Charge;
+use Modules\Noyau\Exploitation\Modeles\Commercial;
+use Modules\Noyau\Exploitation\Modeles\Devis;
+use Modules\Noyau\Exploitation\Modeles\Encaissement;
+use Modules\Noyau\Exploitation\Modeles\Facture;
+use Modules\Noyau\Exploitation\Modeles\Prospection;
+use Modules\Noyau\Exploitation\Services\GenerateurNumero;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Site;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;

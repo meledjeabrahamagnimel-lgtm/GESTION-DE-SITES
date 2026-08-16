@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Domain\Shared\Services\WebPush\EnvoyeurPush;
+use Modules\Noyau\Commun\Services\WebPush\EnvoyeurPush;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 

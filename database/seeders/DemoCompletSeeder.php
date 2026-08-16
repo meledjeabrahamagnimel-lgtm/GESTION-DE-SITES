@@ -2,9 +2,9 @@
 
 namespace Database\Seeders;
 
-use App\Domain\Operations\Models\SaisieJournaliere;
-use App\Domain\Tenants\Models\Entreprise;
-use App\Domain\Tenants\Models\Site;
+use Modules\Noyau\Exploitation\Modeles\SaisieJournaliere;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Site;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 

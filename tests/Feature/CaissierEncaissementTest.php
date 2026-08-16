@@ -2,15 +2,15 @@
 
 namespace Tests\Feature;
 
-use App\Domain\Operations\Models\Charge;
-use App\Domain\Operations\Models\Commercial;
-use App\Domain\Operations\Models\Encaissement;
-use App\Domain\Operations\Models\Facture;
-use App\Domain\Shared\Models\NotificationApp;
-use App\Domain\Tenants\Models\Entreprise;
-use App\Domain\Tenants\Models\Site;
-use App\Domain\Tenants\Models\Ville;
-use App\Domain\Tenants\Services\ProvisionneurEntreprise;
+use Modules\Noyau\Exploitation\Modeles\Charge;
+use Modules\Noyau\Exploitation\Modeles\Commercial;
+use Modules\Noyau\Exploitation\Modeles\Encaissement;
+use Modules\Noyau\Exploitation\Modeles\Facture;
+use Modules\Noyau\Commun\Modeles\NotificationApp;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Site;
+use Modules\Noyau\Entreprises\Modeles\Ville;
+use Modules\Noyau\Entreprises\Services\ProvisionneurEntreprise;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
@@ -115,7 +115,7 @@ class CaissierEncaissementTest extends TestCase
 
         $this->actingAs($this->caissier);
 
-        Volt::test('caissier-encaissements')
+        Volt::test('comptabilite.encaissements')
             ->assertSee($enAttente->n_facture)
             ->assertDontSee($soldee->n_facture);
     }
@@ -126,7 +126,7 @@ class CaissierEncaissementTest extends TestCase
 
         $this->actingAs($this->caissier);
 
-        Volt::test('caissier-encaissements')
+        Volt::test('comptabilite.encaissements')
             ->call('choisirFacture', $facture->id)
             ->set('montant', 300_000)
             ->set('moyen', 'Espèces')
@@ -146,7 +146,7 @@ class CaissierEncaissementTest extends TestCase
 
         $this->actingAs($this->caissier);
 
-        Volt::test('caissier-encaissements')
+        Volt::test('comptabilite.encaissements')
             ->call('choisirFacture', $facture->id)
             ->set('montant', 600_000)
             ->call('encaisser')
@@ -170,7 +170,7 @@ class CaissierEncaissementTest extends TestCase
 
         $this->actingAs($this->caissier);
 
-        Volt::test('caissier-encaissements')
+        Volt::test('comptabilite.encaissements')
             ->set('factureId', $facture->id)
             ->set('montant', 100_000)
             ->call('encaisser')
@@ -183,7 +183,7 @@ class CaissierEncaissementTest extends TestCase
     {
         $this->actingAs($this->caissier);
 
-        Volt::test('caissier-decaissements')
+        Volt::test('comptabilite.decaissements')
             ->set('chgTypeOp', 'Charges')
             ->set('chgLibelle', 'Achats pièces')
             ->set('chgMontant', 75_000)

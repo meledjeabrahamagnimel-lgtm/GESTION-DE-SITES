@@ -1,0 +1,8 @@
+{
+    "Noyau": true,
+    "SuperAdmin": true,
+    "Gerant": true,
+    "Encadrement": true,
+    "Comptabilite": true,
+    "Commercial": true
+}

@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Domain\Shared\Services\WebPush\CleEc;
+use Modules\Noyau\Commun\Services\WebPush\CleEc;
 use Illuminate\Console\Command;
 
 class GenererClesVapid extends Command

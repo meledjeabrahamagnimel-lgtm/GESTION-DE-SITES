@@ -1,0 +1,11 @@
+{
+    "name": "Encadrement",
+    "alias": "encadrement",
+    "description": "Superviseur de ville et responsable de site : saisie du jour et indicateurs.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Encadrement\\Providers\\EncadrementServiceProvider"
+    ],
+    "files": []
+}

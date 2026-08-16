@@ -29,9 +29,10 @@ return [
     |
     */
 
+    // Les écrans ne vivent plus ici : chaque module monte les siens depuis
+    // Modules/<Module>/resources/views, via son fournisseur de services.
     'component_namespaces' => [
         'layouts' => resource_path('views/layouts'),
-        'pages' => resource_path('views/pages'),
     ],
 
     /*

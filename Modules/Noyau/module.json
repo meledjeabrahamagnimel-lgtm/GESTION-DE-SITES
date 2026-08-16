@@ -1,0 +1,11 @@
+{
+    "name": "Noyau",
+    "alias": "noyau",
+    "description": "Socle commun : modeles, migrations, services metier et ecrans accessibles a tous les roles.",
+    "keywords": [],
+    "priority": -10,
+    "providers": [
+        "Modules\\Noyau\\Providers\\NoyauServiceProvider"
+    ],
+    "files": []
+}

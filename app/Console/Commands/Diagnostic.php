@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Domain\Shared\Models\AbonnementPush;
-use App\Domain\Shared\Services\WebPush\EnvoyeurPush;
+use Modules\Noyau\Commun\Modeles\AbonnementPush;
+use Modules\Noyau\Commun\Services\WebPush\EnvoyeurPush;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;

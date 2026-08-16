@@ -1,0 +1,11 @@
+{
+    "name": "Commercial",
+    "alias": "commercial",
+    "description": "Commercial : prospections, performance individuelle et notes.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Commercial\\Providers\\CommercialServiceProvider"
+    ],
+    "files": []
+}
