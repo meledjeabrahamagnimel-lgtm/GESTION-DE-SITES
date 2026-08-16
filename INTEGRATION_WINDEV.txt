@@ -526,3 +526,117 @@ PROCHAINES ETAPES CONCRETES
 5. Test croise sur un jeu de donnees limite avant la bascule reelle.
 
 ================================================================================
+
+
+================================================================================
+ANNEXE A - OUTILS NECESSAIRES POUR DEVELOPPER LE MODULE WINDEV 27
+================================================================================
+
+Ce dont vous avez REELLEMENT besoin (le strict minimum) :
+
+1. WINDEV 27 (l'atelier de developpement) - PC SOFT, licence payante.
+   - C'est le seul outil indispensable. Il contient tout : l'editeur de
+     fenetres, le langage WLangage, l'editeur d'analyse (le modele de donnees),
+     le debogueur, et le generateur d'installation.
+   - Attention a ne pas confondre :
+       * WINDEV        = applications Windows classiques (c'est votre cas)
+       * WEBDEV        = applications web
+       * WINDEV MOBILE = Android / iOS
+   - Version 27 : sortie en 2021, toujours parfaitement utilisable. Elle
+     contient nativement tout ce qu'il faut pour l'API REST (httpRequete,
+     JSONVersVariable, etc.) : aucun composant supplementaire a acheter.
+
+2. HFSQL - inclus avec WINDEV, rien a acheter en plus.
+   - HFSQL Classic : les donnees sont dans des fichiers (.fic/.ndx/.mmo) poses
+     dans un dossier. Gratuit, illimite, aucun serveur a installer.
+   - HFSQL Client/Serveur : un vrai service serveur (comme MySQL). Necessaire
+     des que plusieurs postes travaillent simultanement sur les memes donnees.
+     Gratuit egalement pour un usage sur un serveur du client.
+   - >>> C'EST LE POINT A TRANCHER EN PREMIER (voir Annexe B).
+
+3. Un poste Windows (Windows 10 ou 11, 8 Go de RAM minimum, 16 Go confortable).
+   WinDev ne tourne pas nativement sur Mac ni Linux.
+
+4. Pour la mise en production chez le client :
+   - Le generateur d'installation est INCLUS dans WinDev : il produit un .exe
+     d'installation a passer poste par poste.
+   - Le "Centre de Suivi de Projet" (inclus) sert au suivi des bugs et des
+     taches ; utile mais pas obligatoire.
+
+Optionnel, selon vos habitudes :
+   - Un gestionnaire de sources (WinDev a le sien, le GDS - Gestionnaire De
+     Sources - inclus ; ou Git, mais WinDev s'y prete mal, ses fichiers etant
+     binaires).
+   - Postman ou l'outil de test HTTP de votre choix, pour valider les appels
+     vers GESTION-DE-SITES avant meme d'ecrire la premiere ligne de WLangage.
+
+Ce dont vous N'AVEZ PAS besoin :
+   - Aucun serveur d'application, aucun IIS, aucun WEBDEV Application Serveur :
+     l'application WinDev appelle GESTION-DE-SITES de l'exterieur vers
+     l'interieur, elle n'expose rien.
+   - Aucune licence supplementaire pour le JSON ou le HTTPS : c'est natif.
+
+
+================================================================================
+ANNEXE B - POURQUOI ON NE PEUT PAS "ATTAQUER DIRECTEMENT" LA BASE HFSQL
+================================================================================
+
+La question posee est legitime : si tous les postes de l'Artisan (Abidjan,
+Bouake, San Pedro) voient les memes donnees, pourquoi GESTION-DE-SITES ne
+pourrait-il pas s'y connecter lui aussi ?
+
+Il faut distinguer deux choses tres differentes :
+
+  (a) PARTAGER DES DONNEES ENTRE POSTES D'UN MEME RESEAU
+  (b) ETRE JOIGNABLE DEPUIS INTERNET
+
+Les postes de l'Artisan font (a). Ils ne font pas (b).
+
+1. LE PARTAGE ENTRE POSTES SE FAIT A L'INTERIEUR DU RESEAU LOCAL
+   Quand un poste modifie une donnee et que les autres la voient, l'echange
+   passe par le reseau local du garage (le cable, le switch, le wifi de la
+   boutique) ou par un serveur pose dans le meme local. Les adresses utilisees
+   sont des adresses PRIVEES (192.168.x.x, 10.x.x.x). Ces adresses n'existent
+   que dans ce batiment : elles ne sont pas routables sur Internet. Deux
+   garages differents peuvent avoir exactement les memes.
+
+2. GESTION-DE-SITES EST DEHORS
+   Le serveur cloud n'est pas dans le reseau du garage. Pour joindre HFSQL, il
+   lui faudrait :
+       - une adresse IP publique FIXE cote garage (les abonnements internet
+         courants en donnent une DYNAMIQUE, qui change) ;
+       - l'ouverture du port HFSQL (4900 par defaut) sur la box du garage,
+         vers Internet ;
+       - que cette ouverture reste stable malgre les coupures, les changements
+         de box, les redemarrages.
+   Techniquement possible. Mais cela revient a exposer la base comptable du
+   client directement sur Internet, et a faire dependre la synchronisation de
+   la box internet du garage. C'est cela qui est deconseille, pas la faisabilite
+   brute.
+
+3. LE CAS "HFSQL CLASSIC" REND LA QUESTION SANS OBJET
+   Si l'installation est en HFSQL Classic (fichiers .fic partages dans un
+   dossier reseau), il n'y a AUCUN serveur a joindre : ce ne sont que des
+   fichiers sur un disque. Rien a distance ne peut s'y connecter, meme en
+   ouvrant tous les ports du monde. Seul HFSQL Client/Serveur expose un vrai
+   service reseau.
+   >>> D'ou l'importance de la question posee plus haut : Classic ou C/S ?
+
+4. LE SENS INVERSE, LUI, NE POSE AUCUN PROBLEME
+   Quand c'est WinDev qui appelle GESTION-DE-SITES, tout s'inverse :
+   l'appel part de l'interieur vers l'exterieur, comme quand un poste ouvre un
+   site web. Aucune IP fixe, aucun port a ouvrir, aucune configuration de box.
+   Cela fonctionne meme en 4G, meme si le garage change d'operateur.
+   C'est exactement pour cette raison que l'API REST a ete retenue.
+
+5. SI VOUS VOULEZ MALGRE TOUT L'ACCES DIRECT A LA BASE
+   Deux montages le rendent propre :
+       - VPN site-a-site entre le serveur cloud et le reseau du garage. La base
+         reste privee, le serveur cloud entre "dans" le reseau. Cout : un
+         routeur VPN par ville + une configuration a maintenir.
+       - Heberger HFSQL Client/Serveur sur un serveur en ligne plutot que chez
+         le client. Les postes WinDev s'y connectent par Internet, et
+         GESTION-DE-SITES aussi. Mais on perd le fonctionnement hors connexion :
+         plus d'internet au garage = plus d'application du tout.
+   Dans les deux cas, l'API REST reste la solution la plus simple, la moins
+   chere et la plus robuste pour ce besoin precis.
