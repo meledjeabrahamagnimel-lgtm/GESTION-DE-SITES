@@ -39,13 +39,13 @@ class NotificationsProspectionTest extends TestCase
 
         $this->entreprise = Entreprise::create(['nom' => 'Alpha', 'slug' => 'alpha']);
 
-        foreach (['gerant', 'responsable_site', 'commercial'] as $role) {
+        foreach (['gerant', 'responsable_ville', 'commercial'] as $role) {
             Role::findOrCreate($role, 'web');
         }
 
         app(PermissionRegistrar::class)->setPermissionsTeamId($this->entreprise->id);
 
-        $this->responsable = $this->utilisateur('responsable_site', 'Responsable Un', 'resp@exemple.test');
+        $this->responsable = $this->utilisateur('responsable_ville', 'Responsable Un', 'resp@exemple.test');
         $this->commercialUser = $this->utilisateur('commercial', 'Commercial Un', 'com@exemple.test');
 
         $ville = Ville::create([
@@ -58,8 +58,7 @@ class NotificationsProspectionTest extends TestCase
         $this->site = Site::create([
             'entreprise_id' => $this->entreprise->id,
             'ville_id' => $ville->id,
-            'nom' => 'Abidjan — Mécanique',
-            'activite' => 'Mécanique',
+            'nom' => 'Abidjan',
         ]);
 
         $this->commercial = Commercial::create([

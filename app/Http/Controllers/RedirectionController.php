@@ -16,7 +16,7 @@ class RedirectionController extends Controller
         $destination = match (true) {
             $utilisateur->hasRole('super_admin') => route('super-admin.dashboard'),
             $utilisateur->hasRole('gerant') => route('tableau-de-bord'),
-            $utilisateur->hasRole('responsable_site') => route('saisie-du-jour'),
+            $utilisateur->hasRole('responsable_ville') || $utilisateur->hasRole('responsable_site') => route('saisie-du-jour'),
             $utilisateur->hasRole('commercial') => route('ma-performance'),
             $utilisateur->hasRole('caissier') => route('caissier.tableau-de-bord'),
             default => null,

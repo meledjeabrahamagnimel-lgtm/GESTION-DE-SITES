@@ -42,7 +42,10 @@ class MessagerieEtNotesSeeder extends Seeder
         }
 
         $gerant = $this->utilisateursAyantLeRole('gerant', $entreprise->id)->first();
-        $responsables = $this->utilisateursAyantLeRole('responsable_site', $entreprise->id);
+        // Les deux rôles d'encadrement intermédiaire se valent ici : ce qui compte est de
+        // s'adresser à celui qui répond réellement du commercial, ville ou site.
+        $responsables = $this->utilisateursAyantLeRole('responsable_ville', $entreprise->id)
+            ->merge($this->utilisateursAyantLeRole('responsable_site', $entreprise->id));
         $commerciaux = $this->utilisateursAyantLeRole('commercial', $entreprise->id);
         $superAdmin = $this->utilisateursAyantLeRole('super_admin', 0)->first();
 

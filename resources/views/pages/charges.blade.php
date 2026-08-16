@@ -14,6 +14,7 @@ state([
     'semaineFiltre' => '',
     'jourFiltre' => '',
     'villeFiltre' => '',
+    'siteFiltre' => '',
     'activiteFiltre' => '',
     'pageDetail' => 1,
 ]);
@@ -25,36 +26,40 @@ mount(function () {
 
 $updatedMoisFiltre = function () { $this->semaineFiltre = ''; $this->jourFiltre = ''; };
 $updatedSemaineFiltre = function () { $this->jourFiltre = ''; };
+/** Changer de ville rend caduc le lieu choisi dans la précédente. */
+$updatedVilleFiltre = function () { $this->siteFiltre = ''; };
 
 $plage = computed(fn () => PeriodeCalculateur::plage(
     $this->periode, $this->dateDebut, $this->dateFin, $this->moisFiltre ?: null, $this->semaineFiltre ?: null, $this->jourFiltre ?: null
 ));
 $mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
 $villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
-$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
-$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$mesSitesFiltre = computed(fn () => PerimetreSites::optionsSites(auth()->user(), $this->villeFiltre));
+$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->siteFiltre));
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->siteFiltre, $this->activiteFiltre));
 
+/**
+ * Une charge n'est ventilée par activité que si celui qui l'a saisie l'a précisée :
+ * beaucoup d'entre elles (loyer, salaires, fonctionnement) concernent réellement le
+ * lieu entier. Isoler une activité les écarte donc volontairement du total — ce sont
+ * les seules dont on puisse affirmer qu'elles lui appartiennent.
+ */
 $requeteBase = computed(function () {
     [$debut, $fin] = $this->plage;
 
-    return Charge::query()->whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin]);
+    return Charge::query()->whereIn('site_id', $this->idsSites)
+        ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
+        ->whereBetween('date', [$debut, $fin]);
 });
 
 $caPeriode = computed(function () {
     [$debut, $fin] = $this->plage;
 
-    return (int) Facture::whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin])->sum('montant');
+    return (int) Facture::whereIn('site_id', $this->idsSites)
+        ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
+        ->whereBetween('date', [$debut, $fin])->sum('montant');
 });
 
-/**
- * Les charges n'ont pas d'étiquette Mécanique/Sinistre en base — contrairement au CA
- * (chaque facture porte la sienne) : elles ne sont rattachées qu'au site où elles sont
- * enregistrées. Or un même commercial vend sur les deux activités d'une ville, si bien
- * qu'une ventilation par activité du site afficherait « Sinistre : 0 F » même quand des
- * charges liées à cette activité existent bel et bien — trompeur plutôt qu'informatif.
- * Ces KPI restent donc consolidés, sans tenter une répartition que la base ne permet
- * pas d'établir fiablement.
- */
 $kpis = computed(function () {
     $lignes = (clone $this->requeteBase)->where('type_operation', 'Charges')->get();
     $total = (int) $lignes->sum('montant');
@@ -95,7 +100,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('da
 
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
-        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
+        :ville-filtre="$villeFiltre" :sites="$this->mesSitesFiltre" :site-filtre="$siteFiltre" :activite-filtre="$activiteFiltre"
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
@@ -121,7 +126,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('da
                         <th>Libellé d'opération</th>
                         <th>Moyens</th>
                         <th>Tiers</th>
-                        @if (! $activiteFiltre && count($this->idsSites) > 1)
+                        @if (count($this->idsSites) > 1)
                             <th>Site</th>
                         @endif
                         <th>Montant</th>
@@ -136,14 +141,14 @@ $detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('da
                             <td>{{ $ligne->libelle }}</td>
                             <td>{{ $ligne->moyen }}</td>
                             <td style="color:#6B6E76;">{{ $ligne->tiers ?? '—' }}</td>
-                            @if (! $activiteFiltre && count($this->idsSites) > 1)
+                            @if (count($this->idsSites) > 1)
                                 <td>{{ $ligne->site->nom }}</td>
                             @endif
                             <td style="font-variant-numeric:tabular-nums; font-weight:700;">{{ ae($ligne->montant) }}</td>
                             <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 8 : 7" texte="Aucune charge enregistrée sur cette période." />
+                        <x-table-vide :colspan="count($this->idsSites) > 1 ? 8 : 7" texte="Aucune charge enregistrée sur cette période." />
                     @endforelse
                 </tbody>
             </table>

@@ -13,7 +13,7 @@ state([
     'nom' => '',
     'email' => '',
     'motDePasse' => '',
-    'perimetre' => '',
+    'villeChoix' => '',
     'siteChoix' => '',
     'objectifGlobal' => Commercial::OBJECTIF_MENSUEL_DEFAUT,
     'pourcentageMecanique' => (int) (Commercial::PART_MECANIQUE_DEFAUT * 100),
@@ -22,72 +22,29 @@ state([
 
 $entreprises = computed(fn () => Entreprise::where('est_active', true)->orderBy('nom')->get());
 
-$sites = computed(fn () => $this->entrepriseId ? Site::where('entreprise_id', $this->entrepriseId)->where('est_actif', true)->with('ville')->orderBy('nom')->get() : collect());
+/** Villes de l'entreprise choisie : périmètre du responsable de ville, du commercial et de la comptabilité. */
+$optionsVille = computed(fn () => $this->entrepriseId
+    ? Ville::where('entreprise_id', $this->entrepriseId)->where('est_actif', true)->orderBy('nom')->pluck('nom', 'id')->all()
+    : []);
 
-/** Un seul contrôle Site : le site précis définit l'activité, plus une option "les deux" par ville. */
-$optionsSiteCommercial = computed(function () {
-    $options = [];
-
-    foreach ($this->sites->groupBy('ville_id') as $sitesDeLaVille) {
-        $ville = $sitesDeLaVille->first()->ville;
-
-        foreach ($sitesDeLaVille->sortBy('activite') as $site) {
-            $options['site:'.$site->id] = ($ville ? $ville->nom.' — ' : '').$site->activite;
-        }
-
-        if ($sitesDeLaVille->count() > 1) {
-            $options['ville:'.$ville?->id] = ($ville ? $ville->nom.' — ' : '').'Les deux (Mécanique + Sinistre)';
-        }
-    }
-
-    return $options;
-});
-
-$activiteResolue = computed(function () {
-    if (str_starts_with((string) $this->siteChoix, 'ville:')) {
-        return 'Mécanique/Sinistre';
-    }
-
-    [$type, $id] = array_pad(explode(':', (string) $this->siteChoix, 2), 2, null);
-
-    return $type === 'site' ? $this->sites->firstWhere('id', (int) $id)?->activite : null;
-});
-
-/** Périmètres proposés pour un nouveau responsable : une ville entière, ou un site précis. */
-$perimetres = computed(function () {
-    if (! $this->entrepriseId) {
-        return [];
-    }
-
-    $options = [];
-
-    foreach (Ville::where('entreprise_id', $this->entrepriseId)->where('est_actif', true)->orderBy('nom')->get() as $ville) {
-        $options['ville:'.$ville->id] = $ville->nom.' — toute la ville';
-    }
-
-    foreach ($this->sites as $site) {
-        $options['site:'.$site->id] = $site->nom.' (site précis)';
-    }
-
-    return $options;
-});
+/** Lieux de l'entreprise choisie : périmètre du seul responsable de site. */
+$optionsSite = computed(fn () => $this->entrepriseId
+    ? Site::where('entreprise_id', $this->entrepriseId)->where('est_actif', true)->orderBy('nom')->pluck('nom', 'id')->all()
+    : []);
 
 $rolesDisponibles = computed(fn () => [
     'gerant' => 'Gérant',
+    'responsable_ville' => 'Responsable de ville',
     'responsable_site' => 'Responsable de site',
     'commercial' => 'Commercial',
     'caissier' => 'Comptabilité',
 ]);
 
-$objectifMecanique = computed(function () {
-    $global = (int) $this->objectifGlobal;
+/** Rôles dont le titulaire prospecte : il reçoit une fiche commercial et des objectifs. */
+$roleAvecObjectifs = computed(fn () => in_array($this->roleActif, ['responsable_ville', 'responsable_site', 'commercial'], true));
 
-    return match ($this->activiteResolue) {
-        'Mécanique' => $global,
-        'Sinistre' => 0,
-        default => (int) round($global * ((int) $this->pourcentageMecanique) / 100),
-    };
-});
+/** Répartition Mécanique/Sinistre de l'objectif global : tout lieu accueille les deux activités. */
+$objectifMecanique = computed(fn () => (int) round((int) $this->objectifGlobal * ((int) $this->pourcentageMecanique) / 100));
 
 $objectifSinistre = computed(fn () => (int) $this->objectifGlobal - $this->objectifMecanique);
 
@@ -106,11 +63,13 @@ $creer = function (CreerAcces $action) {
         'motDePasse' => ['required', 'string', 'min:8'],
     ];
 
-    if ($this->roleActif === 'responsable_site' || $this->roleActif === 'caissier') {
-        $regles['perimetre'] = ['required', 'in:'.implode(',', array_keys($this->perimetres))];
+    if ($this->roleActif === 'responsable_site') {
+        $regles['siteChoix'] = ['required', 'in:'.implode(',', array_keys($this->optionsSite))];
+    } elseif ($this->roleActif !== 'gerant') {
+        $regles['villeChoix'] = ['required', 'in:'.implode(',', array_keys($this->optionsVille))];
     }
-    if ($this->roleActif === 'commercial') {
-        $regles['siteChoix'] = ['required', 'in:'.implode(',', array_keys($this->optionsSiteCommercial))];
+
+    if ($this->roleAvecObjectifs) {
         $regles['objectifGlobal'] = ['required', 'numeric', 'min:0'];
         $regles['pourcentageMecanique'] = ['required', 'numeric', 'min:0', 'max:100'];
     }
@@ -120,7 +79,7 @@ $creer = function (CreerAcces $action) {
         'nom' => 'nom et prénoms',
         'email' => 'adresse e-mail',
         'motDePasse' => 'mot de passe',
-        'perimetre' => 'périmètre',
+        'villeChoix' => 'ville',
         'siteChoix' => 'site',
         'objectifGlobal' => 'objectif mensuel',
         'pourcentageMecanique' => 'pourcentage Mécanique',
@@ -128,30 +87,19 @@ $creer = function (CreerAcces $action) {
 
     $entreprise = Entreprise::findOrFail($donnees['entrepriseId']);
 
-    $siteId = null;
-    if ($this->roleActif === 'commercial') {
-        [$type, $id] = explode(':', $donnees['siteChoix'], 2);
-        $siteId = $type === 'site'
-            ? (int) $id
-            : $this->sites->where('ville_id', (int) $id)->sortBy('activite')->first()?->id;
-    }
-
     $action->executer($entreprise, $this->roleActif, [
         'nom' => $donnees['nom'],
         'email' => $donnees['email'],
         'mot_de_passe' => $donnees['motDePasse'],
-        'perimetre' => $donnees['perimetre'] ?? null,
-        'site_id' => $siteId,
-        'activite' => $this->activiteResolue,
+        'ville_id' => $donnees['villeChoix'] ?? null,
+        'site_id' => $donnees['siteChoix'] ?? null,
         'objectif_mecanique' => $this->objectifMecanique,
         'objectif_sinistre' => $this->objectifSinistre,
     ]);
 
-    $this->reset(['nom', 'email', 'motDePasse']);
-    $this->siteChoix = '';
+    $this->reset(['nom', 'email', 'motDePasse', 'siteChoix', 'villeChoix']);
     $this->objectifGlobal = Commercial::OBJECTIF_MENSUEL_DEFAUT;
     $this->pourcentageMecanique = (int) (Commercial::PART_MECANIQUE_DEFAUT * 100);
-    $this->perimetre = '';
     $this->confirmation = "Accès créé pour {$entreprise->nom} — mot de passe à changer à la première connexion.";
 };
 
@@ -205,42 +153,44 @@ $creer = function (CreerAcces $action) {
                 style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #E2E0D8; border-radius:8px; font-size:15.5px; margin-bottom:4px;">
             @error('motDePasse') <div style="color:#C8102E; font-size:13.5px; margin-bottom:8px;">{{ $message }}</div> @enderror
 
-            @if ($roleActif === 'responsable_site' || $roleActif === 'caissier')
-                <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Périmètre</label>
-                <select wire:model="perimetre" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #E2E0D8; border-radius:8px; font-size:15.5px;">
-                    <option value="">— Choisir une ville ou un site —</option>
-                    @foreach ($this->perimetres as $valeur => $libelle)
-                        <option value="{{ $valeur }}">{{ $libelle }}</option>
-                    @endforeach
-                </select>
-                @error('perimetre') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
-            @endif
-
-            @if ($roleActif === 'commercial')
-                <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Site (définit l'activité)</label>
-                <select wire:model.live="siteChoix" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #E2E0D8; border-radius:8px; font-size:15.5px;">
+            {{-- Un responsable de site répond d'un lieu précis ; le responsable de ville,
+                 le commercial et la comptabilité couvrent une ville entière. --}}
+            @if ($roleActif === 'responsable_site')
+                <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Site (lieu dont il répond)</label>
+                <select wire:model="siteChoix" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #E2E0D8; border-radius:8px; font-size:15.5px;">
                     <option value="">— Choisir un site —</option>
-                    @foreach ($this->optionsSiteCommercial as $valeur => $libelle)
-                        <option value="{{ $valeur }}">{{ $libelle }}</option>
+                    @foreach ($this->optionsSite as $id => $nom)
+                        <option value="{{ $id }}">{{ $nom }}</option>
                     @endforeach
                 </select>
                 @error('siteChoix') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
+            @elseif ($roleActif !== 'gerant')
+                <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Ville</label>
+                <select wire:model="villeChoix" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #E2E0D8; border-radius:8px; font-size:15.5px;">
+                    <option value="">— Choisir une ville —</option>
+                    @foreach ($this->optionsVille as $id => $nom)
+                        <option value="{{ $id }}">{{ $nom }}</option>
+                    @endforeach
+                </select>
+                @error('villeChoix') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
+            @endif
 
+            @if ($this->roleAvecObjectifs)
+                {{-- Les responsables prospectent eux aussi : ils apparaissent parmi les
+                     commerciaux et portent donc leurs propres objectifs. --}}
                 <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:14px 0 6px;">Objectif mensuel global (FCFA)</label>
                 <input type="number" wire:model.live="objectifGlobal"
                     style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #E2E0D8; border-radius:8px; font-size:15.5px;">
                 @error('objectifGlobal') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
 
-                @if ($this->activiteResolue === 'Mécanique/Sinistre')
-                    <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Répartition — % Mécanique</label>
-                    <input type="number" wire:model.live="pourcentageMecanique" min="0" max="100"
-                        style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #E2E0D8; border-radius:8px; font-size:15.5px;">
-                    @error('pourcentageMecanique') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
-                @endif
+                <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Répartition — % Mécanique (le reste va au Sinistre)</label>
+                <input type="number" wire:model.live="pourcentageMecanique" min="0" max="100"
+                    style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #E2E0D8; border-radius:8px; font-size:15.5px;">
+                @error('pourcentageMecanique') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
 
                 <div style="display:flex; gap:16px; margin-top:10px; padding:10px 12px; background:#F9F9F7; border-radius:8px; font-size:13px; color:#4B4E55; flex-wrap:wrap;">
-                    <span>Mécanique : <b>{{ ae($this->objectifMecanique) }}</b></span>
-                    <span>Sinistre : <b>{{ ae($this->objectifSinistre) }}</b></span>
+                    <span>Mécanique : <b>{{ ae($this->objectifMecanique) }}</b> ({{ $pourcentageMecanique }}%)</span>
+                    <span>Sinistre : <b>{{ ae($this->objectifSinistre) }}</b> ({{ 100 - (int) $pourcentageMecanique }}%)</span>
                     <span>Équivalent annuel : <b>{{ ae($this->objectifAnnuel) }}</b></span>
                 </div>
             @endif

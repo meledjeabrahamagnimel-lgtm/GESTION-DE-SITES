@@ -15,7 +15,7 @@ use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
 #[Fillable([
-    'entreprise_id', 'site_id', 'devis_id', 'commercial_id', 'numero', 'n_facture',
+    'entreprise_id', 'site_id', 'devis_id', 'reference_devis', 'commercial_id', 'numero', 'n_facture',
     'date', 'client', 'type', 'activite', 'montant', 'observations', 'cree_par',
 ])]
 class Facture extends Model

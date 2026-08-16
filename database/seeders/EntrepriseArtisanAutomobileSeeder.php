@@ -87,9 +87,20 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
             'password' => 'password',
             'email_verified_at' => now(),
         ]);
-        $responsable->assignRole('responsable_site');
+        $responsable->assignRole('responsable_ville');
 
-        // La ville Abidjan : le responsable en a la charge entière, donc de ses deux sites.
+        // Abidjan comptant deux lieux, son second site a son propre responsable, qui ne
+        // répond que de lui — le responsable de ville, lui, couvre les deux.
+        $responsableSite = User::create([
+            'entreprise_id' => $entreprise->id,
+            'name' => 'Sylvain Kouassi',
+            'email' => 'responsable.site2@gmail.com',
+            'password' => 'password',
+            'email_verified_at' => now(),
+        ]);
+        $responsableSite->assignRole('responsable_site');
+
+        // La ville Abidjan : le responsable de ville en a la charge entière, donc de ses deux lieux.
         $ville = Ville::create([
             'entreprise_id' => $entreprise->id,
             'code' => 'ABJ',
@@ -102,19 +113,22 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
             'est_actif' => true,
         ]);
 
-        $siteMecanique = Site::create([
+        // Abidjan est la seule ville à compter deux lieux distincts. Chacun accueille les
+        // deux activités : c'est l'opération, jamais le lieu, qui porte Mécanique ou Sinistre.
+        $siteUn = Site::create([
             'entreprise_id' => $entreprise->id,
             'ville_id' => $ville->id,
-            'nom' => 'Abidjan — Mécanique',
-            'activite' => 'Mécanique',
+            'code' => 'ABJ-1',
+            'nom' => 'Abidjan — Site 1',
             'est_actif' => true,
         ]);
 
-        $siteSinistre = Site::create([
+        $siteDeux = Site::create([
             'entreprise_id' => $entreprise->id,
             'ville_id' => $ville->id,
-            'nom' => 'Abidjan — Sinistre',
-            'activite' => 'Sinistre',
+            'code' => 'ABJ-2',
+            'nom' => 'Abidjan — Site 2',
+            'responsable_id' => $responsableSite->id,
             'est_actif' => true,
         ]);
 
@@ -139,23 +153,40 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
             'est_spontane' => false,
         ]);
 
+        // Les responsables prospectent eux aussi : ils doivent donc figurer parmi les
+        // commerciaux, sans quoi ni leurs prospections ni leur chiffre d'affaires ne
+        // seraient rattachables à quiconque.
+        foreach ([['C-0002', $responsable, 9_000_000, 4_000_000], ['C-0003', $responsableSite, 7_000_000, 3_000_000]] as [$numero, $encadrant, $mecanique, $sinistre]) {
+            Commercial::create([
+                'entreprise_id' => $entreprise->id,
+                'ville_id' => $ville->id,
+                'user_id' => $encadrant->id,
+                'numero' => $numero,
+                'nom' => $encadrant->name,
+                'objectif_mecanique' => $mecanique,
+                'objectif_sinistre' => $sinistre,
+                'statut' => 'Actif',
+                'est_spontane' => false,
+            ]);
+        }
+
         // Vente sans commercial nommé : un seul par ville, celui-ci couvrant les deux
         // activités comme tout commercial.
         Commercial::create([
             'entreprise_id' => $entreprise->id,
             'ville_id' => $ville->id,
-            'numero' => 'SP-MEC',
+            'numero' => 'SP-ABJ',
             'nom' => 'Client spontané',
             'objectif_mensuel' => 0,
             'statut' => 'Actif',
             'est_spontane' => true,
         ]);
 
-        // Le caissier est rattaché au site Mécanique précisément (et non à toute la ville),
-        // pour tester les deux formes de rattachement prévues (site ou ville entière).
+        // La comptabilité couvre une ville entière, jamais un lieu : une seule caisse
+        // par ville, quel que soit le nombre de sites qui s'y trouvent.
         $caissier = User::create([
             'entreprise_id' => $entreprise->id,
-            'site_id' => $siteMecanique->id,
+            'ville_id' => $ville->id,
             'name' => 'Fatou Diabaté',
             'email' => 'caissier@gmail.com',
             'password' => 'password',
@@ -169,7 +200,7 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
         CompteurDocument::create([
             'entreprise_id' => $entreprise->id,
             'type' => 'com',
-            'dernier_numero' => 1,
+            'dernier_numero' => 3,
         ]);
 
         // L'exercice de l'année en cours, ouvert : sans lui, le badge d'en-tête reste

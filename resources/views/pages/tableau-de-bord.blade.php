@@ -20,6 +20,7 @@ state([
     'semaineFiltre' => '',
     'jourFiltre' => '',
     'villeFiltre' => '',
+    'siteFiltre' => '',
     'activiteFiltre' => '',
     'commercialFiltre' => '',
     'pageSynthese' => 1,
@@ -32,20 +33,23 @@ mount(function () {
 
 $updatedMoisFiltre = function () { $this->semaineFiltre = ''; $this->jourFiltre = ''; };
 $updatedSemaineFiltre = function () { $this->jourFiltre = ''; };
+/** Changer de ville rend caduc le lieu choisi dans la précédente. */
+$updatedVilleFiltre = function () { $this->siteFiltre = ''; };
 
 $plage = computed(fn () => PeriodeCalculateur::plage(
     $this->periode, $this->dateDebut, $this->dateFin, $this->moisFiltre ?: null, $this->semaineFiltre ?: null, $this->jourFiltre ?: null
 ));
 
 $mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
+$mesSitesFiltre = computed(fn () => PerimetreSites::optionsSites(auth()->user(), $this->villeFiltre));
 
 $villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
 
-$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->siteFiltre, $this->activiteFiltre));
 
-/** Sites réellement pris en compte par le filtre ville + activité. */
+/** Lieux réellement pris en compte par le filtre ville + site. */
 $sitesRetenus = computed(function () {
-    $ids = PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre);
+    $ids = PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->siteFiltre);
 
     return Site::whereIn('id', $ids)->with('ville')->orderBy('nom')->get();
 });
@@ -59,9 +63,9 @@ $sitesRetenus = computed(function () {
 $commerciaux = computed(fn () => Commercial::whereIn('ville_id', PerimetreSites::idsVillesRetenus(auth()->user(), $this->villeFiltre))->orderBy('est_spontane')->orderBy('nom')->get());
 
 /**
- * Résout le filtre commercial en identifiants concrets : un site a un "Client
- * spontané" distinct par activité (Mécanique et Sinistre), donc choisir "Client
- * spontané" dans la liste doit filtrer sur les deux à la fois, pas sur un seul.
+ * Résout le filtre commercial en identifiants concrets : chaque ville a son propre
+ * "Client spontané", donc choisir "Client spontané" dans la liste doit filtrer sur
+ * ceux de toutes les villes retenues à la fois, pas sur un seul.
  */
 $idsCommercialFiltre = computed(function () {
     if ($this->commercialFiltre === 'spontane') {
@@ -74,16 +78,18 @@ $idsCommercialFiltre = computed(function () {
 $synthese = computed(function () {
     [$debut, $fin] = $this->plage;
 
-    return $this->sitesRetenus->map(function ($site) use ($debut, $fin) {
+    $activite = fn ($q) => $q->when($this->activiteFiltre, fn ($r) => $r->where('activite', $this->activiteFiltre));
+
+    return $this->sitesRetenus->map(function ($site) use ($debut, $fin, $activite) {
         // Charges, encaissements et véhicules sans facture ne portent aucun commercial en
         // base : seuls les devis et factures, rattachés à un commercial précis, peuvent
         // être restreints par le filtre.
-        $caFacture = (int) Facture::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])
+        $caFacture = (int) $activite(Facture::where('site_id', $site->id))->whereBetween('date', [$debut, $fin])
             ->when($this->idsCommercialFiltre !== null, fn ($q) => $q->whereIn('commercial_id', $this->idsCommercialFiltre))->sum('montant');
-        $charges = (int) Charge::where('site_id', $site->id)->where('type_operation', 'Charges')->whereBetween('date', [$debut, $fin])->sum('montant');
-        $encaisse = (int) Encaissement::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('montant');
-        $decaisse = (int) Charge::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('montant');
-        $devisAttente = Devis::where('site_id', $site->id)->where('statut', 'En attente')->whereBetween('date_emission', [$debut, $fin])
+        $charges = (int) $activite(Charge::where('site_id', $site->id))->where('type_operation', 'Charges')->whereBetween('date', [$debut, $fin])->sum('montant');
+        $encaisse = (int) $activite(Encaissement::where('site_id', $site->id))->whereBetween('date', [$debut, $fin])->sum('montant');
+        $decaisse = (int) $activite(Charge::where('site_id', $site->id))->whereBetween('date', [$debut, $fin])->sum('montant');
+        $devisAttente = $activite(Devis::where('site_id', $site->id))->where('statut', 'En attente')->whereBetween('date_emission', [$debut, $fin])
             ->when($this->idsCommercialFiltre !== null, fn ($q) => $q->whereIn('commercial_id', $this->idsCommercialFiltre))->count();
         $sansFacture = (int) SaisieJournaliere::where('site_id', $site->id)->whereBetween('date', [$debut, $fin])->sum('vehicules_sans_facture');
 
@@ -105,6 +111,7 @@ $kpis = computed(function () {
     $idsSites = $this->sitesRetenus->pluck('id');
 
     $devisEmis = Devis::whereIn('site_id', $idsSites)->whereBetween('date_emission', [$debut, $fin])
+        ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
         ->when($this->idsCommercialFiltre !== null, fn ($q) => $q->whereIn('commercial_id', $this->idsCommercialFiltre));
     $nbEmis = (clone $devisEmis)->count();
     $nbValides = (clone $devisEmis)->where('statut', 'Validé')->count();
@@ -116,15 +123,14 @@ $kpis = computed(function () {
     };
 
     $facturesQ = Facture::whereIn('site_id', $idsSites)->whereBetween('date', [$debut, $fin])
+        ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
         ->when($this->idsCommercialFiltre !== null, fn ($q) => $q->whereIn('commercial_id', $this->idsCommercialFiltre));
 
-    // Charges, encaissements, résultat et véhicules sans facture n'ont pas d'étiquette
-    // Mécanique/Sinistre en base — ils ne sont rattachés qu'au site où ils sont
-    // enregistrés, et un même site accueille souvent un commercial qui vend sur les deux
-    // activités. Une ventilation par activité du site afficherait donc « Sinistre : 0 F »
-    // même quand des mouvements liés à cette activité existent bel et bien — trompeur
-    // plutôt qu'informatif. Seuls le CA et le taux de transfo (chaque facture/devis porte
-    // sa propre étiquette) peuvent être ventilés de façon fiable.
+    // Seuls le CA et le taux de transfo se ventilent systématiquement par activité, chaque
+    // facture et chaque devis portant la sienne. Les charges et les encaissements ne la
+    // renseignent que lorsqu'elle est connue de celui qui saisit, et les véhicules sans
+    // facture relèvent du lieu entier : leur ventilation resterait partielle, on ne
+    // l'affiche donc pas en sous-total.
     return [
         'ca' => $this->synthese->sum('ca'),
         'caMecanique' => (int) (clone $facturesQ)->where('activite', 'Mécanique')->sum('montant'),
@@ -165,8 +171,12 @@ $graphiqueFlux = computed(function () {
     $total = 0;
 
     foreach ($points as $point) {
-        $e = (int) Encaissement::whereIn('site_id', $idsSites)->whereBetween('date', [$point['debut'], $point['fin']])->sum('montant');
-        $s = (int) Charge::whereIn('site_id', $idsSites)->whereBetween('date', [$point['debut'], $point['fin']])->sum('montant');
+        $e = (int) Encaissement::whereIn('site_id', $idsSites)
+            ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
+            ->whereBetween('date', [$point['debut'], $point['fin']])->sum('montant');
+        $s = (int) Charge::whereIn('site_id', $idsSites)
+            ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
+            ->whereBetween('date', [$point['debut'], $point['fin']])->sum('montant');
         $total += $e - $s;
 
         $labels[] = $point['label'];
@@ -261,7 +271,7 @@ $commentaires = computed(function () {
 
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
-        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
+        :ville-filtre="$villeFiltre" :sites="$this->mesSitesFiltre" :site-filtre="$siteFiltre" :activite-filtre="$activiteFiltre"
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre"
         :commerciaux="$this->commerciaux" :commercial-filtre="$commercialFiltre" />
 

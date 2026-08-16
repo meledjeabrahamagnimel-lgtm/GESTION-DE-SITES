@@ -90,9 +90,13 @@ $encaisser = function () {
             'facture_id' => $facture->id,
             'date' => now()->toDateString(),
             'type' => 'Client',
+            // L'encaissement hérite de l'activité et du numéro de la facture qu'il solde :
+            // c'est ce qui rend la ligne ventilable et rapprochable plus tard.
+            'activite' => $facture->activite,
             'moyen' => $donnees['moyen'],
             'montant' => $montant,
             'client' => $facture->client,
+            'reference_origine' => $facture->n_facture,
             'cree_par' => auth()->id(),
         ]);
 

@@ -54,10 +54,13 @@ class AnnuaireMessagerie
             return collect();
         }
 
+        $encadrement = ['responsable_ville', 'responsable_site'];
+
         $rolesVises = match (true) {
-            $expediteur->hasRole('gerant') => ['responsable_site', 'commercial'],
-            $expediteur->hasRole('responsable_site') => ['gerant', 'responsable_site', 'commercial'],
-            $expediteur->hasRole('commercial') => ['responsable_site', 'commercial'],
+            $expediteur->hasRole('gerant') => [...$encadrement, 'commercial'],
+            $expediteur->hasRole('responsable_ville') => ['gerant', ...$encadrement, 'commercial'],
+            $expediteur->hasRole('responsable_site') => ['gerant', ...$encadrement, 'commercial'],
+            $expediteur->hasRole('commercial') => [...$encadrement, 'commercial'],
             default => [],
         };
 
@@ -126,6 +129,7 @@ class AnnuaireMessagerie
         return match (true) {
             str_contains($roles, 'super_admin') => 'Plateforme',
             str_contains($roles, 'gerant') => 'Direction',
+            str_contains($roles, 'responsable_ville') => 'Responsables de ville',
             str_contains($roles, 'responsable_site') => 'Responsables de site',
             str_contains($roles, 'commercial') => 'Commerciaux',
             default => 'Autres',

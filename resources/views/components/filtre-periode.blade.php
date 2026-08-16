@@ -1,5 +1,6 @@
 @props([
     'periode', 'villes' => null, 'villeUnique' => null, 'villeFiltre' => null, 'activiteFiltre' => null,
+    'sites' => null, 'siteFiltre' => null,
     'moisFiltre' => null, 'semaineFiltre' => null, 'jourFiltre' => null,
     'masquerActivite' => false, 'commerciaux' => null, 'commercialFiltre' => null,
 ])
@@ -13,11 +14,16 @@
     // vient d'en choisir une dans la liste. Le caissier fait exception : sa
     // comptabilité reste toujours consolidée à l'échelle de la ville, jamais scindée
     // par activité.
-    $afficherPrecision = ! $masquerActivite && ($villeUnique !== null || ($villes !== null && $villeFiltre));
+    $villeEnContexte = $villeUnique !== null || ($villes !== null && $villeFiltre);
+    $afficherPrecision = ! $masquerActivite && $villeEnContexte;
+
+    // Le choix du lieu suit la même règle, et n'est proposé que là où la ville en compte
+    // réellement plusieurs (Abidjan) : ailleurs le site se confond avec la ville.
+    $afficherSite = $villeEnContexte && $sites !== null && $sites->count() > 1;
 
     // Le sélecteur de commercial suit la même logique : il n'apparaît qu'une fois la
     // ville connue (fixe ou choisie), et seulement si la page en fournit la liste.
-    $afficherCommercial = $afficherPrecision && $commerciaux !== null;
+    $afficherCommercial = $villeEnContexte && $commerciaux !== null;
 
     $mois = PeriodeCalculateur::moisDeLAnnee();
     $anneeEnCours = Carbon::today()->year;
@@ -59,9 +65,18 @@
         </select>
     @endif
 
+    @if ($afficherSite)
+        <select wire:model.live="siteFiltre" class="champ" style="width:auto; font-weight:600; background:#fff;">
+            <option value="">Tous les sites de la ville</option>
+            @foreach ($sites as $site)
+                <option value="{{ $site->id }}">{{ $site->nom }}</option>
+            @endforeach
+        </select>
+    @endif
+
     @if ($afficherPrecision)
         <select wire:model.live="activiteFiltre" class="champ" style="width:auto; font-weight:600; background:#fff;">
-            <option value="">Consolidé (les deux sites)</option>
+            <option value="">Consolidé (les deux activités)</option>
             <option value="Mécanique">Mécanique</option>
             <option value="Sinistre">Sinistre</option>
         </select>
@@ -73,8 +88,8 @@
             @foreach ($commerciaux->where('est_spontane', false) as $commercial)
                 <option value="{{ $commercial->id }}">{{ $commercial->nom }}</option>
             @endforeach
-            {{-- Un « Client spontané » par site (Mécanique et Sinistre) : une seule entrée
-                 à l'écran, qui filtre sur l'ensemble d'entre eux à la fois. --}}
+            {{-- Le « Client spontané » n'est pas un commercial nommé : une seule entrée à
+                 l'écran, qui filtre sur ceux de toutes les villes retenues à la fois. --}}
             @if ($commerciaux->contains('est_spontane', true))
                 <option value="spontane">Client spontané</option>
             @endif

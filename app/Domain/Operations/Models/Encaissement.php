@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
-#[Fillable(['entreprise_id', 'site_id', 'facture_id', 'date', 'type', 'moyen', 'montant', 'client', 'autres_tiers', 'cree_par'])]
+#[Fillable(['entreprise_id', 'site_id', 'facture_id', 'date', 'type', 'activite', 'moyen', 'montant', 'client', 'autres_tiers', 'reference_origine', 'cree_par'])]
 class Encaissement extends Model
 {
     use AppartientAUneEntreprise, HasFactory;

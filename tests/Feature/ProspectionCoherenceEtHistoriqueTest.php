@@ -43,10 +43,10 @@ class ProspectionCoherenceEtHistoriqueTest extends TestCase
             'name' => 'Responsable', 'email' => 'resp@exemple.test', 'password' => 'x',
             'entreprise_id' => $this->entreprise->id, 'est_actif' => true,
         ]);
-        $this->responsable->assignRole('responsable_site');
+        $this->responsable->assignRole('responsable_ville');
 
         $ville = Ville::create(['entreprise_id' => $this->entreprise->id, 'code' => 'ABJ', 'nom' => 'Abidjan', 'responsable_id' => $this->responsable->id]);
-        $this->site = Site::create(['entreprise_id' => $this->entreprise->id, 'ville_id' => $ville->id, 'nom' => 'Abidjan — Mécanique', 'activite' => 'Mécanique']);
+        $this->site = Site::create(['entreprise_id' => $this->entreprise->id, 'ville_id' => $ville->id, 'nom' => 'Abidjan']);
 
         $this->commercial = Commercial::create([
             'entreprise_id' => $this->entreprise->id, 'ville_id' => $ville->id,

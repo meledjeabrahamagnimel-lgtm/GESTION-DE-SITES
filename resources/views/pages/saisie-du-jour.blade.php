@@ -21,6 +21,7 @@ uses([GereLesDonneesLibres::class]);
 
 state([
     'date' => null,
+    'siteSaisieId' => null,
 
     'prosClient' => '', 'prosLocalisation' => '', 'prosMoyen' => 'RDV', 'prosCommercialId' => '',
     'prosActivite' => 'Mécanique', 'prosPassage' => false, 'prosDatePassage' => null,
@@ -36,10 +37,24 @@ state([
     'devisSelection' => [], 'devisBrouillon' => [],
     'factureSelection' => [], 'factureBrouillon' => [],
 
+    // Saisie directe d'un devis qui ne vient d'aucune prospection enregistrée ici.
+    'devisLibreOuvert' => false,
+    'devLibreClient' => '', 'devLibreCommercialId' => '', 'devLibreActivite' => 'Mécanique',
+    'devLibreDateReception' => null, 'devLibreFiche' => '', 'devLibreDateEmission' => null,
+    'devLibreStatut' => 'En attente', 'devLibreMontant' => '', 'devLibreMontantValide' => '', 'devLibreObs' => '',
+
+    // Saisie directe d'une facture émise hors application, rattachable à un devis par son numéro.
+    'factureLibreOuvert' => false,
+    'facLibreClient' => '', 'facLibreCommercialId' => '', 'facLibreActivite' => 'Mécanique',
+    'facLibreType' => 'FNE', 'facLibreNumero' => '', 'facLibreRefDevis' => '',
+    'facLibreMontant' => '', 'facLibreObs' => '',
+
     'encType' => 'Client', 'encFactureId' => '', 'encMoyen' => 'Espèces', 'encMontant' => '', 'encClient' => '', 'encTiers' => '',
+    'encActivite' => '', 'encReference' => '',
 
     'chgDate' => null, 'chgTypeOp' => 'Charges', 'chgLibelle' => 'Achats pièces',
     'chgMoyen' => 'Espèces', 'chgMontant' => '', 'chgTiers' => '', 'chgObs' => '',
+    'chgActivite' => '', 'chgReference' => '',
 
     'motifRefus' => [],
 
@@ -52,48 +67,43 @@ state([
     'pageFacturesDuJour' => 1, 'pageEncaissementsDuJour' => 1, 'pageChargesDuJour' => 1,
 ]);
 
-/** Sites dont le responsable a la charge, directement ou via sa ville — un ou deux. */
+/** Lieux dont l'utilisateur a la charge : tous ceux de sa ville, ou le seul qui lui est confié. */
 $mesSites = computed(fn () => Site::visiblesPour(auth()->user()));
 
 /**
- * Sites pris en compte par l'écran : toujours l'ensemble du périmètre du Responsable
- * (les deux sites de sa ville, ou le seul site dont il a la charge) — il n'y a plus de
- * choix à faire, un commercial travaillant indifféremment sur les deux activités.
+ * Le lieu sur lequel on saisit. On ne saisit jamais pour deux lieux à la fois : une
+ * journée d'atelier se tient dans un endroit précis. Le responsable de ville en choisit
+ * un quand sa ville en compte plusieurs (Abidjan) ; ailleurs le choix est sans objet.
  */
-$sitesActifs = computed(fn () => $this->mesSites);
+$site = computed(fn () => $this->mesSites->firstWhere('id', $this->siteSaisieId) ?? $this->mesSites->first());
+
+$sitesActifs = computed(fn () => $this->site ? collect([$this->site]) : collect());
 
 $siteIdsActifs = computed(fn () => $this->sitesActifs->pluck('id')->all());
-
-/** Le site précis choisi, ou null en mode « Les deux » — sert à verrouiller l'Activité dans les saisies. */
-$siteUnique = computed(fn () => $this->sitesActifs->count() === 1 ? $this->sitesActifs->first() : null);
-
-/** Activité imposée dans chaque saisie quand un site précis est choisi ; libre en mode « Les deux ». */
-$activiteVerrouillee = computed(fn () => $this->siteUnique?->activite);
-
-/**
- * Site d'ancrage pour les sous-systèmes sans notion d'activité propre (charges,
- * décaissements, encaissements, commentaires du jour) : le site précis choisi, ou le
- * premier du périmètre en mode « Les deux » — ces saisies restent rattachées à un
- * site physique unique, la consolidation ne concernant que la lecture.
- */
-$site = computed(fn () => $this->sitesActifs->first());
 
 /** Vrai si l'exercice est clos pour la ville de ce site à la date sélectionnée : toute saisie y est bloquée. */
 $exerciceFerme = computed(fn () => $this->site
     && \App\Domain\Tenants\Models\Exercice::estFerme(auth()->user()->entreprise_id, $this->site->ville_id, $this->date));
 
-/** Résout le site physique d'une nouvelle ligne prospection/devis/facture à partir de son activité. */
-$resoudreSiteId = function (string $activite) {
-    return $this->mesSites->firstWhere('activite', $activite)?->id;
-};
-
 mount(function () {
     $this->date = now()->toDateString();
     $this->chgDate = now()->toDateString();
-    $this->prosActivite = $this->activiteVerrouillee ?? $this->prosActivite;
+    $this->siteSaisieId = $this->mesSites->first()?->id;
+    $this->devLibreDateEmission = $this->date;
+    $this->devLibreDateReception = $this->date;
     $this->prosCommercialId = $this->commerciauxSelectables->keys()->first() ?? '';
     $this->chargerSaisieJournaliere();
 });
+
+/** Changer de lieu recharge intégralement l'écran : commentaires, listes et brouillons. */
+$updatedSiteSaisieId = function () {
+    $this->devisSelection = [];
+    $this->devisBrouillon = [];
+    $this->factureSelection = [];
+    $this->factureBrouillon = [];
+    $this->reinitialiserPagination();
+    $this->chargerSaisieJournaliere();
+};
 
 $reinitialiserPagination = function () {
     $this->pageProsATraiter = $this->pageProsDuJour = $this->pageAttenteDevis = 1;
@@ -359,7 +369,7 @@ $ajouterProspection = function () {
 
     Prospection::create([
         'entreprise_id' => auth()->user()->entreprise_id,
-        'site_id' => $this->resoudreSiteId($donnees['prosActivite']) ?? $this->site->id,
+        'site_id' => $this->site->id,
         'commercial_id' => $donnees['prosCommercialId'],
         'numero' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'pro'),
         'date' => $this->date,
@@ -374,7 +384,7 @@ $ajouterProspection = function () {
 
     $this->reset(['prosClient', 'prosLocalisation', 'prosObs', 'prosPassage', 'prosDatePassage', 'prosDevisApres', 'prosDateDevis']);
     $this->prosMoyen = 'RDV';
-    $this->prosActivite = $this->activiteVerrouillee ?? 'Mécanique';
+    $this->prosActivite = 'Mécanique';
 };
 
 $modifierProspection = function (int $id) {
@@ -512,7 +522,7 @@ $validerDevis = function () {
 
         $devis = Devis::create([
             'entreprise_id' => auth()->user()->entreprise_id,
-            'site_id' => $this->resoudreSiteId($ligne['activite']) ?? $this->site->id,
+            'site_id' => $this->site->id,
             'commercial_id' => $ligne['commercial_id'],
             'prospection_id' => $ligne['prospection_id'],
             'numero' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'dev'),
@@ -573,6 +583,71 @@ $changerMontantValide = function (int $id, $valeur) {
     $devis->update(['montant_valide' => is_numeric($valeur) ? (int) $valeur : null]);
 };
 
+/**
+ * Tout devis ne naît pas d'une prospection : un client peut se présenter de lui-même à
+ * l'atelier, ou le devis avoir été établi ailleurs (carnet, application Windev). Cette
+ * saisie libre crée le devis sans prospection d'origine, exactement comme les autres.
+ */
+$ouvrirDevisLibre = function () {
+    $this->devisLibreOuvert = true;
+    $this->devLibreDateEmission = $this->date;
+    $this->devLibreDateReception = $this->date;
+    $this->devLibreCommercialId = $this->commerciauxSelectables->keys()->first() ?? '';
+};
+
+$annulerDevisLibre = function () {
+    $this->devisLibreOuvert = false;
+    $this->reset(['devLibreClient', 'devLibreFiche', 'devLibreMontant', 'devLibreMontantValide', 'devLibreObs']);
+    $this->devLibreStatut = 'En attente';
+};
+
+$ajouterDevisLibre = function () {
+    if ($this->exerciceFerme) {
+        $this->addError('exercice', "L'exercice est clos pour ce site à cette date — saisie impossible.");
+
+        return;
+    }
+
+    $donnees = $this->validate([
+        'devLibreClient' => ['required', 'string', 'max:255'],
+        'devLibreCommercialId' => ['required', Rule::exists('commerciaux', 'id')->where('ville_id', $this->site->ville_id)],
+        'devLibreActivite' => ['required', Rule::in(array_keys($this->optionsActivite))],
+        'devLibreDateReception' => ['nullable', 'date'],
+        'devLibreFiche' => ['nullable', 'string', 'max:255'],
+        'devLibreDateEmission' => ['required', 'date'],
+        'devLibreStatut' => ['required', 'in:En attente,Validé,Refusé'],
+        'devLibreMontant' => ['required', 'numeric', 'min:1'],
+        'devLibreMontantValide' => ['nullable', 'numeric', 'min:0'],
+        'devLibreObs' => ['nullable', 'string'],
+    ], [], [
+        'devLibreClient' => 'client', 'devLibreCommercialId' => 'commercial',
+        'devLibreActivite' => 'activité', 'devLibreMontant' => 'montant du devis',
+    ]);
+
+    Devis::create([
+        'entreprise_id' => auth()->user()->entreprise_id,
+        'site_id' => $this->site->id,
+        'commercial_id' => $donnees['devLibreCommercialId'],
+        'prospection_id' => null,
+        'numero' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'dev'),
+        'n_fiche_reception' => $donnees['devLibreFiche'] ?: null,
+        'date_reception' => $donnees['devLibreDateReception'] ?: null,
+        'date_emission' => $donnees['devLibreDateEmission'],
+        'client' => $donnees['devLibreClient'],
+        'activite' => $donnees['devLibreActivite'],
+        'statut' => $donnees['devLibreStatut'],
+        'montant_devis' => (int) $donnees['devLibreMontant'],
+        'montant_valide' => $donnees['devLibreStatut'] === 'Validé'
+            ? (int) ($donnees['devLibreMontantValide'] !== '' && $donnees['devLibreMontantValide'] !== null ? $donnees['devLibreMontantValide'] : $donnees['devLibreMontant'])
+            : null,
+        'observations' => $donnees['devLibreObs'] ?: null,
+        'cree_par' => auth()->id(),
+    ]);
+
+    $this->annulerDevisLibre();
+    unset($this->devisDuJour, $this->devisEnAttente, $this->devisValidesNonFactures);
+};
+
 // Chiffre d'affaires facturé
 
 $genererBrouillonsFactures = function () {
@@ -622,13 +697,14 @@ $validerFactures = function () {
 
         Facture::create([
             'entreprise_id' => auth()->user()->entreprise_id,
-            'site_id' => $this->resoudreSiteId($ligne['activite']) ?? $this->site->id,
+            'site_id' => $this->site->id,
             'devis_id' => $ligne['devis_id'],
             'commercial_id' => $ligne['commercial_id'],
             'numero' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'fac'),
             // Le N° de facture est généré automatiquement, jamais saisi à la main — un champ
             // manuel oublié faisait silencieusement disparaître la ligne à la validation.
             'n_facture' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'nfa'),
+            'reference_devis' => $ligne['devis_numero'],
             'date' => $this->date,
             'client' => $ligne['client'],
             'type' => $ligne['type'],
@@ -640,6 +716,73 @@ $validerFactures = function () {
     }
 
     $this->factureBrouillon = [];
+};
+
+/** Numéros de devis du lieu, proposés en saisie libre pour rattacher une facture au bon devis. */
+$numerosDevisRattachables = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)
+    ->orderByDesc('id')->limit(200)->pluck('numero'));
+
+$ouvrirFactureLibre = function () {
+    $this->factureLibreOuvert = true;
+    $this->facLibreCommercialId = $this->commerciauxSelectables->keys()->first() ?? '';
+};
+
+$annulerFactureLibre = function () {
+    $this->factureLibreOuvert = false;
+    $this->reset(['facLibreClient', 'facLibreNumero', 'facLibreRefDevis', 'facLibreMontant', 'facLibreObs']);
+    $this->facLibreType = 'FNE';
+};
+
+/**
+ * Facture émise hors application (carnet du jour, application Windev…). Le N° de devis
+ * est saisi librement : s'il correspond à un devis du lieu, la facture lui est réellement
+ * rattachée — sinon la référence est conservée telle quelle, pour que le rapprochement
+ * reste possible plus tard sans bloquer la saisie du jour.
+ */
+$ajouterFactureLibre = function () {
+    if ($this->exerciceFerme) {
+        $this->addError('exercice', "L'exercice est clos pour ce site à cette date — saisie impossible.");
+
+        return;
+    }
+
+    $donnees = $this->validate([
+        'facLibreClient' => ['required', 'string', 'max:255'],
+        'facLibreCommercialId' => ['required', Rule::exists('commerciaux', 'id')->where('ville_id', $this->site->ville_id)],
+        'facLibreActivite' => ['required', Rule::in(array_keys($this->optionsActivite))],
+        'facLibreType' => ['required', 'in:FNE,HT'],
+        'facLibreNumero' => ['nullable', 'string', 'max:255'],
+        'facLibreRefDevis' => ['nullable', 'string', 'max:60'],
+        'facLibreMontant' => ['required', 'numeric', 'min:1'],
+        'facLibreObs' => ['nullable', 'string'],
+    ], [], [
+        'facLibreClient' => 'client', 'facLibreCommercialId' => 'commercial',
+        'facLibreActivite' => 'activité', 'facLibreMontant' => 'montant de la facture',
+    ]);
+
+    $devisLie = $donnees['facLibreRefDevis']
+        ? Devis::whereIn('site_id', $this->siteIdsActifs)->where('numero', $donnees['facLibreRefDevis'])->first()
+        : null;
+
+    Facture::create([
+        'entreprise_id' => auth()->user()->entreprise_id,
+        'site_id' => $this->site->id,
+        'devis_id' => $devisLie?->id,
+        'reference_devis' => $donnees['facLibreRefDevis'] ?: null,
+        'commercial_id' => $donnees['facLibreCommercialId'],
+        'numero' => GenerateurNumero::suivant(auth()->user()->entreprise_id, 'fac'),
+        'n_facture' => $donnees['facLibreNumero'] ?: GenerateurNumero::suivant(auth()->user()->entreprise_id, 'nfa'),
+        'date' => $this->date,
+        'client' => $donnees['facLibreClient'],
+        'type' => $donnees['facLibreType'],
+        'activite' => $donnees['facLibreActivite'],
+        'montant' => (int) $donnees['facLibreMontant'],
+        'observations' => $donnees['facLibreObs'] ?: null,
+        'cree_par' => auth()->id(),
+    ]);
+
+    $this->annulerFactureLibre();
+    unset($this->facturesDuJour, $this->facturesAvecReste);
 };
 
 // Encaissements du jour
@@ -658,19 +801,23 @@ $ajouterEncaissement = function () {
         'encMontant' => ['required', 'numeric', 'min:1'],
         'encClient' => ['nullable', 'string', 'max:255'],
         'encTiers' => ['nullable', 'string', 'max:255'],
+        'encActivite' => ['nullable', Rule::in(array_keys($this->optionsActivite))],
+        'encReference' => ['nullable', 'string', 'max:60'],
     ], [], ['encMontant' => 'montant', 'encFactureId' => 'facture']);
 
     $montant = (int) $donnees['encMontant'];
     $factureId = null;
     $client = $donnees['encClient'] ?: null;
-    // La facture peut appartenir à l'un ou l'autre site en mode « Les deux » : l'encaissement
-    // est rattaché au site réel de la facture, jamais au seul site d'ancrage.
     $siteIdResolu = $this->site->id;
+    // Un encaissement adossé à une facture hérite de son activité ; sinon celui qui saisit
+    // la précise, ou la laisse vide quand l'opération ne relève d'aucune des deux.
+    $activite = $donnees['encActivite'] ?: null;
+    $reference = $donnees['encReference'] ?: null;
 
     if ($donnees['encFactureId']) {
         // Verrou en base : empêche qu'un encaissement du responsable et du caissier,
         // saisis au même instant sur la même facture, dépassent ensemble son montant.
-        $depassement = DB::transaction(function () use ($donnees, $montant, &$factureId, &$client, &$siteIdResolu) {
+        $depassement = DB::transaction(function () use ($donnees, $montant, &$factureId, &$client, &$siteIdResolu, &$activite, &$reference) {
             $facture = Facture::whereIn('site_id', $this->siteIdsActifs)->lockForUpdate()->find($donnees['encFactureId']);
 
             if (! $facture || $montant > $facture->resteAEncaisser()) {
@@ -680,6 +827,8 @@ $ajouterEncaissement = function () {
             $factureId = $facture->id;
             $client = $facture->client;
             $siteIdResolu = $facture->site_id;
+            $activite = $facture->activite;
+            $reference ??= $facture->n_facture;
 
             return false;
         });
@@ -698,14 +847,16 @@ $ajouterEncaissement = function () {
         'facture_id' => $factureId,
         'date' => $this->date,
         'type' => $donnees['encType'],
+        'activite' => $activite,
         'moyen' => $donnees['encMoyen'],
         'montant' => $montant,
         'client' => $client,
         'autres_tiers' => $donnees['encTiers'] ?: null,
+        'reference_origine' => $reference,
         'cree_par' => auth()->id(),
     ]);
 
-    $this->reset(['encMontant', 'encClient', 'encTiers', 'encFactureId']);
+    $this->reset(['encMontant', 'encClient', 'encTiers', 'encFactureId', 'encActivite', 'encReference']);
     $this->encType = 'Client';
     $this->encMoyen = 'Espèces';
     unset($this->facturesAvecReste);
@@ -728,6 +879,8 @@ $ajouterCharge = function () {
         'chgMontant' => ['required', 'numeric', 'min:1'],
         'chgTiers' => ['nullable', 'string', 'max:255'],
         'chgObs' => ['nullable', 'string'],
+        'chgActivite' => ['nullable', Rule::in(array_keys($this->optionsActivite))],
+        'chgReference' => ['nullable', 'string', 'max:60'],
     ], [], ['chgMontant' => 'montant', 'chgLibelle' => "libellé d'opération"]);
 
     $typeOperation = 'Charges';
@@ -740,15 +893,17 @@ $ajouterCharge = function () {
         'site_id' => $this->site->id,
         'date' => $donnees['chgDate'],
         'type_operation' => $typeOperation,
+        'activite' => $donnees['chgActivite'] ?: null,
         'libelle' => $donnees['chgLibelle'],
         'moyen' => $donnees['chgMoyen'],
         'montant' => (int) $donnees['chgMontant'],
         'tiers' => $donnees['chgTiers'] ?: null,
+        'reference_origine' => $donnees['chgReference'] ?: null,
         'observations' => $donnees['chgObs'] ?: null,
         'cree_par' => auth()->id(),
     ]);
 
-    $this->reset(['chgMontant', 'chgTiers', 'chgObs']);
+    $this->reset(['chgMontant', 'chgTiers', 'chgObs', 'chgActivite', 'chgReference']);
     $this->chgDate = $this->date;
     $this->chgTypeOp = 'Charges';
     $this->chgLibelle = 'Achats pièces';
@@ -764,11 +919,23 @@ $ajouterCharge = function () {
         <div class="carte" style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;">
             <div style="flex:1; min-width:220px;">
                 <h1 style="font-size:19px; font-weight:800; margin:0 0 4px;">
-                    Saisie du jour — {{ $this->siteUnique?->nom ?? ($this->mesSites->first()->ville->nom.' — Mécanique + Sinistre') }}
+                    Saisie du jour — {{ $this->site->nom }}
                 </h1>
-                <p style="color:#6B6E76; font-size:14px; margin:0;">Chaque ligne est enregistrée immédiatement à l'ajout et alimente les tableaux de bord en temps réel.</p>
+                <p style="color:#6B6E76; font-size:14px; margin:0;">Chaque ligne est enregistrée immédiatement à l'ajout et alimente les tableaux de bord en temps réel. Les deux activités (Mécanique et Sinistre) se saisissent ici, ligne par ligne.</p>
             </div>
             <div style="display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
+                {{-- Le choix du lieu n'apparaît que là où la ville en compte plusieurs : une
+                     journée se saisit toujours pour un endroit précis, jamais pour deux. --}}
+                @if ($this->mesSites->count() > 1)
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <label class="champ-libelle">Site de saisie</label>
+                        <select wire:model.live="siteSaisieId" class="champ" style="width:auto; font-weight:600;">
+                            @foreach ($this->mesSites as $s)
+                                <option value="{{ $s->id }}">{{ $s->nom }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                @endif
                 <div style="display:flex; flex-direction:column; gap:4px;">
                     <label class="champ-libelle">Date de la journée (calendrier)</label>
                     <input type="date" wire:model.live="date" class="champ" style="width:158px;">
@@ -804,7 +971,7 @@ $ajouterCharge = function () {
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach ($this->prospectionsATraiter->forPage($pageProsATraiter, 10) as $p)
+                            @foreach ($this->prospectionsATraiter->forPage($pageProsATraiter, 5) as $p)
                                 <tr wire:key="a-traiter-{{ $p->id }}">
                                     <td style="font-weight:700;">{{ $p->numero }}</td>
                                     <td>{{ $p->date->format('d/m/Y') }}</td>
@@ -828,7 +995,7 @@ $ajouterCharge = function () {
                         </tbody>
                     </table>
                 </div>
-                <x-pagination :page="$pageProsATraiter" :total="$this->prospectionsATraiter->count()" prop="pageProsATraiter" />
+                <x-pagination :page="$pageProsATraiter" :total="$this->prospectionsATraiter->count()" prop="pageProsATraiter" :par-page="5" />
             @endif
 
             <x-sous-titre n="1" t="Prospections" />
@@ -849,7 +1016,7 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->prospectionsDuJour->forPage($pageProsDuJour, 10) as $p)
+                        @forelse ($this->prospectionsDuJour->forPage($pageProsDuJour, 5) as $p)
                             @if ($editionProspectionId === $p->id)
                                 <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); background:#FDF2F4;" wire:key="pros-edit-{{ $p->id }}">
                                     <td style="font-weight:700;">{{ $p->numero }}</td>
@@ -928,14 +1095,14 @@ $ajouterCharge = function () {
                     </tbody>
                 </table>
             </div>
-            <x-pagination :page="$pageProsDuJour" :total="$this->prospectionsDuJour->count()" prop="pageProsDuJour" />
+            <x-pagination :page="$pageProsDuJour" :total="$this->prospectionsDuJour->count()" prop="pageProsDuJour" :par-page="5" />
 
             <div class="bloc-saisie">
                 <x-champ label="Clients visités" model="prosClient" />
                 <x-champ label="Localisation" model="prosLocalisation" width="130" />
                 <x-champ label="Moyens" model="prosMoyen" type="select" :options="$this->optionsMoyenProspection" width="130" />
                 <x-champ label="Commercial" model="prosCommercialId" type="select" :options="$this->commerciauxSelectables" width="170" />
-                <x-champ label="Activité" model="prosActivite" type="select" :options="$this->optionsActivite" width="140" :disabled="$this->activiteVerrouillee !== null" />
+                <x-champ label="Activité" model="prosActivite" type="select" :options="$this->optionsActivite" width="140" />
                 <x-champ label="Passage" model="prosPassage" type="checkbox" live="true" />
                 @if ($prosPassage && ! $prosDevisApres)
                     <x-champ label="Date de passage" model="prosDatePassage" type="date" width="150" />
@@ -979,7 +1146,7 @@ $ajouterCharge = function () {
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($this->prospectionsAttenteDevis->forPage($pageAttenteDevis, 10) as $p)
+                                @foreach ($this->prospectionsAttenteDevis->forPage($pageAttenteDevis, 5) as $p)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="attente-devis-{{ $p->id }}">
                                         <td><input type="checkbox" wire:model="devisSelection.{{ $p->id }}"></td>
                                         <td style="font-weight:700;">{{ $p->numero }}</td>
@@ -993,7 +1160,7 @@ $ajouterCharge = function () {
                             </tbody>
                         </table>
                     </div>
-                    <x-pagination :page="$pageAttenteDevis" :total="$this->prospectionsAttenteDevis->count()" prop="pageAttenteDevis" />
+                    <x-pagination :page="$pageAttenteDevis" :total="$this->prospectionsAttenteDevis->count()" prop="pageAttenteDevis" :par-page="5" />
                     <button type="button" wire:click="genererBrouillonsDevis"
                         style="margin-top:8px; background:var(--th-ink,#191B20); color:#fff; border:0; border-radius:8px; padding:8px 14px; font-weight:700; font-size:13px; cursor:pointer;">
                         + Ajouter devis
@@ -1020,7 +1187,7 @@ $ajouterCharge = function () {
                             @if (($ligne['statut'] ?? '') === 'Validé')
                                 <x-champ label="Montant validé" model="devisBrouillon.{{ $i }}.montant_valide" type="number" width="130" />
                             @endif
-                            <x-champ label="Activité" model="devisBrouillon.{{ $i }}.activite" type="select" :options="['Mécanique' => 'Mécanique', 'Sinistre' => 'Sinistre']" width="140" :disabled="$this->activiteVerrouillee !== null" />
+                            <x-champ label="Activité" model="devisBrouillon.{{ $i }}.activite" type="select" :options="['Mécanique' => 'Mécanique', 'Sinistre' => 'Sinistre']" width="140" />
                             <x-champ label="Observations" model="devisBrouillon.{{ $i }}.observations" />
                         </div>
                     @endforeach
@@ -1036,6 +1203,36 @@ $ajouterCharge = function () {
                     </div>
                 </div>
             @endif
+
+            {{-- Devis sans prospection d'origine : client venu de lui-même, devis établi
+                 au carnet ou repris d'une autre application. --}}
+            <div style="width:100%; margin-top:12px;">
+                @if (! $devisLibreOuvert)
+                    <button type="button" wire:click="ouvrirDevisLibre" class="bouton bouton-secondaire">
+                        + Ajouter un devis (sans prospection)
+                    </button>
+                @else
+                    <div style="background:#FAF9F5; border:1px dashed var(--th-ligne,#E2E0D8); border-radius:8px; padding:12px;">
+                        <p style="font-size:12.5px; font-weight:700; margin:0 0 8px;">Devis saisi directement — sans prospection d'origine :</p>
+                        <div class="bloc-saisie">
+                            <x-champ label="Client" model="devLibreClient" />
+                            <x-champ label="Commercial" model="devLibreCommercialId" type="select" :options="$this->commerciauxSelectables" width="170" />
+                            <x-champ label="Activité" model="devLibreActivite" type="select" :options="$this->optionsActivite" width="140" />
+                            <x-champ label="Date de réception" model="devLibreDateReception" type="date" width="150" />
+                            <x-champ label="N° fiche de réception" model="devLibreFiche" width="140" />
+                            <x-champ label="Date d'émission" model="devLibreDateEmission" type="date" width="150" />
+                            <x-champ label="Statut du devis" model="devLibreStatut" type="select" :options="['En attente' => 'En attente', 'Validé' => 'Validé', 'Refusé' => 'Refusé']" width="130" live="true" />
+                            <x-champ label="Montant du devis" model="devLibreMontant" type="number" width="140" />
+                            @if ($devLibreStatut === 'Validé')
+                                <x-champ label="Montant validé" model="devLibreMontantValide" type="number" width="140" />
+                            @endif
+                            <x-champ label="Observations" model="devLibreObs" />
+                            <button type="button" wire:click="ajouterDevisLibre" class="bouton bouton-sombre">+ Ajouter</button>
+                            <button type="button" wire:click="annulerDevisLibre" class="bouton bouton-secondaire">Annuler</button>
+                        </div>
+                    </div>
+                @endif
+            </div>
 
             <div style="overflow-x:auto; margin-top:14px;">
                 <table class="tableau">
@@ -1055,7 +1252,7 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->devisDuJour->forPage($pageDevisDuJour, 10) as $d)
+                        @forelse ($this->devisDuJour->forPage($pageDevisDuJour, 5) as $d)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td style="font-weight:700;">{{ $d->numero }}</td>
                                 <td>{{ $d->date_reception?->format('d/m/Y') ?? '—' }}</td>
@@ -1075,7 +1272,7 @@ $ajouterCharge = function () {
                     </tbody>
                 </table>
             </div>
-            <x-pagination :page="$pageDevisDuJour" :total="$this->devisDuJour->count()" prop="pageDevisDuJour" />
+            <x-pagination :page="$pageDevisDuJour" :total="$this->devisDuJour->count()" prop="pageDevisDuJour" :par-page="5" />
 
             @if ($this->devisEnAttente->isNotEmpty())
                 <div style="width:100%; margin-top:14px;">
@@ -1095,7 +1292,7 @@ $ajouterCharge = function () {
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($this->devisEnAttente->forPage($pageDevisEnAttente, 10) as $d)
+                                @foreach ($this->devisEnAttente->forPage($pageDevisEnAttente, 5) as $d)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="devis-attente-{{ $d->id }}">
                                         <td style="font-weight:700;">{{ $d->numero }}</td>
                                         <td>{{ $d->client }}</td>
@@ -1122,7 +1319,7 @@ $ajouterCharge = function () {
                             </tbody>
                         </table>
                     </div>
-                    <x-pagination :page="$pageDevisEnAttente" :total="$this->devisEnAttente->count()" prop="pageDevisEnAttente" />
+                    <x-pagination :page="$pageDevisEnAttente" :total="$this->devisEnAttente->count()" prop="pageDevisEnAttente" :par-page="5" />
                 </div>
             @endif
 
@@ -1154,7 +1351,7 @@ $ajouterCharge = function () {
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($this->devisValidesNonFactures->forPage($pageValidesNonFactures, 10) as $d)
+                                @foreach ($this->devisValidesNonFactures->forPage($pageValidesNonFactures, 5) as $d)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="valide-non-facture-{{ $d->id }}">
                                         <td><input type="checkbox" wire:model="factureSelection.{{ $d->id }}"></td>
                                         <td style="font-weight:700;">{{ $d->numero }}</td>
@@ -1167,7 +1364,7 @@ $ajouterCharge = function () {
                             </tbody>
                         </table>
                     </div>
-                    <x-pagination :page="$pageValidesNonFactures" :total="$this->devisValidesNonFactures->count()" prop="pageValidesNonFactures" />
+                    <x-pagination :page="$pageValidesNonFactures" :total="$this->devisValidesNonFactures->count()" prop="pageValidesNonFactures" :par-page="5" />
                     <button type="button" wire:click="genererBrouillonsFactures"
                         style="margin-top:8px; background:var(--th-ink,#191B20); color:#fff; border:0; border-radius:8px; padding:8px 14px; font-weight:700; font-size:13px; cursor:pointer;">
                         + Facturer la sélection
@@ -1191,7 +1388,7 @@ $ajouterCharge = function () {
                                 <label style="font-size:12.5px; font-weight:600; color:#4B4E55;">N° de facture</label>
                                 <span style="padding:8px 10px; color:#9A9DA5; font-style:italic;">généré automatiquement</span>
                             </div>
-                            <x-champ label="Activité" model="factureBrouillon.{{ $i }}.activite" type="select" :options="['Mécanique' => 'Mécanique', 'Sinistre' => 'Sinistre']" width="140" :disabled="$this->activiteVerrouillee !== null" />
+                            <x-champ label="Activité" model="factureBrouillon.{{ $i }}.activite" type="select" :options="['Mécanique' => 'Mécanique', 'Sinistre' => 'Sinistre']" width="140" />
                             <x-champ label="Montant de la facture" model="factureBrouillon.{{ $i }}.montant" type="number" width="140" />
                             <x-champ label="Observations" model="factureBrouillon.{{ $i }}.observations" />
                         </div>
@@ -1209,6 +1406,40 @@ $ajouterCharge = function () {
                 </div>
             @endif
 
+            {{-- Facture émise hors application : le N° de devis rattache la ligne à son
+                 devis quand il existe ici, et reste consigné tel quel sinon. --}}
+            <div style="width:100%; margin-top:12px;">
+                @if (! $factureLibreOuvert)
+                    <button type="button" wire:click="ouvrirFactureLibre" class="bouton bouton-secondaire">
+                        + Ajouter une facture (sans devis dans l'application)
+                    </button>
+                @else
+                    <div style="background:#FAF9F5; border:1px dashed var(--th-ligne,#E2E0D8); border-radius:8px; padding:12px;">
+                        <p style="font-size:12.5px; font-weight:700; margin:0 0 8px;">Facture saisie directement — indiquer le N° de devis s'il existe :</p>
+                        <div class="bloc-saisie">
+                            <x-champ label="Client" model="facLibreClient" />
+                            <x-champ label="Commercial" model="facLibreCommercialId" type="select" :options="$this->commerciauxSelectables" width="170" />
+                            <x-champ label="Activité" model="facLibreActivite" type="select" :options="$this->optionsActivite" width="140" />
+                            <x-champ label="Type" model="facLibreType" type="select" :options="['FNE' => 'FNE', 'HT' => 'HT']" width="90" />
+                            <x-champ label="N° de facture (vide = généré)" model="facLibreNumero" width="170" />
+                            <div style="display:flex; flex-direction:column; gap:4px; min-width:160px;">
+                                <label style="font-size:12.5px; font-weight:600; color:#4B4E55;">N° de devis d'origine</label>
+                                <input type="text" wire:model="facLibreRefDevis" list="devis-rattachables" class="champ" placeholder="Facultatif">
+                                <datalist id="devis-rattachables">
+                                    @foreach ($this->numerosDevisRattachables as $numero)
+                                        <option value="{{ $numero }}"></option>
+                                    @endforeach
+                                </datalist>
+                            </div>
+                            <x-champ label="Montant de la facture" model="facLibreMontant" type="number" width="150" />
+                            <x-champ label="Observations" model="facLibreObs" />
+                            <button type="button" wire:click="ajouterFactureLibre" class="bouton bouton-sombre">+ Ajouter</button>
+                            <button type="button" wire:click="annulerFactureLibre" class="bouton bouton-secondaire">Annuler</button>
+                        </div>
+                    </div>
+                @endif
+            </div>
+
             <div style="overflow-x:auto; margin-top:14px;">
                 <table class="tableau">
                     <thead>
@@ -1218,6 +1449,7 @@ $ajouterCharge = function () {
                             <th>Clients</th>
                             <th>Type</th>
                             <th>N° de facture</th>
+                            <th>N° de devis</th>
                             <th>Activité</th>
                             <th>Montant de la facture</th>
                             <th>Observations</th>
@@ -1225,13 +1457,14 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->facturesDuJour->forPage($pageFacturesDuJour, 10) as $f)
+                        @forelse ($this->facturesDuJour->forPage($pageFacturesDuJour, 5) as $f)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td style="font-weight:700;">{{ $f->numero }}</td>
                                 <td>{{ $f->commercial->nom }}</td>
                                 <td>{{ $f->client }}</td>
                                 <td>{{ $f->type }}</td>
                                 <td>{{ $f->n_facture }}</td>
+                                <td>{{ $f->reference_devis ?? '—' }}</td>
                                 <td>{{ $f->activite }}</td>
                                 <td style="font-weight:700;">{{ ae($f->montant) }}</td>
                                 <td style="color:#6B6E76;">{{ $f->observations ?? '—' }}</td>
@@ -1241,12 +1474,12 @@ $ajouterCharge = function () {
                                 </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="9" texte="Aucune facture émise pour cette journée." />
+                            <x-table-vide :colspan="10" texte="Aucune facture émise pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>
             </div>
-            <x-pagination :page="$pageFacturesDuJour" :total="$this->facturesDuJour->count()" prop="pageFacturesDuJour" />
+            <x-pagination :page="$pageFacturesDuJour" :total="$this->facturesDuJour->count()" prop="pageFacturesDuJour" :par-page="5" />
 
             <div style="margin-top:14px;">
                 <label style="display:block; font-size:12.5px; font-weight:600; color:#4B4E55; margin-bottom:5px;">Commentaire — Chiffre d'affaires</label>
@@ -1262,33 +1495,37 @@ $ajouterCharge = function () {
                     <thead>
                         <tr>
                             <th>Type d'encaissement</th>
+                            <th>Activité</th>
                             <th>Moyens</th>
                             <th>Montant</th>
                             <th>Clients</th>
                             <th>Autres tiers</th>
+                            <th>Origine / référence</th>
                             <th>Informations libres</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->encaissementsDuJour->forPage($pageEncaissementsDuJour, 10) as $e)
+                        @forelse ($this->encaissementsDuJour->forPage($pageEncaissementsDuJour, 5) as $e)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td>{{ $e->type }}</td>
+                                <td>{{ $e->activite ?? '—' }}</td>
                                 <td>{{ $e->moyen }}</td>
                                 <td style="font-weight:700; color:#0E9F6E;">{{ ae($e->montant) }}</td>
                                 <td>{{ $e->client ?? '—' }}</td>
                                 <td>{{ $e->autres_tiers ?? '—' }}</td>
+                                <td style="color:#6B6E76;">{{ $e->reference_origine ?? '—' }}</td>
                                 <td style="white-space:normal; min-width:220px;">
                                     <x-saisie-libre :sujet="$e"
                                         :ouvert="$libreSujetId === $e->id && $libreSujetType === get_class($e)" />
                                 </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="6" texte="Aucun encaissement saisi pour cette journée." />
+                            <x-table-vide :colspan="8" texte="Aucun encaissement saisi pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>
             </div>
-            <x-pagination :page="$pageEncaissementsDuJour" :total="$this->encaissementsDuJour->count()" prop="pageEncaissementsDuJour" />
+            <x-pagination :page="$pageEncaissementsDuJour" :total="$this->encaissementsDuJour->count()" prop="pageEncaissementsDuJour" :par-page="5" />
 
             <div class="bloc-saisie">
                 <x-champ label="Type d'encaissement" model="encType" type="select" live="true" :options="$this->optionsTypeEncaissement" width="140" />
@@ -1310,7 +1547,12 @@ $ajouterCharge = function () {
                         </datalist>
                     </div>
                     <x-champ label="Autres tiers à préciser" model="encTiers" />
+                    {{-- Un encaissement adossé à une facture hérite de son activité ;
+                         seul un encaissement libre a besoin qu'on la précise. --}}
+                    <x-champ label="Activité (facultatif)" model="encActivite" type="select" width="150"
+                        :options="['' => '— Non précisée'] + $this->optionsActivite" />
                 @endif
+                <x-champ label="Origine / référence" model="encReference" width="170" />
                 <button type="button" wire:click="ajouterEncaissement"
                     class="bouton bouton-sombre">
                     + Ajouter
@@ -1333,23 +1575,27 @@ $ajouterCharge = function () {
                         <tr>
                             <th>Date</th>
                             <th>Type d'opération</th>
+                            <th>Activité</th>
                             <th>Libellé d'opération</th>
                             <th>Moyens</th>
                             <th>Montant</th>
                             <th>Tiers</th>
+                            <th>Origine / référence</th>
                             <th>Observations</th>
                             <th>Informations libres</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->chargesDuJour->forPage($pageChargesDuJour, 10) as $c)
+                        @forelse ($this->chargesDuJour->forPage($pageChargesDuJour, 5) as $c)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td>{{ $c->date->format('d/m/Y') }}</td>
                                 <td>{{ $c->type_operation === 'Charges' ? 'Charges' : 'Décaissements' }}</td>
+                                <td>{{ $c->activite ?? '—' }}</td>
                                 <td>{{ $c->libelle }}</td>
                                 <td>{{ $c->moyen }}</td>
                                 <td style="font-weight:700; color:#C8102E;">{{ ae($c->montant) }}</td>
                                 <td>{{ $c->tiers ?? '—' }}</td>
+                                <td style="color:#6B6E76;">{{ $c->reference_origine ?? '—' }}</td>
                                 <td style="color:#6B6E76;">{{ $c->observations ?? '—' }}</td>
                                 <td style="white-space:normal; min-width:220px;">
                                     <x-saisie-libre :sujet="$c"
@@ -1357,12 +1603,12 @@ $ajouterCharge = function () {
                                 </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="8" texte="Aucune charge ni décaissement saisi pour cette journée." />
+                            <x-table-vide :colspan="10" texte="Aucune charge ni décaissement saisi pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>
             </div>
-            <x-pagination :page="$pageChargesDuJour" :total="$this->chargesDuJour->count()" prop="pageChargesDuJour" />
+            <x-pagination :page="$pageChargesDuJour" :total="$this->chargesDuJour->count()" prop="pageChargesDuJour" :par-page="5" />
 
             <div class="bloc-saisie">
                 <x-champ label="Date" model="chgDate" type="date" width="140" />
@@ -1371,6 +1617,11 @@ $ajouterCharge = function () {
                 <x-champ label="Moyens" model="chgMoyen" type="select" :options="$this->optionsMoyenPaiement" width="150" />
                 <x-champ label="Montant (FCFA)" model="chgMontant" type="number" width="140" />
                 <x-champ label="Tiers" model="chgTiers" width="160" />
+                {{-- Beaucoup de charges (loyer, salaires) relèvent du lieu entier : l'activité
+                     ne se renseigne que lorsqu'elle est réellement connue. --}}
+                <x-champ label="Activité (facultatif)" model="chgActivite" type="select" width="150"
+                    :options="['' => '— Non précisée'] + $this->optionsActivite" />
+                <x-champ label="Origine / référence" model="chgReference" width="170" />
                 <x-champ label="Observations" model="chgObs" />
                 <button type="button" wire:click="ajouterCharge"
                     class="bouton bouton-sombre">

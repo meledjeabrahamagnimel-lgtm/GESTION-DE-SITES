@@ -15,6 +15,7 @@ state([
     'semaineFiltre' => '',
     'jourFiltre' => '',
     'villeFiltre' => '',
+    'siteFiltre' => '',
     'activiteFiltre' => '',
     'pageEncaissements' => 1,
     'pageDecaissements' => 1,
@@ -27,31 +28,40 @@ mount(function () {
 
 $updatedMoisFiltre = function () { $this->semaineFiltre = ''; $this->jourFiltre = ''; };
 $updatedSemaineFiltre = function () { $this->jourFiltre = ''; };
+/** Changer de ville rend caduc le lieu choisi dans la précédente. */
+$updatedVilleFiltre = function () { $this->siteFiltre = ''; };
 
 $plage = computed(fn () => PeriodeCalculateur::plage(
     $this->periode, $this->dateDebut, $this->dateFin, $this->moisFiltre ?: null, $this->semaineFiltre ?: null, $this->jourFiltre ?: null
 ));
 $mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
+$mesSitesFiltre = computed(fn () => PerimetreSites::optionsSites(auth()->user(), $this->villeFiltre));
 $villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
-$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
-$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->siteFiltre));
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->siteFiltre, $this->activiteFiltre));
 
 $encaissementsQ = computed(function () {
     [$debut, $fin] = $this->plage;
 
-    return Encaissement::whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin]);
+    return Encaissement::whereIn('site_id', $this->idsSites)
+        ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
+        ->whereBetween('date', [$debut, $fin]);
 });
 
 $chargesQ = computed(function () {
     [$debut, $fin] = $this->plage;
 
-    return Charge::whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin]);
+    return Charge::whereIn('site_id', $this->idsSites)
+        ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
+        ->whereBetween('date', [$debut, $fin]);
 });
 
 $facturesQ = computed(function () {
     [$debut, $fin] = $this->plage;
 
-    return Facture::whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin]);
+    return Facture::whereIn('site_id', $this->idsSites)
+        ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
+        ->whereBetween('date', [$debut, $fin]);
 });
 
 /**
@@ -112,7 +122,7 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
 
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
-        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
+        :ville-filtre="$villeFiltre" :sites="$this->mesSitesFiltre" :site-filtre="$siteFiltre" :activite-filtre="$activiteFiltre"
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">

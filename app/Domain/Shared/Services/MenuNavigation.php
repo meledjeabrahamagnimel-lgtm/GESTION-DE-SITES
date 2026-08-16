@@ -62,7 +62,7 @@ class MenuNavigation
             $parametres = 'parametres';
         }
 
-        if ($utilisateur->hasRole('responsable_site')) {
+        if ($utilisateur->hasRole('responsable_ville') || $utilisateur->hasRole('responsable_site')) {
             $onglets[] = ['label' => 'Saisie du jour', 'route' => 'saisie-du-jour'];
         }
 

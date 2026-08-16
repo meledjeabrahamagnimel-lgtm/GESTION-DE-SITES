@@ -102,7 +102,7 @@ class VillesBouakeSanPedroSeeder extends Seeder
             'password' => 'password',
             'email_verified_at' => now(),
         ]);
-        $responsable->assignRole('responsable_site');
+        $responsable->assignRole('responsable_ville');
 
         $ville = Ville::create([
             'entreprise_id' => $entreprise->id,
@@ -116,19 +116,13 @@ class VillesBouakeSanPedroSeeder extends Seeder
             'est_actif' => true,
         ]);
 
-        $siteMecanique = Site::create([
+        // Hors Abidjan, la ville ne compte qu'un lieu : il se confond avec elle, et les
+        // deux activités s'y pratiquent.
+        $site = Site::create([
             'entreprise_id' => $entreprise->id,
             'ville_id' => $ville->id,
-            'nom' => "$nom — Mécanique",
-            'activite' => 'Mécanique',
-            'est_actif' => true,
-        ]);
-
-        $siteSinistre = Site::create([
-            'entreprise_id' => $entreprise->id,
-            'ville_id' => $ville->id,
-            'nom' => "$nom — Sinistre",
-            'activite' => 'Sinistre',
+            'code' => $code,
+            'nom' => $nom,
             'est_actif' => true,
         ]);
 
@@ -155,7 +149,7 @@ class VillesBouakeSanPedroSeeder extends Seeder
 
         // Vente sans commercial nommé : un seul par ville (il couvre les deux activités,
         // comme tout commercial) — numéro propre à la ville pour ne pas entrer en
-        // collision avec celui d'Abidjan (SP-MEC).
+        // collision avec celui d'Abidjan (SP-ABJ).
         Commercial::create([
             'entreprise_id' => $entreprise->id,
             'ville_id' => $ville->id,
@@ -166,6 +160,19 @@ class VillesBouakeSanPedroSeeder extends Seeder
             'est_spontane' => true,
         ]);
 
-        return new Collection([$siteMecanique, $siteSinistre]);
+        // Le responsable de ville prospecte lui aussi : il figure donc parmi les commerciaux.
+        Commercial::create([
+            'entreprise_id' => $entreprise->id,
+            'ville_id' => $ville->id,
+            'user_id' => $responsable->id,
+            'numero' => GenerateurNumero::suivant($entreprise->id, 'com'),
+            'nom' => $responsableNom,
+            'objectif_mecanique' => (int) round(Commercial::OBJECTIF_MENSUEL_DEFAUT * Commercial::PART_MECANIQUE_DEFAUT / 2),
+            'objectif_sinistre' => (int) round(Commercial::OBJECTIF_MENSUEL_DEFAUT * Commercial::PART_SINISTRE_DEFAUT / 2),
+            'statut' => 'Actif',
+            'est_spontane' => false,
+        ]);
+
+        return new Collection([$site]);
     }
 }

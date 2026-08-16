@@ -15,8 +15,8 @@ state([
 
     'nom' => '', 'email' => '', 'telephone' => '', 'photo' => null,
 
-    // Villes (responsable de site uniquement) : créer une ville crée aussitôt
-    // ses deux sites d'activité (Mécanique et Sinistre).
+    // Villes (responsables uniquement) : créer une ville crée aussitôt son lieu,
+    // où se pratiquent les deux activités.
     'villeId' => null,
     'villeNom' => '', 'villeCommune' => '', 'villeTelephone' => '', 'villeAdresse' => '',
 
@@ -35,6 +35,10 @@ $utilisateur = computed(fn () => auth()->user());
 $entreprise = computed(fn () => auth()->user()->entreprise);
 
 $monRole = computed(function () {
+    if (auth()->user()->hasRole('responsable_ville')) {
+        return 'Responsable de ville';
+    }
+
     if (auth()->user()->hasRole('responsable_site')) {
         return 'Responsable de site';
     }
@@ -46,24 +50,26 @@ $monRole = computed(function () {
     return 'Commercial';
 });
 
-/** Site(s) sous la responsabilité de l'utilisateur : les deux de sa ville pour un commercial, un ou deux pour un responsable ou un caissier. */
+/** Lieux couverts par l'utilisateur : ceux de sa ville pour un commercial, ceux de son périmètre pour les autres rôles. */
 $mesSites = computed(function () {
-    if (auth()->user()->hasRole('responsable_site') || auth()->user()->hasRole('caissier')) {
-        return Site::visiblesPour(auth()->user());
+    $sitesDuPerimetre = Site::visiblesPour(auth()->user());
+
+    if ($sitesDuPerimetre->isNotEmpty()) {
+        return $sitesDuPerimetre;
     }
 
     $villeId = Commercial::where('user_id', auth()->id())->first()?->ville_id;
 
-    return $villeId ? Site::where('ville_id', $villeId)->orderBy('activite')->get() : collect();
+    return $villeId ? Site::where('ville_id', $villeId)->orderBy('nom')->get() : collect();
 });
 
 $maFicheCommerciale = computed(fn () => Commercial::where('user_id', auth()->id())->first());
 
 /**
- * Le responsable de site tient les villes à jour depuis son poste, sans dépendre
+ * Les responsables tiennent les villes à jour depuis leur poste, sans dépendre
  * de la disponibilité du gérant. Le commercial, lui, n'y a pas accès.
  */
-$estResponsable = computed(fn () => auth()->user()->hasRole('responsable_site'));
+$estResponsable = computed(fn () => auth()->user()->hasRole('responsable_ville') || auth()->user()->hasRole('responsable_site'));
 
 $villes = computed(fn () => Ville::where('entreprise_id', auth()->user()->entreprise_id)
     ->withCount('commerciaux')
@@ -131,17 +137,18 @@ $enregistrerVille = function () {
             'est_actif' => true,
         ]);
 
-        foreach (['Mécanique', 'Sinistre'] as $activite) {
-            Site::create([
-                'entreprise_id' => auth()->user()->entreprise_id,
-                'ville_id' => $ville->id,
-                'nom' => $donnees['villeNom'].' — '.$activite,
-                'activite' => $activite,
-                'est_actif' => true,
-            ]);
-        }
+        // Une ville naît avec un seul lieu, confondu avec elle : les deux activités s'y
+        // pratiquent. Un second lieu ne se justifie que le jour où l'entreprise en ouvre
+        // réellement un — comme Abidjan.
+        Site::create([
+            'entreprise_id' => auth()->user()->entreprise_id,
+            'ville_id' => $ville->id,
+            'code' => $ville->code,
+            'nom' => $donnees['villeNom'],
+            'est_actif' => true,
+        ]);
 
-        $this->message = 'Ville créée avec ses deux sites (Mécanique et Sinistre) : ils sont désormais proposés dans les listes déroulantes.';
+        $this->message = 'Ville créée avec son site : il est désormais proposé dans les listes déroulantes.';
     }
 
     $this->viderFormulaireVille();
@@ -261,7 +268,6 @@ $enregistrerProfil = function (EnregistreurPhoto $enregistreur) {
                         <tr><td style="font-weight:600;">{{ $this->mesSites->count() > 1 ? 'Mes sites' : 'Mon site' }}</td><td>{{ $this->mesSites->pluck('nom')->implode(', ') ?: '—' }}</td></tr>
                         @if ($this->maFicheCommerciale)
                             <tr><td style="font-weight:600;">N° commercial</td><td>{{ $this->maFicheCommerciale->numero }}</td></tr>
-                            <tr><td style="font-weight:600;">Activité</td><td>{{ $this->maFicheCommerciale->activite ?? '—' }}</td></tr>
                             <tr><td style="font-weight:600;">Objectif mensuel</td><td>{{ ae($this->maFicheCommerciale->objectif_mensuel) }}</td></tr>
                         @endif
                     </tbody>
@@ -358,7 +364,7 @@ $enregistrerProfil = function (EnregistreurPhoto $enregistreur) {
                 <table class="tableau">
                     <thead>
                         <tr>
-                            <th>Ville</th><th>Site</th><th>Activité</th>
+                            <th>Ville</th><th>Site</th><th>Code</th>
                             <th>Responsable propre</th><th>Statut</th>
                             <th style="text-align:right;">Actions</th>
                         </tr>
@@ -368,7 +374,7 @@ $enregistrerProfil = function (EnregistreurPhoto $enregistreur) {
                             <tr wire:key="site-{{ $s->id }}">
                                 <td>{{ $s->ville->nom }}</td>
                                 <td style="font-weight:600;">{{ $s->nom }}</td>
-                                <td>{{ $s->activite }}</td>
+                                <td style="color:#6B6E76;">{{ $s->code ?? '—' }}</td>
                                 <td>{{ $s->responsable?->name ?? '— (hérite de la ville)' }}</td>
                                 <td>
                                     <span class="pastille {{ $s->est_actif ? 'pastille-vert' : 'pastille-ambre' }}">

@@ -37,13 +37,13 @@ class SitesResponsableTest extends TestCase
         $this->alpha = Entreprise::create(['nom' => 'Alpha', 'slug' => 'alpha']);
         $this->beta = Entreprise::create(['nom' => 'Beta', 'slug' => 'beta']);
 
-        foreach (['responsable_site', 'commercial'] as $role) {
+        foreach (['responsable_ville', 'commercial'] as $role) {
             Role::findOrCreate($role, 'web');
         }
 
         app(PermissionRegistrar::class)->setPermissionsTeamId($this->alpha->id);
 
-        $this->responsable = $this->membre('responsable_site', 'resp@exemple.test');
+        $this->responsable = $this->membre('responsable_ville', 'resp@exemple.test');
         $this->commercial = $this->membre('commercial', 'com@exemple.test');
     }
 
@@ -62,7 +62,7 @@ class SitesResponsableTest extends TestCase
         return $utilisateur;
     }
 
-    public function test_le_responsable_cree_une_ville_avec_ses_deux_sites(): void
+    public function test_le_responsable_cree_une_ville_avec_son_site(): void
     {
         $this->actingAs($this->responsable);
 
@@ -81,9 +81,11 @@ class SitesResponsableTest extends TestCase
         $this->assertNotEmpty($ville->code);
         $this->assertTrue($ville->est_actif);
 
-        $sites = Site::where('ville_id', $ville->id)->orderBy('activite')->get();
-        $this->assertCount(2, $sites);
-        $this->assertSame(['Mécanique', 'Sinistre'], $sites->pluck('activite')->all());
+        // Une ville naît avec un seul lieu, confondu avec elle : les deux activités s'y
+        // pratiquent, seule Abidjan ayant réellement deux endroits distincts.
+        $sites = Site::where('ville_id', $ville->id)->get();
+        $this->assertCount(1, $sites);
+        $this->assertSame('Abidjan', $sites->first()->nom);
     }
 
     public function test_le_nom_est_obligatoire(): void
@@ -171,8 +173,7 @@ class SitesResponsableTest extends TestCase
         $site = Site::create([
             'entreprise_id' => $this->alpha->id,
             'ville_id' => $ville->id,
-            'nom' => 'Abidjan — Mécanique',
-            'activite' => 'Mécanique',
+            'nom' => 'Abidjan',
         ]);
 
         $this->actingAs($this->responsable);

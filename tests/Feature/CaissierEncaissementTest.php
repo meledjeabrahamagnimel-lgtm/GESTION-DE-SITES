@@ -45,7 +45,7 @@ class CaissierEncaissementTest extends TestCase
         ProvisionneurEntreprise::creerRoles($this->entreprise);
         app(PermissionRegistrar::class)->setPermissionsTeamId($this->entreprise->id);
 
-        $this->responsable = $this->membre('responsable_site', 'resp@exemple.test');
+        $this->responsable = $this->membre('responsable_ville', 'resp@exemple.test');
 
         $ville = Ville::create([
             'entreprise_id' => $this->entreprise->id,
@@ -57,8 +57,7 @@ class CaissierEncaissementTest extends TestCase
         $this->site = Site::create([
             'entreprise_id' => $this->entreprise->id,
             'ville_id' => $ville->id,
-            'nom' => 'Abidjan — Mécanique',
-            'activite' => 'Mécanique',
+            'nom' => 'Abidjan',
         ]);
 
         $this->caissier = $this->membre('caissier', 'caissier@exemple.test');

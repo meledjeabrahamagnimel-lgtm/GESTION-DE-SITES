@@ -12,13 +12,21 @@ use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
- * Création d'un accès (Gérant, Responsable de site, Commercial ou Caissier) au sein
- * d'une entreprise. Utilisée par le Gérant (crée Responsables/Commerciaux/Caissiers),
- * le Responsable (crée des Commerciaux/Caissiers) et le Super Admin (crée n'importe
- * quel rôle, dans n'importe quelle entreprise).
+ * Création d'un accès au sein d'une entreprise, quel qu'en soit le rôle. Utilisée par
+ * le Gérant, par les Responsables (qui créent Commerciaux et Comptabilité) et par le
+ * Super Admin (n'importe quel rôle, dans n'importe quelle entreprise).
+ *
+ * Le périmètre attendu dans $donnees dépend du rôle :
+ * - responsable_ville, commercial, caissier → `ville_id` (la comptabilité et les
+ *   commerciaux travaillent pour une ville entière, pas pour un lieu précis) ;
+ * - responsable_site → `site_id`, le lieu dont il répond ;
+ * - gerant → aucun, son périmètre étant l'entreprise.
  */
 class CreerAcces
 {
+    /** Rôles dont le titulaire prospecte aussi : il doit donc exister comme commercial. */
+    private const ROLES_COMMERCIAUX = ['responsable_ville', 'responsable_site', 'commercial'];
+
     public function executer(Entreprise $entreprise, string $role, array $donnees): User
     {
         return DB::transaction(function () use ($entreprise, $role, $donnees) {
@@ -37,30 +45,10 @@ class CreerAcces
             app(PermissionRegistrar::class)->setPermissionsTeamId($entreprise->id);
             $utilisateur->assignRole($role);
 
-            if ($role === 'responsable_site') {
-                $this->affecterPerimetre($entreprise, $utilisateur, $donnees['perimetre']);
-            }
+            $ville = $this->affecterPerimetre($entreprise, $utilisateur, $role, $donnees);
 
-            if ($role === 'caissier') {
-                $this->affecterPerimetre($entreprise, $utilisateur, $donnees['perimetre'], surUtilisateur: true);
-            }
-
-            if ($role === 'commercial') {
-                $ville = Ville::where('id', $donnees['ville_id'])->where('entreprise_id', $entreprise->id)->firstOrFail();
-                $objectifMecanique = (int) ($donnees['objectif_mecanique'] ?? 0);
-                $objectifSinistre = (int) ($donnees['objectif_sinistre'] ?? 0);
-
-                Commercial::create([
-                    'entreprise_id' => $entreprise->id,
-                    'ville_id' => $ville->id,
-                    'user_id' => $utilisateur->id,
-                    'numero' => GenerateurNumero::suivant($entreprise->id, 'com'),
-                    'nom' => $donnees['nom'],
-                    'objectif_mecanique' => $objectifMecanique,
-                    'objectif_sinistre' => $objectifSinistre,
-                    'statut' => 'Actif',
-                    'est_spontane' => false,
-                ]);
+            if (in_array($role, self::ROLES_COMMERCIAUX, true) && $ville) {
+                $this->creerFicheCommercial($entreprise, $utilisateur, $ville, $donnees);
             }
 
             return $utilisateur;
@@ -68,31 +56,55 @@ class CreerAcces
     }
 
     /**
-     * Affecte un responsable ou un caissier à son périmètre : une ville entière (les
-     * deux sites) ou un site précis (une seule activité), selon la valeur choisie dans
-     * la liste déroulante — au format "ville:<id>" ou "site:<id>".
+     * Rattache l'accès à son périmètre et renvoie la ville qui en découle.
      *
-     * Le responsable est rattaché en marquant la ville/le site comme le sien
-     * (`responsable_id`) ; le caissier, lui, porte directement son rattachement sur son
-     * propre compte (`users.ville_id`/`site_id`), car plusieurs caissiers peuvent
-     * partager le même site.
+     * Un responsable est rattaché en se voyant désigné sur sa ville ou son lieu
+     * (`responsable_id`) ; la comptabilité, elle, porte son rattachement sur son propre
+     * compte (`users.ville_id`), plusieurs comptables pouvant partager la même ville.
      */
-    private function affecterPerimetre(Entreprise $entreprise, User $utilisateur, string $perimetre, bool $surUtilisateur = false): void
+    private function affecterPerimetre(Entreprise $entreprise, User $utilisateur, string $role, array $donnees): ?Ville
     {
-        [$type, $id] = explode(':', $perimetre, 2);
+        if ($role === 'responsable_site') {
+            $site = Site::where('id', $donnees['site_id'] ?? null)->where('entreprise_id', $entreprise->id)->firstOrFail();
+            $site->update(['responsable_id' => $utilisateur->id]);
 
-        if ($surUtilisateur) {
-            $utilisateur->update($type === 'ville' ? ['ville_id' => $id, 'site_id' => null] : ['site_id' => $id, 'ville_id' => null]);
-
-            return;
+            return $site->ville;
         }
 
-        if ($type === 'ville') {
-            Ville::where('id', $id)->where('entreprise_id', $entreprise->id)->update(['responsable_id' => $utilisateur->id]);
-
-            return;
+        if (! in_array($role, ['responsable_ville', 'commercial', 'caissier'], true)) {
+            return null;
         }
 
-        Site::where('id', $id)->where('entreprise_id', $entreprise->id)->update(['responsable_id' => $utilisateur->id]);
+        $ville = Ville::where('id', $donnees['ville_id'] ?? null)->where('entreprise_id', $entreprise->id)->firstOrFail();
+
+        if ($role === 'responsable_ville') {
+            $ville->update(['responsable_id' => $utilisateur->id]);
+        }
+
+        if ($role === 'caissier') {
+            $utilisateur->update(['ville_id' => $ville->id, 'site_id' => null]);
+        }
+
+        return $ville;
+    }
+
+    /**
+     * Un responsable de ville ou de site prospecte lui aussi : il doit donc figurer
+     * parmi les commerciaux, avec ses propres objectifs, sans quoi ni ses prospections
+     * ni son chiffre d'affaires ne seraient rattachables à quiconque.
+     */
+    private function creerFicheCommercial(Entreprise $entreprise, User $utilisateur, Ville $ville, array $donnees): void
+    {
+        Commercial::create([
+            'entreprise_id' => $entreprise->id,
+            'ville_id' => $ville->id,
+            'user_id' => $utilisateur->id,
+            'numero' => GenerateurNumero::suivant($entreprise->id, 'com'),
+            'nom' => $donnees['nom'],
+            'objectif_mecanique' => (int) ($donnees['objectif_mecanique'] ?? 0),
+            'objectif_sinistre' => (int) ($donnees['objectif_sinistre'] ?? 0),
+            'statut' => 'Actif',
+            'est_spontane' => false,
+        ]);
     }
 }

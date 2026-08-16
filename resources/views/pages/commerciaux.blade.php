@@ -14,6 +14,7 @@ state([
     'semaineFiltre' => '',
     'jourFiltre' => '',
     'villeFiltre' => '',
+    'siteFiltre' => '',
     'activiteFiltre' => '',
     'commercialFiltre' => '',
     'pageClassement' => 1,
@@ -26,15 +27,18 @@ mount(function () {
 
 $updatedMoisFiltre = function () { $this->semaineFiltre = ''; $this->jourFiltre = ''; };
 $updatedSemaineFiltre = function () { $this->jourFiltre = ''; };
+/** Changer de ville rend caduc le lieu choisi dans la précédente. */
+$updatedVilleFiltre = function () { $this->siteFiltre = ''; };
 
 $plage = computed(fn () => PeriodeCalculateur::plage(
     $this->periode, $this->dateDebut, $this->dateFin, $this->moisFiltre ?: null, $this->semaineFiltre ?: null, $this->jourFiltre ?: null
 ));
 $mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
+$mesSitesFiltre = computed(fn () => PerimetreSites::optionsSites(auth()->user(), $this->villeFiltre));
 $villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
-$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->siteFiltre));
 $idsVilles = computed(fn () => PerimetreSites::idsVillesRetenus(auth()->user(), $this->villeFiltre));
-$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->siteFiltre, $this->activiteFiltre));
 
 $optionsCommerciaux = computed(fn () => Commercial::actifs()->where('est_spontane', false)
     ->whereIn('ville_id', $this->idsVilles)->orderBy('nom')->get());
@@ -47,18 +51,24 @@ $classement = computed(function () {
         ->when($this->commercialFiltre, fn ($q) => $q->where('id', $this->commercialFiltre))
         ->get();
 
-    // CA de la ville sur la période (ses deux sites), pour exprimer la contribution de
-    // chaque commercial — celui-ci travaillant pour la ville entière, pas un site précis.
+    // CA de la ville sur la période, pour exprimer la contribution de chaque commercial —
+    // celui-ci travaillant pour la ville entière, jamais pour un lieu précis. Le CA est
+    // néanmoins restreint aux lieux et à l'activité retenus, pour que la contribution se
+    // rapporte bien à ce que le filtre affiche.
     $caParVille = Facture::query()
         ->join('sites', 'sites.id', '=', 'factures.site_id')
-        ->whereIn('sites.ville_id', $commerciaux->pluck('ville_id')->unique())
+        ->whereIn('factures.site_id', $this->idsSites)
+        ->when($this->activiteFiltre, fn ($q) => $q->where('factures.activite', $this->activiteFiltre))
         ->whereBetween('factures.date', [$debut, $fin])
         ->selectRaw('sites.ville_id, SUM(factures.montant) as total')
         ->groupBy('sites.ville_id')
         ->pluck('total', 'ville_id');
 
     return $commerciaux->map(function ($commercial) use ($debut, $fin, $caParVille) {
-        $lignesFactures = Facture::where('commercial_id', $commercial->id)->whereBetween('date', [$debut, $fin])->get(['montant', 'activite']);
+        $lignesFactures = Facture::where('commercial_id', $commercial->id)
+            ->whereIn('site_id', $this->idsSites)
+            ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
+            ->whereBetween('date', [$debut, $fin])->get(['montant', 'activite']);
         $realisation = (int) $lignesFactures->sum('montant');
         $objectifProrata = (int) round(PeriodeCalculateur::objectifProrata((float) $commercial->objectif_mensuel, $debut, $fin));
         $ecart = $realisation - $objectifProrata;
@@ -117,7 +127,7 @@ $graphique = computed(fn () => [
 
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
-        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
+        :ville-filtre="$villeFiltre" :sites="$this->mesSitesFiltre" :site-filtre="$siteFiltre" :activite-filtre="$activiteFiltre"
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre"
         :commerciaux="$this->optionsCommerciaux" :commercial-filtre="$commercialFiltre" />
 

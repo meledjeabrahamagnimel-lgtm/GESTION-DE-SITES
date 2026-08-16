@@ -118,7 +118,9 @@ class DonneesOperationnellesSeeder extends Seeder
                         'client' => self::CLIENTS_DEMO[array_rand(self::CLIENTS_DEMO)],
                         'localisation' => self::LOCALISATIONS[array_rand(self::LOCALISATIONS)],
                         'moyen' => ['RDV', 'Téléphone', 'Mail'][array_rand(['RDV', 'Téléphone', 'Mail'])],
-                        'activite' => $site->activite,
+                        // Un lieu accueille les deux activités : c'est la prospection qui
+                        // dit laquelle est concernée, pas le site.
+                        'activite' => self::activiteAuHasard(),
                         'passage' => $passage,
                         'devis_apres_passage' => $devisApresPassage,
                         // Circuit de validation : l'essentiel est validé, mais les tout derniers
@@ -357,10 +359,16 @@ class DonneesOperationnellesSeeder extends Seeder
      * Crée la chaîne prospection → devis → (facture → encaissement) d'une seule traite,
      * en datant chaque étape du même jour pour qu'elle apparaisse dans la saisie du jour.
      */
+    /** Le lieu ne détermine plus l'activité : chaque opération tire la sienne. */
+    private static function activiteAuHasard(): string
+    {
+        return random_int(1, 100) <= 70 ? 'Mécanique' : 'Sinistre';
+    }
+
     private function creerChaineComplete(int $entrepriseId, Site $site, Commercial $commercial, Carbon $date, string $statut): void
     {
         $client = self::CLIENTS_DEMO[array_rand(self::CLIENTS_DEMO)];
-        $activite = $site->activite;
+        $activite = self::activiteAuHasard();
         $jour = $date->toDateString();
 
         $prospection = Prospection::create([

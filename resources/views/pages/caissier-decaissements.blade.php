@@ -15,6 +15,8 @@ state([
     'chgMoyen' => 'Espèces',
     'chgMontant' => '',
     'chgTiers' => '',
+    'chgActivite' => '',
+    'chgReference' => '',
     'chgObs' => '',
     'message' => null,
     'pageDuJour' => 1,
@@ -74,6 +76,8 @@ $ajouterCharge = function () {
         'chgMoyen' => ['required', Rule::in(array_keys($this->optionsMoyenPaiement))],
         'chgMontant' => ['required', 'numeric', 'min:1'],
         'chgTiers' => ['nullable', 'string', 'max:255'],
+        'chgActivite' => ['nullable', 'in:Mécanique,Sinistre'],
+        'chgReference' => ['nullable', 'string', 'max:60'],
         'chgObs' => ['nullable', 'string'],
     ], [], ['chgMontant' => 'montant', 'chgLibelle' => "libellé d'opération"]);
 
@@ -87,15 +91,17 @@ $ajouterCharge = function () {
         'site_id' => $this->site->id,
         'date' => $donnees['chgDate'],
         'type_operation' => $typeOperation,
+        'activite' => $donnees['chgActivite'] ?: null,
         'libelle' => $donnees['chgLibelle'],
         'moyen' => $donnees['chgMoyen'],
         'montant' => (int) $donnees['chgMontant'],
         'tiers' => $donnees['chgTiers'] ?: null,
+        'reference_origine' => $donnees['chgReference'] ?: null,
         'observations' => $donnees['chgObs'] ?: null,
         'cree_par' => auth()->id(),
     ]);
 
-    $this->reset(['chgMontant', 'chgTiers', 'chgObs']);
+    $this->reset(['chgMontant', 'chgTiers', 'chgObs', 'chgActivite', 'chgReference']);
     $this->chgTypeOp = 'Charges';
     $this->chgLibelle = 'Achats pièces';
     $this->chgMoyen = 'Espèces';
@@ -138,6 +144,11 @@ $ajouterCharge = function () {
                 <x-champ label="Moyens" model="chgMoyen" type="select" :options="$this->optionsMoyenPaiement" width="150" />
                 <x-champ label="Montant (FCFA)" model="chgMontant" type="number" width="150" />
                 <x-champ label="Tiers" model="chgTiers" placeholder="Ex : fournisseur, bénéficiaire…" />
+                {{-- Beaucoup de décaissements (loyer, salaires) relèvent du lieu entier :
+                     l'activité ne se renseigne que lorsqu'elle est réellement connue. --}}
+                <x-champ label="Activité (facultatif)" model="chgActivite" type="select" width="150"
+                    :options="['' => '— Non précisée', 'Mécanique' => 'Mécanique', 'Sinistre' => 'Sinistre']" />
+                <x-champ label="Origine / référence" model="chgReference" width="170" placeholder="Pièce, bon, N° externe…" />
             </div>
             <div class="bloc-saisie" style="margin-top:10px;">
                 <x-champ label="Observations" model="chgObs" />
@@ -150,22 +161,24 @@ $ajouterCharge = function () {
                 <table class="tableau">
                     <thead>
                         <tr>
-                            <th>Type d'opération</th><th>Libellé</th><th>Moyens</th>
-                            <th>Montant</th><th>Tiers</th><th>Observations</th>
+                            <th>Type d'opération</th><th>Activité</th><th>Libellé</th><th>Moyens</th>
+                            <th>Montant</th><th>Tiers</th><th>Origine / référence</th><th>Observations</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->decaissementsDuJour->forPage($pageDuJour, 10) as $c)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td>{{ $c->type_operation }}</td>
+                                <td>{{ $c->activite ?? '—' }}</td>
                                 <td>{{ $c->libelle }}</td>
                                 <td>{{ $c->moyen }}</td>
                                 <td style="font-weight:700; color:#C8102E; font-variant-numeric:tabular-nums;">{{ ae($c->montant) }}</td>
                                 <td>{{ $c->tiers ?? '—' }}</td>
+                                <td style="color:#6B6E76;">{{ $c->reference_origine ?? '—' }}</td>
                                 <td style="color:#6B6E76;">{{ $c->observations ?? '—' }}</td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="6" texte="Aucun décaissement pour cette journée." />
+                            <x-table-vide :colspan="8" texte="Aucun décaissement pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>

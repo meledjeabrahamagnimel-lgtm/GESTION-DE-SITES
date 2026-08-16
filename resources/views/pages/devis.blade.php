@@ -14,6 +14,7 @@ state([
     'semaineFiltre' => '',
     'jourFiltre' => '',
     'villeFiltre' => '',
+    'siteFiltre' => '',
     'activiteFiltre' => '',
     'recherche' => '',
     'commercialFiltre' => '',
@@ -30,18 +31,23 @@ mount(function () {
 
 $updatedMoisFiltre = function () { $this->semaineFiltre = ''; $this->jourFiltre = ''; };
 $updatedSemaineFiltre = function () { $this->jourFiltre = ''; };
+/** Changer de ville rend caduc le lieu choisi dans la précédente. */
+$updatedVilleFiltre = function () { $this->siteFiltre = ''; };
 
 $plage = computed(fn () => PeriodeCalculateur::plage(
     $this->periode, $this->dateDebut, $this->dateFin, $this->moisFiltre ?: null, $this->semaineFiltre ?: null, $this->jourFiltre ?: null
 ));
 $mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
+$mesSitesFiltre = computed(fn () => PerimetreSites::optionsSites(auth()->user(), $this->villeFiltre));
 $villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
-$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
-$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->siteFiltre));
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->siteFiltre, $this->activiteFiltre));
 
 $requeteBase = computed(function () {
     [$debut, $fin] = $this->plage;
-    $q = Devis::query()->whereIn('site_id', $this->idsSites)->whereBetween('date_emission', [$debut, $fin]);
+    $q = Devis::query()->whereIn('site_id', $this->idsSites)
+        ->when($this->activiteFiltre, fn ($r) => $r->where('activite', $this->activiteFiltre))
+        ->whereBetween('date_emission', [$debut, $fin]);
 
     if ($this->recherche) {
         $q->where('client', 'like', '%'.$this->recherche.'%');
@@ -208,7 +214,7 @@ $detail = computed(function () {
 
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
-        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
+        :ville-filtre="$villeFiltre" :sites="$this->mesSitesFiltre" :site-filtre="$siteFiltre" :activite-filtre="$activiteFiltre"
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre"
         :commerciaux="$this->commerciaux" :commercial-filtre="$commercialFiltre" />
 
@@ -296,7 +302,7 @@ $detail = computed(function () {
                         <th>Date d'émission</th>
                         <th>Délai moyen</th>
                         <th>Commercial</th>
-                        @if (! $activiteFiltre && count($this->idsSites) > 1)
+                        @if (count($this->idsSites) > 1)
                             <th>Site</th>
                         @endif
                         <th>Statut du devis</th>
@@ -333,7 +339,7 @@ $detail = computed(function () {
                                 @endif
                             </td>
                             <td>{{ $ligne->commercial->nom }}</td>
-                            @if (! $activiteFiltre && count($this->idsSites) > 1)
+                            @if (count($this->idsSites) > 1)
                                 <td>{{ $ligne->site->nom }}</td>
                             @endif
                             <td>
@@ -346,7 +352,7 @@ $detail = computed(function () {
                             <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 14 : 13" texte="Aucun devis enregistré sur cette période." />
+                        <x-table-vide :colspan="count($this->idsSites) > 1 ? 14 : 13" texte="Aucun devis enregistré sur cette période." />
                     @endforelse
                 </tbody>
             </table>

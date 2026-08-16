@@ -8,12 +8,13 @@ use Spatie\Permission\PermissionRegistrar;
 
 /**
  * Prépare une entreprise fraîchement créée : ses rôles (scopés à son équipe).
- * Rôles disponibles pour toute entreprise : gerant, responsable_site, commercial, caissier.
- * Le rôle super_admin, lui, vit hors entreprise sur l'équipe plateforme (id 0).
+ * Rôles disponibles pour toute entreprise : gerant, responsable_ville, responsable_site,
+ * commercial, caissier. Le rôle super_admin, lui, vit hors entreprise sur l'équipe
+ * plateforme (id 0).
  */
 class ProvisionneurEntreprise
 {
-    public const ROLES = ['gerant', 'responsable_site', 'commercial', 'caissier'];
+    public const ROLES = ['gerant', 'responsable_ville', 'responsable_site', 'commercial', 'caissier'];
 
     public static function creerRoles(Entreprise $entreprise): void
     {

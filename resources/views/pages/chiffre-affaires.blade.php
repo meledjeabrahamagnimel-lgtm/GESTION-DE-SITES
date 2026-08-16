@@ -15,6 +15,7 @@ state([
     'semaineFiltre' => '',
     'jourFiltre' => '',
     'villeFiltre' => '',
+    'siteFiltre' => '',
     'activiteFiltre' => '',
     'recherche' => '',
     'commercialFiltre' => '',
@@ -28,18 +29,23 @@ mount(function () {
 
 $updatedMoisFiltre = function () { $this->semaineFiltre = ''; $this->jourFiltre = ''; };
 $updatedSemaineFiltre = function () { $this->jourFiltre = ''; };
+/** Changer de ville rend caduc le lieu choisi dans la précédente. */
+$updatedVilleFiltre = function () { $this->siteFiltre = ''; };
 
 $plage = computed(fn () => PeriodeCalculateur::plage(
     $this->periode, $this->dateDebut, $this->dateFin, $this->moisFiltre ?: null, $this->semaineFiltre ?: null, $this->jourFiltre ?: null
 ));
 $mesVilles = computed(fn () => PerimetreSites::optionsVilles(auth()->user()));
 $villeUnique = computed(fn () => PerimetreSites::villeUnique(auth()->user()));
-$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
-$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->activiteFiltre));
+$mesSitesFiltre = computed(fn () => PerimetreSites::optionsSites(auth()->user(), $this->villeFiltre));
+$idsSites = computed(fn () => PerimetreSites::idsRetenus(auth()->user(), $this->villeFiltre, $this->siteFiltre));
+$libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->user(), $this->villeFiltre, $this->siteFiltre, $this->activiteFiltre));
 
 $requeteBase = computed(function () {
     [$debut, $fin] = $this->plage;
-    $q = Facture::query()->whereIn('site_id', $this->idsSites)->whereBetween('date', [$debut, $fin]);
+    $q = Facture::query()->whereIn('site_id', $this->idsSites)
+        ->when($this->activiteFiltre, fn ($r) => $r->where('activite', $this->activiteFiltre))
+        ->whereBetween('date', [$debut, $fin]);
 
     if ($this->recherche) {
         $q->where('client', 'like', '%'.$this->recherche.'%');
@@ -60,6 +66,7 @@ $chargesPeriode = computed(function () {
 
     return (int) Charge::where('type_operation', 'Charges')
         ->whereIn('site_id', $this->idsSites)
+        ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
         ->whereBetween('date', [$debut, $fin])->sum('montant');
 });
 
@@ -90,6 +97,7 @@ $graphique = computed(function () {
         $charges = (int) \App\Domain\Operations\Models\Charge::query()
             ->where('type_operation', 'Charges')
             ->whereIn('site_id', $this->idsSites)
+            ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
             ->whereBetween('date', [$point['debut'], $point['fin']])
             ->sum('montant');
 
@@ -115,7 +123,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
 
 <div>
     <x-filtre-periode :periode="$periode" :villes="$this->mesVilles" :ville-unique="$this->villeUnique"
-        :ville-filtre="$villeFiltre" :activite-filtre="$activiteFiltre"
+        :ville-filtre="$villeFiltre" :sites="$this->mesSitesFiltre" :site-filtre="$siteFiltre" :activite-filtre="$activiteFiltre"
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px;">
@@ -154,7 +162,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                         <th>Type</th>
                         <th>N° de facture</th>
                         <th>Activité</th>
-                        @if (! $activiteFiltre && count($this->idsSites) > 1)
+                        @if (count($this->idsSites) > 1)
                             <th>Site</th>
                         @endif
                         <th>Montant</th>
@@ -171,14 +179,14 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                             <td>{{ $ligne->type }}</td>
                             <td>{{ $ligne->n_facture }}</td>
                             <td>{{ $ligne->activite }}</td>
-                            @if (! $activiteFiltre && count($this->idsSites) > 1)
+                            @if (count($this->idsSites) > 1)
                                 <td>{{ $ligne->site->nom }}</td>
                             @endif
                             <td style="font-variant-numeric:tabular-nums; font-weight:700;">{{ ae($ligne->montant) }}</td>
                             <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="! $activiteFiltre && count($this->idsSites) > 1 ? 10 : 9" texte="Aucune facture enregistrée sur cette période." />
+                        <x-table-vide :colspan="count($this->idsSites) > 1 ? 10 : 9" texte="Aucune facture enregistrée sur cette période." />
                     @endforelse
                 </tbody>
             </table>

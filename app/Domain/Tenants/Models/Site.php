@@ -10,8 +10,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** Un site est l'endroit d'activité précis où l'entreprise opère (une ville, une activité). */
-#[Fillable(['entreprise_id', 'ville_id', 'activite', 'nom', 'responsable_id', 'est_actif'])]
+/**
+ * Un site est un lieu : l'endroit physique où l'entreprise opère, et où l'on pratique
+ * indifféremment les deux activités (Mécanique et Sinistre). Une ville peut compter
+ * plusieurs lieux — Abidjan en a deux — ou n'en avoir qu'un, alors confondu avec elle.
+ */
+#[Fillable(['entreprise_id', 'ville_id', 'code', 'nom', 'responsable_id', 'est_actif'])]
 class Site extends Model
 {
     use AppartientAUneEntreprise, HasFactory;
@@ -47,7 +51,8 @@ class Site extends Model
     /**
      * Sites que $user peut voir, selon son rôle :
      * - Gérant : tous les sites de son entreprise.
-     * - Responsable de site : les sites dont il est responsable, directement ou via sa ville.
+     * - Responsable de ville : tous les lieux des villes dont il répond.
+     * - Responsable de site : le ou les lieux qui lui sont nommément confiés.
      * - Caissier : son site de rattachement, ou tous les sites de sa ville s'il est rattaché à une ville entière.
      */
     public static function visiblesPour(User $user): Collection
@@ -56,12 +61,15 @@ class Site extends Model
             return static::where('entreprise_id', $user->entreprise_id)->orderBy('nom')->get();
         }
 
+        if ($user->hasRole('responsable_ville')) {
+            return static::where('entreprise_id', $user->entreprise_id)
+                ->whereHas('ville', fn ($q) => $q->where('responsable_id', $user->id))
+                ->orderBy('nom')->get();
+        }
+
         if ($user->hasRole('responsable_site')) {
             return static::where('entreprise_id', $user->entreprise_id)
-                ->where(function ($requete) use ($user) {
-                    $requete->where('responsable_id', $user->id)
-                        ->orWhereHas('ville', fn ($q) => $q->where('responsable_id', $user->id));
-                })
+                ->where('responsable_id', $user->id)
                 ->orderBy('nom')->get();
         }
 

@@ -11,8 +11,8 @@ state([
     'nom' => '',
     'email' => '',
     'motDePasse' => '',
-    'perimetre' => '',
     'villeChoix' => '',
+    'siteChoix' => '',
     'objectifGlobal' => Commercial::OBJECTIF_MENSUEL_DEFAUT,
     'pourcentageMecanique' => (int) (Commercial::PART_MECANIQUE_DEFAUT * 100),
     'confirmation' => null,
@@ -20,52 +20,58 @@ state([
 ]);
 
 mount(function () {
-    $this->roleActif = auth()->user()->hasRole('gerant') ? 'responsable_site' : 'commercial';
+    $this->roleActif = array_key_first($this->rolesDisponibles);
 
-    if (! auth()->user()->hasRole('gerant') && count($this->optionsVilleCommercial) === 1) {
+    if (count($this->optionsVilleCommercial) === 1) {
         $this->villeChoix = array_key_first($this->optionsVilleCommercial);
     }
 });
 
+/**
+ * Rôles créables, du plus large au plus étroit : chacun ne peut nommer que des accès
+ * strictement en dessous du sien. Un responsable de site, dernier maillon encadrant,
+ * ne crée donc que des commerciaux et la comptabilité de sa ville.
+ */
 $rolesDisponibles = computed(function () {
-    $roles = [];
     if (auth()->user()->hasRole('gerant')) {
-        $roles['responsable_site'] = 'Responsable de site';
-        $roles['commercial'] = 'Commercial';
-        $roles['caissier'] = 'Comptabilité';
-    } elseif (auth()->user()->hasRole('responsable_site')) {
-        $roles['commercial'] = 'Commercial';
-        $roles['caissier'] = 'Comptabilité';
+        return [
+            'responsable_ville' => 'Responsable de ville',
+            'responsable_site' => 'Responsable de site',
+            'commercial' => 'Commercial',
+            'caissier' => 'Comptabilité',
+        ];
     }
 
-    return $roles;
+    if (auth()->user()->hasRole('responsable_ville')) {
+        return [
+            'responsable_site' => 'Responsable de site',
+            'commercial' => 'Commercial',
+            'caissier' => 'Comptabilité',
+        ];
+    }
+
+    return ['commercial' => 'Commercial', 'caissier' => 'Comptabilité'];
 });
 
-/** Périmètres proposés pour un nouveau responsable ou caissier : une ville entière, ou un site précis. */
-$perimetres = computed(function () {
-    $options = [];
-
-    foreach (Ville::where('entreprise_id', auth()->user()->entreprise_id)->where('est_actif', true)->orderBy('nom')->get() as $ville) {
-        $options['ville:'.$ville->id] = $ville->nom.' — toute la ville';
-    }
-
-    foreach (Site::where('entreprise_id', auth()->user()->entreprise_id)->where('est_actif', true)->orderBy('nom')->get() as $site) {
-        $options['site:'.$site->id] = $site->nom.' (site précis)';
-    }
-
-    return $options;
-});
+/** Rôles dont le titulaire prospecte : il reçoit une fiche commercial et des objectifs. */
+$roleAvecObjectifs = computed(fn () => in_array($this->roleActif, ['responsable_ville', 'responsable_site', 'commercial'], true));
 
 /**
- * Un commercial n'est pas rattaché à une activité mais à une ville entière : il
- * prospecte pour l'une ou l'autre selon le client, l'activité étant portée par chaque
- * prospection et non par sa fiche.
+ * Villes proposées. Un commercial, un responsable de ville et la comptabilité sont
+ * rattachés à une ville entière : le commercial prospecte pour l'une ou l'autre
+ * activité selon le client, et la comptabilité couvre toute la ville, pas un lieu.
  */
 $villesPourCommercial = computed(fn () => auth()->user()->hasRole('gerant')
     ? Ville::where('entreprise_id', auth()->user()->entreprise_id)->where('est_actif', true)->orderBy('nom')->get()
     : Ville::whereIn('id', Site::visiblesPour(auth()->user())->pluck('ville_id')->unique())->orderBy('nom')->get());
 
 $optionsVilleCommercial = computed(fn () => $this->villesPourCommercial->pluck('nom', 'id')->all());
+
+/** Lieux proposés à un responsable de site : ceux du périmètre de celui qui le nomme. */
+$optionsSite = computed(fn () => (auth()->user()->hasRole('gerant')
+        ? Site::where('entreprise_id', auth()->user()->entreprise_id)->where('est_actif', true)->orderBy('nom')->get()
+        : Site::visiblesPour(auth()->user()))
+    ->pluck('nom', 'id')->all());
 
 /** Répartition Mécanique/Sinistre de l'objectif global, au pourcentage saisi. */
 $objectifMecanique = computed(fn () => (int) round((int) $this->objectifGlobal * ((int) $this->pourcentageMecanique) / 100));
@@ -113,12 +119,13 @@ $creer = function (CreerAcces $action) {
         'motDePasse' => ['required', 'string', 'min:8'],
     ];
 
-    if ($this->roleActif === 'responsable_site' || $this->roleActif === 'caissier') {
-        $regles['perimetre'] = ['required', 'in:'.implode(',', array_keys($this->perimetres))];
+    if ($this->roleActif === 'responsable_site') {
+        $regles['siteChoix'] = ['required', 'in:'.implode(',', array_keys($this->optionsSite))];
+    } else {
+        $regles['villeChoix'] = ['required', 'in:'.implode(',', array_keys($this->optionsVilleCommercial))];
     }
 
-    if ($this->roleActif === 'commercial') {
-        $regles['villeChoix'] = ['required', 'in:'.implode(',', array_keys($this->optionsVilleCommercial))];
+    if ($this->roleAvecObjectifs) {
         $regles['objectifGlobal'] = ['required', 'numeric', 'min:0'];
         $regles['pourcentageMecanique'] = ['required', 'numeric', 'min:0', 'max:100'];
     }
@@ -127,7 +134,7 @@ $creer = function (CreerAcces $action) {
         'nom' => 'nom et prénoms',
         'email' => 'adresse e-mail',
         'motDePasse' => 'mot de passe',
-        'perimetre' => 'périmètre',
+        'siteChoix' => 'site',
         'villeChoix' => 'ville',
         'objectifGlobal' => 'objectif mensuel',
         'pourcentageMecanique' => 'pourcentage Mécanique',
@@ -137,19 +144,16 @@ $creer = function (CreerAcces $action) {
         'nom' => $donnees['nom'],
         'email' => $donnees['email'],
         'mot_de_passe' => $donnees['motDePasse'],
-        'perimetre' => $donnees['perimetre'] ?? null,
         'ville_id' => $donnees['villeChoix'] ?? null,
+        'site_id' => $donnees['siteChoix'] ?? null,
         'objectif_mecanique' => $this->objectifMecanique,
         'objectif_sinistre' => $this->objectifSinistre,
     ]);
 
-    $this->reset(['nom', 'email', 'motDePasse']);
-    $this->villeChoix = (! auth()->user()->hasRole('gerant') && count($this->optionsVilleCommercial) === 1)
-        ? array_key_first($this->optionsVilleCommercial)
-        : '';
+    $this->reset(['nom', 'email', 'motDePasse', 'siteChoix']);
+    $this->villeChoix = count($this->optionsVilleCommercial) === 1 ? array_key_first($this->optionsVilleCommercial) : '';
     $this->objectifGlobal = Commercial::OBJECTIF_MENSUEL_DEFAUT;
     $this->pourcentageMecanique = (int) (Commercial::PART_MECANIQUE_DEFAUT * 100);
-    $this->perimetre = '';
     $this->confirmation = "Accès créé — mot de passe à changer à la première connexion.";
 };
 
@@ -196,29 +200,31 @@ $creer = function (CreerAcces $action) {
                 style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px; margin-bottom:4px;">
             @error('motDePasse') <div style="color:#C8102E; font-size:13.5px; margin-bottom:8px;">{{ $message }}</div> @enderror
 
-            @if ($roleActif === 'responsable_site' || $roleActif === 'caissier')
-                <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Périmètre</label>
-                <select wire:model="perimetre" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
-                    <option value="">— Choisir une ville ou un site —</option>
-                    @foreach ($this->perimetres as $valeur => $libelle)
-                        <option value="{{ $valeur }}">{{ $libelle }}</option>
+            @if ($roleActif === 'responsable_site')
+                {{-- Un responsable de site répond d'un lieu précis ; les autres rôles
+                     couvrent une ville entière, lieux et activités confondus. --}}
+                <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Site (lieu dont il répond)</label>
+                <select wire:model="siteChoix" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
+                    <option value="">— Choisir un site —</option>
+                    @foreach ($this->optionsSite as $id => $nom)
+                        <option value="{{ $id }}">{{ $nom }}</option>
                     @endforeach
                 </select>
-                @error('perimetre') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
+                @error('siteChoix') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
+            @else
+                <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Ville</label>
+                <select wire:model.live="villeChoix" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
+                    <option value="">— Choisir une ville —</option>
+                    @foreach ($this->optionsVilleCommercial as $id => $nom)
+                        <option value="{{ $id }}">{{ $nom }}</option>
+                    @endforeach
+                </select>
+                @error('villeChoix') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
             @endif
 
-            @if ($roleActif === 'commercial')
-                @if (auth()->user()->hasRole('gerant') || count($this->optionsVilleCommercial) > 1)
-                    <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Ville</label>
-                    <select wire:model.live="villeChoix" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
-                        <option value="">— Choisir une ville —</option>
-                        @foreach ($this->optionsVilleCommercial as $id => $nom)
-                            <option value="{{ $id }}">{{ $nom }}</option>
-                        @endforeach
-                    </select>
-                    @error('villeChoix') <div style="color:#C8102E; font-size:13.5px; margin-top:6px;">{{ $message }}</div> @enderror
-                @endif
-
+            @if ($this->roleAvecObjectifs)
+                {{-- Les responsables prospectent eux aussi : ils apparaissent parmi les
+                     commerciaux et portent donc leurs propres objectifs. --}}
                 <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:14px 0 6px;">Objectif mensuel global (FCFA)</label>
                 <input type="number" wire:model.live="objectifGlobal"
                     style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">

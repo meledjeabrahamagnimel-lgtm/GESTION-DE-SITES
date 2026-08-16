@@ -162,9 +162,10 @@ $ajouter = function () {
         (bool) $this->devisApres, $donnees['dateDevis'],
     );
 
-    // Le commercial est rattaché à une ville, pas à une activité : le site (Mécanique
-    // ou Sinistre) se résout à partir de l'activité choisie pour cette prospection.
-    $siteId = Site::where('ville_id', $this->commercial->ville_id)->where('activite', $donnees['activite'])->value('id');
+    // Le commercial est rattaché à une ville, pas à un lieu : sa prospection est
+    // enregistrée sur le premier lieu de sa ville, qui accueille les deux activités.
+    // C'est la prospection elle-même qui dit laquelle est concernée.
+    $siteId = Site::where('ville_id', $this->commercial->ville_id)->orderBy('id')->value('id');
 
     Prospection::create([
         'entreprise_id' => auth()->user()->entreprise_id,

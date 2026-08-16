@@ -32,7 +32,7 @@ Route::middleware(['auth'])->group(function () {
     Volt::route('/mes-notifications', 'mes-notifications')->name('mes-notifications');
 
     // Espace personnel : profil, photo, rattachement, listes déroulantes.
-    Route::middleware(['role:responsable_site|commercial|caissier'])->group(function () {
+    Route::middleware(['role:responsable_ville|responsable_site|commercial|caissier'])->group(function () {
         Volt::route('/mon-espace', 'mon-espace')->name('mon-espace');
     });
 
@@ -42,12 +42,12 @@ Route::middleware(['auth'])->group(function () {
         Volt::route('/parametres', 'parametres')->name('parametres');
     });
 
-    Route::middleware(['role:responsable_site'])->group(function () {
+    Route::middleware(['role:responsable_ville|responsable_site'])->group(function () {
         Volt::route('/saisie-du-jour', 'saisie-du-jour')->name('saisie-du-jour');
         Volt::route('/saisie-du-jour/prospections/{prospection}', 'prospection-voir')->name('prospection.voir');
     });
 
-    Route::middleware(['role:gerant|responsable_site'])->group(function () {
+    Route::middleware(['role:gerant|responsable_ville|responsable_site'])->group(function () {
         Volt::route('/prospects', 'prospects')->name('prospects');
         Volt::route('/devis', 'devis')->name('devis');
         Volt::route('/chiffre-affaires', 'chiffre-affaires')->name('chiffre-affaires');
@@ -56,7 +56,7 @@ Route::middleware(['auth'])->group(function () {
         Volt::route('/commerciaux', 'commerciaux')->name('commerciaux');
     });
 
-    Route::middleware(['role:gerant|responsable_site'])->group(function () {
+    Route::middleware(['role:gerant|responsable_ville|responsable_site'])->group(function () {
         Volt::route('/acces/creer', 'acces-creer')->name('acces.creer');
     });
 

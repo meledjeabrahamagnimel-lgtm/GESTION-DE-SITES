@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
-#[Fillable(['entreprise_id', 'site_id', 'date', 'type_operation', 'libelle', 'moyen', 'montant', 'tiers', 'observations', 'cree_par'])]
+#[Fillable(['entreprise_id', 'site_id', 'date', 'type_operation', 'activite', 'libelle', 'moyen', 'montant', 'tiers', 'reference_origine', 'observations', 'cree_par'])]
 class Charge extends Model
 {
     use AppartientAUneEntreprise, HasFactory;

@@ -1,0 +1,528 @@
+================================================================================
+INTEGRATION GESTION-DE-SITES <-> APPLICATION WINDEV (HFSQL)
+Methode retenue : API REST (JSON, HTTPS, jeton d'authentification)
+================================================================================
+
+PRINCIPE GENERAL
+--------------------------------------------------------------------------------
+GESTION-DE-SITES est une application cloud (Laravel), accessible en HTTPS a
+l'adresse : https://gestionsites.dc-knowing.com
+
+L'application WinDev est installee en local, poste par poste, chez le client
+(garage). Elle n'a pas d'adresse IP fixe joignable depuis Internet.
+
+Consequence technique importante :
+  - WinDev PEUT appeler GESTION-DE-SITES (c'est WinDev qui se connecte vers
+    l'exterieur : aucun port a ouvrir chez le client, ca marche derriere
+    n'importe quelle box internet).
+  - GESTION-DE-SITES NE PEUT PAS appeler WinDev directement (le poste local
+    n'est pas joignable depuis l'exterieur).
+
+Donc :
+  - SENS 1 (actif maintenant) : WinDev POUSSE ses donnees vers GESTION-DE-SITES
+    via des appels HTTP sortants (POST).
+  - SENS 2 (pour plus tard, bidirectionnel) : comme GESTION-DE-SITES ne peut
+    pas appeler WinDev, c'est WinDev qui doit interroger PERIODIQUEMENT
+    GESTION-DE-SITES ("y a-t-il du nouveau pour moi ?"). C'est ce qu'on
+    appelle du "polling". GESTION-DE-SITES ne fait jamais le premier pas.
+
+
+================================================================================
+CE QUE WINDEV DOIT PREVOIR TECHNIQUEMENT
+================================================================================
+
+1. Une cle API (jeton secret)
+   - Generee cote GESTION-DE-SITES, une par entreprise/poste.
+   - A stocker en configuration WinDev (fichier .ini local ou table HFSQL de
+     parametrage), JAMAIS en dur dans le code source.
+   - Envoyee dans l'en-tete HTTP "Authorization: Bearer <cle>" a chaque appel.
+
+2. Une fonction d'envoi HTTP/JSON
+   - WinDev 27 sait nativement faire des requetes REST en JSON avec les
+     fonctions HTTPEnvoieRequete / HTTPRequete (WLangage). Voir exemples
+     de code plus bas.
+
+3. Une file d'attente locale (table HFSQL) pour ne rien perdre
+   - Table par exemple "FileSynchro" avec les colonnes :
+       IDLocal          (identifiant genere par WinDev, unique)
+       TypeDonnee       ("facture", "devis", "encaissement", "decaissement")
+       ContenuJSON      (le paquet a envoyer)
+       Statut           ("EnAttente", "Envoye", "Erreur")
+       DateCreation
+       DateEnvoi
+       TentativeNb
+   - Principe : chaque manipulation importante (creation facture, etc.) cree
+     une ligne "EnAttente" dans cette table AVANT meme d'essayer de l'envoyer.
+     Un traitement periodique (toutes les 1 a 5 minutes) parcourt les lignes
+     "EnAttente" ou "Erreur" et tente l'envoi. Si Internet est coupe au
+     moment de la manipulation, rien n'est perdu : ca part au prochain passage.
+
+4. Un identifiant unique par enregistrement envoye (idempotence)
+   - Chaque facture/devis/encaissement envoye doit porter un identifiant
+     unique cote WinDev (ex: son ID HFSQL, ou un UUID genere a la creation).
+   - GESTION-DE-SITES s'en sert pour ne jamais enregistrer deux fois la meme
+     donnee si l'envoi est retente (coupure reseau, timeout, etc.).
+
+5. Un traitement periodique (timer / tache planifiee)
+   - Pour le SENS 1 : relance les envois en attente.
+   - Pour le SENS 2 (plus tard) : interroge GESTION-DE-SITES pour recuperer
+     les nouveautes a appliquer localement.
+   - En WinDev, ceci se fait avec un timer applicatif (fonction TimerSys, ou
+     un processus planifie via l'ordonnanceur Windows qui relance un petit
+     executable WinDev toutes les X minutes).
+
+
+================================================================================
+COTE GESTION-DE-SITES (LARAVEL) - CE QUI DOIT ETRE MIS EN PLACE
+================================================================================
+
+1. Une cle API par entreprise
+   - Colonne "cle_api_windev" sur la table entreprises (chaine aleatoire
+     generee une fois, affichable/regenerable depuis Parametres).
+
+2. Un middleware qui verifie cette cle sur chaque appel entrant.
+
+3. Des routes dediees sous /api/windev/...
+
+4. Une table de suivi des synchronisations (pour la tracabilite et pour
+   detecter les doublons cote serveur, en plus de l'unicite cote WinDev).
+
+
+================================================================================
+SENS 1 : WINDEV ENVOIE UNE DONNEE VERS GESTION-DE-SITES
+================================================================================
+
+--------------------------------------------------------------------------------
+1.A - Migration Laravel : cle API sur l'entreprise
+--------------------------------------------------------------------------------
+
+    Schema::table('entreprises', function (Blueprint $table) {
+        $table->string('cle_api_windev', 64)->nullable()->unique()->after('code_entreprise');
+    });
+
+
+--------------------------------------------------------------------------------
+1.B - Migration Laravel : journal des synchronisations (anti-doublon + suivi)
+--------------------------------------------------------------------------------
+
+    Schema::create('synchronisations_windev', function (Blueprint $table) {
+        $table->id();
+        $table->foreignId('entreprise_id')->constrained('entreprises')->cascadeOnDelete();
+        $table->string('type');                 // facture, devis, encaissement, decaissement
+        $table->string('reference_windev');      // identifiant unique venant de WinDev
+        $table->string('statut');                // Recue, Traitee, Rejetee
+        $table->text('erreur')->nullable();
+        $table->timestamps();
+
+        // Un meme poste WinDev ne peut pas faire enregistrer deux fois la
+        // meme reference pour le meme type de donnee.
+        $table->unique(['entreprise_id', 'type', 'reference_windev']);
+    });
+
+
+--------------------------------------------------------------------------------
+1.C - Middleware Laravel : verification de la cle API
+--------------------------------------------------------------------------------
+
+Fichier : app/Http/Middleware/VerifierCleApiWindev.php
+
+    <?php
+
+    namespace App\Http\Middleware;
+
+    use App\Domain\Tenants\Models\Entreprise;
+    use Closure;
+    use Illuminate\Http\Request;
+
+    class VerifierCleApiWindev
+    {
+        public function handle(Request $request, Closure $next)
+        {
+            $cle = $request->bearerToken();
+
+            if (! $cle) {
+                return response()->json(['message' => 'Cle API manquante.'], 401);
+            }
+
+            $entreprise = Entreprise::where('cle_api_windev', $cle)->first();
+
+            if (! $entreprise) {
+                return response()->json(['message' => 'Cle API invalide.'], 401);
+            }
+
+            // Rendue disponible aux controleurs suivants.
+            $request->attributes->set('entreprise_windev', $entreprise);
+
+            return $next($request);
+        }
+    }
+
+A enregistrer dans bootstrap/app.php (Laravel 11) :
+
+    ->withMiddleware(function (Middleware $middleware) {
+        $middleware->api(prepend: [
+            \App\Http\Middleware\VerifierCleApiWindev::class,
+        ]);
+    })
+
+
+--------------------------------------------------------------------------------
+1.D - Route Laravel
+--------------------------------------------------------------------------------
+
+Fichier : routes/api.php
+
+    use App\Http\Controllers\Api\WindevSynchronisationController;
+
+    Route::prefix('windev')->group(function () {
+        Route::post('/factures', [WindevSynchronisationController::class, 'recevoirFacture']);
+        Route::post('/devis', [WindevSynchronisationController::class, 'recevoirDevis']);
+        Route::post('/encaissements', [WindevSynchronisationController::class, 'recevoirEncaissement']);
+        Route::post('/decaissements', [WindevSynchronisationController::class, 'recevoirDecaissement']);
+    });
+
+
+--------------------------------------------------------------------------------
+1.E - Controleur Laravel (exemple complet : reception d'une facture)
+--------------------------------------------------------------------------------
+
+Fichier : app/Http/Controllers/Api/WindevSynchronisationController.php
+
+    <?php
+
+    namespace App\Http\Controllers\Api;
+
+    use App\Domain\Operations\Models\Facture;
+    use App\Domain\Operations\Models\SynchronisationWindev;
+    use App\Domain\Tenants\Models\Site;
+    use App\Http\Controllers\Controller;
+    use Illuminate\Http\Request;
+    use Illuminate\Support\Facades\DB;
+
+    class WindevSynchronisationController extends Controller
+    {
+        public function recevoirFacture(Request $request)
+        {
+            $entreprise = $request->attributes->get('entreprise_windev');
+
+            $donnees = $request->validate([
+                'reference_windev' => ['required', 'string', 'max:100'],
+                'numero_facture'   => ['required', 'string', 'max:60'],
+                'date'             => ['required', 'date'],
+                'client'           => ['required', 'string', 'max:255'],
+                'montant'          => ['required', 'integer', 'min:0'],
+                'activite'         => ['required', 'in:Mecanique,Sinistre'],
+                'code_ville'       => ['required', 'string', 'max:10'],
+                'type'             => ['required', 'in:FNE,HT'],
+            ]);
+
+            // Deja recue precedemment (retentative apres coupure reseau) ?
+            $dejaTraitee = SynchronisationWindev::where('entreprise_id', $entreprise->id)
+                ->where('type', 'facture')
+                ->where('reference_windev', $donnees['reference_windev'])
+                ->exists();
+
+            if ($dejaTraitee) {
+                return response()->json(['message' => 'Deja recue, ignoree.'], 200);
+            }
+
+            $activite = $donnees['activite'] === 'Mecanique' ? 'Mécanique' : 'Sinistre';
+
+            $site = Site::whereHas('ville', fn ($q) => $q
+                    ->where('entreprise_id', $entreprise->id)
+                    ->where('code', $donnees['code_ville']))
+                ->where('activite', $activite)
+                ->first();
+
+            if (! $site) {
+                return response()->json(['message' => 'Ville/activite inconnue.'], 422);
+            }
+
+            DB::transaction(function () use ($donnees, $entreprise, $site, $activite) {
+                Facture::create([
+                    'entreprise_id' => $entreprise->id,
+                    'site_id'       => $site->id,
+                    'numero'        => $donnees['numero_facture'],
+                    'n_facture'     => $donnees['numero_facture'],
+                    'date'          => $donnees['date'],
+                    'client'        => $donnees['client'],
+                    'type'          => $donnees['type'],
+                    'activite'      => $activite,
+                    'montant'       => $donnees['montant'],
+                ]);
+
+                SynchronisationWindev::create([
+                    'entreprise_id'     => $entreprise->id,
+                    'type'              => 'facture',
+                    'reference_windev'  => $donnees['reference_windev'],
+                    'statut'            => 'Traitee',
+                ]);
+            });
+
+            return response()->json(['message' => 'Facture enregistree.'], 201);
+        }
+    }
+
+Note : la creation via un modele metier existant (commercial_id, generation
+des liens devis, etc.) devra etre affinee une fois qu'on saura exactement
+quelles colonnes WinDev peut fournir (numero de commercial, etc.).
+
+
+--------------------------------------------------------------------------------
+1.F - Code WLangage (WinDev) : envoi d'une facture vers GESTION-DE-SITES
+--------------------------------------------------------------------------------
+
+// Variables de configuration (a lire depuis le fichier .ini local)
+sURLBase   est une chaîne = "https://gestionsites.dc-knowing.com/api/windev"
+sCleAPI    est une chaîne = ChercheParametreIni(...)   // cle propre au poste/entreprise
+
+// Construction du paquet JSON a partir d'un enregistrement HFSQL "Facture"
+oFacture est un JSON
+oFacture.reference_windev = Facture.IDUnique          // identifiant local unique
+oFacture.numero_facture   = Facture.Numero
+oFacture.date             = DateVersChaîne(Facture.Date, "AAAA-MM-JJ")
+oFacture.client           = Facture.Client
+oFacture.montant          = Facture.Montant
+oFacture.activite         = Facture.Activite            // "Mecanique" ou "Sinistre"
+oFacture.code_ville       = Facture.CodeVille
+oFacture.type             = Facture.Type
+
+sJSON est une chaîne = JSONVersChaîne(oFacture)
+
+// Preparation de la requete HTTP
+maRequete est une httpRequête
+maRequete.Adresse = sURLBase + "/factures"
+maRequete.Méthode = httpPost
+maRequete.Contenu = sJSON
+maRequete.CodageContenu = "application/json"
+HTTPAjouteEntête(maRequete, "Authorization", "Bearer " + sCleAPI)
+HTTPAjouteEntête(maRequete, "Content-Type", "application/json")
+HTTPAjouteEntête(maRequete, "Accept", "application/json")
+
+// Envoi
+maReponse est une httpReponse = HTTPEnvoieRequête(maRequete)
+
+SI HTTPDernièreErreur() <> "" ALORS
+    // Pas de reponse (reseau coupe, timeout...) : on laisse la ligne en
+    // "EnAttente" dans FileSynchro, on retentera au prochain passage du timer.
+    HModifie(FileSynchro, "Statut", "Erreur")
+SINON
+    SI maReponse.CodeStatut = 201 OU maReponse.CodeStatut = 200 ALORS
+        HModifie(FileSynchro, "Statut", "Envoye")
+    SINON
+        // Le serveur a repondu mais a refuse (donnee invalide, cle expiree...)
+        HModifie(FileSynchro, "Statut", "Erreur")
+        HModifie(FileSynchro, "DernierMessageErreur", maReponse.Contenu)
+    FIN
+FIN
+
+
+--------------------------------------------------------------------------------
+1.G - Code WLangage : boucle de traitement periodique (timer)
+--------------------------------------------------------------------------------
+
+// Procedure appelee toutes les 2 minutes par un timer applicatif
+PROCEDURE TraiterFileSynchro()
+
+    HLitPremier(FileSynchro, Statut, "EnAttente")
+    TANTQUE HTrouve(FileSynchro)
+        EnvoyerFactureWindev(FileSynchro)   // fonction du point 1.F, generalisee
+        HLitSuivant(FileSynchro, Statut)
+    FIN
+
+    // On retente aussi les erreurs recentes (ex: moins de 24h, moins de 10
+    // tentatives), pour ne pas boucler indefiniment sur une ligne invalide.
+    HLitPremier(FileSynchro, Statut, "Erreur")
+    TANTQUE HTrouve(FileSynchro)
+        SI FileSynchro.TentativeNb < 10 ALORS
+            EnvoyerFactureWindev(FileSynchro)
+        FIN
+        HLitSuivant(FileSynchro, Statut)
+    FIN
+
+FIN
+
+
+================================================================================
+SENS 2 : GESTION-DE-SITES -> WINDEV (POUR PLUS TARD, BIDIRECTIONNEL)
+================================================================================
+
+Rappel : GESTION-DE-SITES ne peut pas appeler WinDev (poste local non
+joignable). C'est donc WinDev qui vient regulierement demander "y a-t-il
+du nouveau pour moi ?" (polling), puis confirme la reception de chaque
+element pour que GESTION-DE-SITES ne le repropose pas indefiniment.
+
+--------------------------------------------------------------------------------
+2.A - Migration Laravel : file d'attente sortante
+--------------------------------------------------------------------------------
+
+    Schema::create('sorties_windev', function (Blueprint $table) {
+        $table->id();
+        $table->foreignId('entreprise_id')->constrained('entreprises')->cascadeOnDelete();
+        $table->string('type');              // ex: "tarif", "nouveau_compte", ...
+        $table->json('contenu');
+        $table->string('statut')->default('EnAttente');  // EnAttente, Livree
+        $table->timestamp('livree_le')->nullable();
+        $table->timestamps();
+    });
+
+Chaque fois qu'une donnee doit partir vers WinDev, on cree une ligne ici
+(dans le controleur/action Laravel concerne), avec statut "EnAttente".
+
+
+--------------------------------------------------------------------------------
+2.B - Route + controleur Laravel : lister puis confirmer
+--------------------------------------------------------------------------------
+
+Route::prefix('windev')->group(function () {
+    Route::get('/a-synchroniser', [WindevSynchronisationController::class, 'aSynchroniser']);
+    Route::post('/accuser-reception', [WindevSynchronisationController::class, 'accuserReception']);
+});
+
+    public function aSynchroniser(Request $request)
+    {
+        $entreprise = $request->attributes->get('entreprise_windev');
+
+        $elements = SortieWindev::where('entreprise_id', $entreprise->id)
+            ->where('statut', 'EnAttente')
+            ->orderBy('id')
+            ->limit(100)   // par lots, pour ne jamais envoyer un paquet enorme
+            ->get(['id', 'type', 'contenu']);
+
+        return response()->json(['elements' => $elements]);
+    }
+
+    public function accuserReception(Request $request)
+    {
+        $entreprise = $request->attributes->get('entreprise_windev');
+
+        $donnees = $request->validate([
+            'ids' => ['required', 'array'],
+            'ids.*' => ['integer'],
+        ]);
+
+        SortieWindev::where('entreprise_id', $entreprise->id)
+            ->whereIn('id', $donnees['ids'])
+            ->update(['statut' => 'Livree', 'livree_le' => now()]);
+
+        return response()->json(['message' => 'Accuse de reception enregistre.']);
+    }
+
+
+--------------------------------------------------------------------------------
+2.C - Code WLangage : sondage periodique (polling) et application locale
+--------------------------------------------------------------------------------
+
+// Procedure appelee toutes les 2 a 5 minutes par un timer applicatif
+PROCEDURE RecupererNouveautesGestionDeSites()
+
+    maRequete est une httpRequête
+    maRequete.Adresse = sURLBase + "/a-synchroniser"
+    maRequete.Méthode = httpGet
+    HTTPAjouteEntête(maRequete, "Authorization", "Bearer " + sCleAPI)
+
+    maReponse est une httpReponse = HTTPEnvoieRequête(maRequete)
+
+    SI maReponse.CodeStatut = 200 ALORS
+        oReponse est un JSON
+        JSONVersVariable(maReponse.Contenu, oReponse)
+
+        idsTraites est un tableau d'entiers
+
+        POUR TOUT elt DE oReponse.elements
+            SI ElementEstApplicableLocalement(elt) ALORS
+                AppliquerElementLocalement(elt)          // ecriture dans HFSQL
+                TableAjoute(idsTraites, elt.id)
+            FIN
+        FIN
+
+        // Accuse de reception, pour que GESTION-DE-SITES ne les represente
+        // plus au prochain sondage.
+        SI TableOccurrence(idsTraites) > 0 ALORS
+            oAccuse est un JSON
+            oAccuse.ids = idsTraites
+
+            maRequeteAccuse est une httpRequête
+            maRequeteAccuse.Adresse = sURLBase + "/accuser-reception"
+            maRequeteAccuse.Méthode = httpPost
+            maRequeteAccuse.Contenu = JSONVersChaîne(oAccuse)
+            HTTPAjouteEntête(maRequeteAccuse, "Authorization", "Bearer " + sCleAPI)
+            HTTPAjouteEntête(maRequeteAccuse, "Content-Type", "application/json")
+            HTTPEnvoieRequête(maRequeteAccuse)
+        FIN
+    FIN
+
+FIN
+
+
+================================================================================
+FORMATS JSON D'EXEMPLE
+================================================================================
+
+Requete WinDev -> GESTION-DE-SITES (POST /api/windev/factures) :
+
+    {
+        "reference_windev": "WD-2026-000451",
+        "numero_facture": "FAC-0451",
+        "date": "2026-08-14",
+        "client": "Garage Test",
+        "montant": 250000,
+        "activite": "Mecanique",
+        "code_ville": "ABJ",
+        "type": "FNE"
+    }
+
+Reponse GESTION-DE-SITES en cas de succes :
+
+    { "message": "Facture enregistree." }          (HTTP 201)
+
+Reponse en cas d'erreur de validation :
+
+    {
+        "message": "The given data was invalid.",
+        "errors": { "montant": ["Le champ montant est obligatoire."] }
+    }                                                (HTTP 422)
+
+Reponse GESTION-DE-SITES -> WinDev (GET /api/windev/a-synchroniser) :
+
+    {
+        "elements": [
+            { "id": 12, "type": "nouveau_compte", "contenu": { ... } },
+            { "id": 13, "type": "tarif", "contenu": { ... } }
+        ]
+    }
+
+
+================================================================================
+SECURITE - POINTS A NE PAS OUBLIER
+================================================================================
+
+  - Toujours en HTTPS (jamais de cle API envoyee en clair sur du HTTP).
+  - La cle API doit pouvoir etre regeneree depuis Parametres si compromise.
+  - Cote Laravel, limiter le debit des appels (throttle) pour eviter qu'un
+    poste WinDev en boucle d'erreur ne sature le serveur.
+  - Journaliser chaque appel recu (table synchronisations_windev) pour
+    pouvoir diagnostiquer un souci a posteriori.
+  - Ne jamais faire confiance aux identifiants internes (entreprise_id,
+    site_id...) envoyes depuis WinDev : toujours les re-resoudre a partir
+    de codes metier (code_ville, numero...) et de l'entreprise identifiee
+    par la cle API, jamais a partir d'un ID transmis tel quel.
+
+
+================================================================================
+PROCHAINES ETAPES CONCRETES
+================================================================================
+
+1. Confirmer avec le developpeur WinDev : HFSQL Classic ou Client/Serveur ?
+   Quelles tables/colonnes existent deja localement pour factures, devis,
+   encaissements, decaissements ?
+2. Decider quelles donnees partent en premier (probablement les factures et
+   encaissements, qui alimentent directement la tresorerie).
+3. Je mets en place cote Laravel : migration cle API + table de synchro +
+   middleware + premier endpoint (factures), avec la meme structure que
+   l'exemple ci-dessus.
+4. Vous transmettez ce document a votre developpeur WinDev pour la partie
+   WLangage (fonctions HTTPEnvoieRequete deja detaillees ci-dessus).
+5. Test croise sur un jeu de donnees limite avant la bascule reelle.
+
+================================================================================
