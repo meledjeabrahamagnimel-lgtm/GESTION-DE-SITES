@@ -971,7 +971,7 @@ $ajouterCharge = function () {
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach ($this->prospectionsATraiter->forPage($pageProsATraiter, 5) as $p)
+                            @foreach ($this->prospectionsATraiter->forPage($pageProsATraiter, 7) as $p)
                                 <tr wire:key="a-traiter-{{ $p->id }}">
                                     <td style="font-weight:700;">{{ $p->numero }}</td>
                                     <td>{{ $p->date->format('d/m/Y') }}</td>
@@ -995,7 +995,7 @@ $ajouterCharge = function () {
                         </tbody>
                     </table>
                 </div>
-                <x-pagination :page="$pageProsATraiter" :total="$this->prospectionsATraiter->count()" prop="pageProsATraiter" :par-page="5" />
+                <x-pagination :page="$pageProsATraiter" :total="$this->prospectionsATraiter->count()" prop="pageProsATraiter" :par-page="7" />
             @endif
 
             <x-sous-titre n="1" t="Prospections" />
@@ -1016,7 +1016,7 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->prospectionsDuJour->forPage($pageProsDuJour, 5) as $p)
+                        @forelse ($this->prospectionsDuJour->forPage($pageProsDuJour, 7) as $p)
                             @if ($editionProspectionId === $p->id)
                                 <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); background:#FDF2F4;" wire:key="pros-edit-{{ $p->id }}">
                                     <td style="font-weight:700;">{{ $p->numero }}</td>
@@ -1095,7 +1095,7 @@ $ajouterCharge = function () {
                     </tbody>
                 </table>
             </div>
-            <x-pagination :page="$pageProsDuJour" :total="$this->prospectionsDuJour->count()" prop="pageProsDuJour" :par-page="5" />
+            <x-pagination :page="$pageProsDuJour" :total="$this->prospectionsDuJour->count()" prop="pageProsDuJour" :par-page="7" />
 
             <div class="bloc-saisie">
                 <x-champ label="Clients visités" model="prosClient" />
@@ -1146,7 +1146,7 @@ $ajouterCharge = function () {
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($this->prospectionsAttenteDevis->forPage($pageAttenteDevis, 5) as $p)
+                                @foreach ($this->prospectionsAttenteDevis->forPage($pageAttenteDevis, 7) as $p)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="attente-devis-{{ $p->id }}">
                                         <td><input type="checkbox" wire:model="devisSelection.{{ $p->id }}"></td>
                                         <td style="font-weight:700;">{{ $p->numero }}</td>
@@ -1160,7 +1160,7 @@ $ajouterCharge = function () {
                             </tbody>
                         </table>
                     </div>
-                    <x-pagination :page="$pageAttenteDevis" :total="$this->prospectionsAttenteDevis->count()" prop="pageAttenteDevis" :par-page="5" />
+                    <x-pagination :page="$pageAttenteDevis" :total="$this->prospectionsAttenteDevis->count()" prop="pageAttenteDevis" :par-page="7" />
                     <button type="button" wire:click="genererBrouillonsDevis"
                         style="margin-top:8px; background:var(--th-ink,#191B20); color:#fff; border:0; border-radius:8px; padding:8px 14px; font-weight:700; font-size:13px; cursor:pointer;">
                         + Ajouter devis
@@ -1252,7 +1252,7 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->devisDuJour->forPage($pageDevisDuJour, 5) as $d)
+                        @forelse ($this->devisDuJour->forPage($pageDevisDuJour, 7) as $d)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td style="font-weight:700;">{{ $d->numero }}</td>
                                 <td>{{ $d->date_reception?->format('d/m/Y') ?? '—' }}</td>
@@ -1272,7 +1272,7 @@ $ajouterCharge = function () {
                     </tbody>
                 </table>
             </div>
-            <x-pagination :page="$pageDevisDuJour" :total="$this->devisDuJour->count()" prop="pageDevisDuJour" :par-page="5" />
+            <x-pagination :page="$pageDevisDuJour" :total="$this->devisDuJour->count()" prop="pageDevisDuJour" :par-page="7" />
 
             @if ($this->devisEnAttente->isNotEmpty())
                 <div style="width:100%; margin-top:14px;">
@@ -1292,7 +1292,7 @@ $ajouterCharge = function () {
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($this->devisEnAttente->forPage($pageDevisEnAttente, 5) as $d)
+                                @foreach ($this->devisEnAttente->forPage($pageDevisEnAttente, 7) as $d)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="devis-attente-{{ $d->id }}">
                                         <td style="font-weight:700;">{{ $d->numero }}</td>
                                         <td>{{ $d->client }}</td>
@@ -1319,7 +1319,7 @@ $ajouterCharge = function () {
                             </tbody>
                         </table>
                     </div>
-                    <x-pagination :page="$pageDevisEnAttente" :total="$this->devisEnAttente->count()" prop="pageDevisEnAttente" :par-page="5" />
+                    <x-pagination :page="$pageDevisEnAttente" :total="$this->devisEnAttente->count()" prop="pageDevisEnAttente" :par-page="7" />
                 </div>
             @endif
 
@@ -1351,7 +1351,7 @@ $ajouterCharge = function () {
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($this->devisValidesNonFactures->forPage($pageValidesNonFactures, 5) as $d)
+                                @foreach ($this->devisValidesNonFactures->forPage($pageValidesNonFactures, 7) as $d)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="valide-non-facture-{{ $d->id }}">
                                         <td><input type="checkbox" wire:model="factureSelection.{{ $d->id }}"></td>
                                         <td style="font-weight:700;">{{ $d->numero }}</td>
@@ -1364,7 +1364,7 @@ $ajouterCharge = function () {
                             </tbody>
                         </table>
                     </div>
-                    <x-pagination :page="$pageValidesNonFactures" :total="$this->devisValidesNonFactures->count()" prop="pageValidesNonFactures" :par-page="5" />
+                    <x-pagination :page="$pageValidesNonFactures" :total="$this->devisValidesNonFactures->count()" prop="pageValidesNonFactures" :par-page="7" />
                     <button type="button" wire:click="genererBrouillonsFactures"
                         style="margin-top:8px; background:var(--th-ink,#191B20); color:#fff; border:0; border-radius:8px; padding:8px 14px; font-weight:700; font-size:13px; cursor:pointer;">
                         + Facturer la sélection
@@ -1457,7 +1457,7 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->facturesDuJour->forPage($pageFacturesDuJour, 5) as $f)
+                        @forelse ($this->facturesDuJour->forPage($pageFacturesDuJour, 7) as $f)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td style="font-weight:700;">{{ $f->numero }}</td>
                                 <td>{{ $f->commercial->nom }}</td>
@@ -1479,7 +1479,7 @@ $ajouterCharge = function () {
                     </tbody>
                 </table>
             </div>
-            <x-pagination :page="$pageFacturesDuJour" :total="$this->facturesDuJour->count()" prop="pageFacturesDuJour" :par-page="5" />
+            <x-pagination :page="$pageFacturesDuJour" :total="$this->facturesDuJour->count()" prop="pageFacturesDuJour" :par-page="7" />
 
             <div style="margin-top:14px;">
                 <label style="display:block; font-size:12.5px; font-weight:600; color:#4B4E55; margin-bottom:5px;">Commentaire — Chiffre d'affaires</label>
@@ -1505,7 +1505,7 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->encaissementsDuJour->forPage($pageEncaissementsDuJour, 5) as $e)
+                        @forelse ($this->encaissementsDuJour->forPage($pageEncaissementsDuJour, 7) as $e)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td>{{ $e->type }}</td>
                                 <td>{{ $e->activite ?? '—' }}</td>
@@ -1525,7 +1525,7 @@ $ajouterCharge = function () {
                     </tbody>
                 </table>
             </div>
-            <x-pagination :page="$pageEncaissementsDuJour" :total="$this->encaissementsDuJour->count()" prop="pageEncaissementsDuJour" :par-page="5" />
+            <x-pagination :page="$pageEncaissementsDuJour" :total="$this->encaissementsDuJour->count()" prop="pageEncaissementsDuJour" :par-page="7" />
 
             <div class="bloc-saisie">
                 <x-champ label="Type d'encaissement" model="encType" type="select" live="true" :options="$this->optionsTypeEncaissement" width="140" />
@@ -1586,7 +1586,7 @@ $ajouterCharge = function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->chargesDuJour->forPage($pageChargesDuJour, 5) as $c)
+                        @forelse ($this->chargesDuJour->forPage($pageChargesDuJour, 7) as $c)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                                 <td>{{ $c->date->format('d/m/Y') }}</td>
                                 <td>{{ $c->type_operation === 'Charges' ? 'Charges' : 'Décaissements' }}</td>
@@ -1608,7 +1608,7 @@ $ajouterCharge = function () {
                     </tbody>
                 </table>
             </div>
-            <x-pagination :page="$pageChargesDuJour" :total="$this->chargesDuJour->count()" prop="pageChargesDuJour" :par-page="5" />
+            <x-pagination :page="$pageChargesDuJour" :total="$this->chargesDuJour->count()" prop="pageChargesDuJour" :par-page="7" />
 
             <div class="bloc-saisie">
                 <x-champ label="Date" model="chgDate" type="date" width="140" />

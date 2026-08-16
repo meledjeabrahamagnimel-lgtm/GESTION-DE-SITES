@@ -291,9 +291,12 @@ $transmettreSelection = function () {
                 <x-champ label="Observations" model="observations" />
                 <button type="button" wire:click="ajouter" class="bouton bouton-sombre">+ Ajouter</button>
             </div>
+            {{-- Les listes déroulantes sont fixées par la direction, dans Paramètres →
+                 Listes déroulantes. Inviter chaque poste à créer sa propre valeur
+                 rendrait les indicateurs incomparables d'une ville à l'autre. --}}
             <p style="font-size:11.5px; color:#9A9DA5; margin:8px 0 0;">
-                Une valeur manque dans « Moyens » ou « Activité » ?
-                <a href="{{ route('mon-espace') }}" wire:navigate style="color:var(--th-accent,#C8102E); font-weight:600;">Ajoutez-la dans vos paramètres.</a>
+                Une valeur manque dans « Moyens » ou « Activité » ? Signalez-le à votre responsable :
+                ces listes sont définies pour toute l'entreprise.
             </p>
 
             <div style="margin-top:12px;">

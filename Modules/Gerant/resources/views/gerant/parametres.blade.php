@@ -1,5 +1,6 @@
 <?php
 
+use Modules\Noyau\Commun\Modeles\Referentiel;
 use Modules\Noyau\Exploitation\Modeles\Commercial;
 use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use Modules\Noyau\Entreprises\Modeles\Exercice;
@@ -17,6 +18,7 @@ usesFileUploads();
 state(['onglet' => 'entreprise'])->url(except: 'entreprise');
 
 state([
+    'nouvelleValeur' => [],
     'message' => null,
 
     // Fiche entreprise
@@ -46,7 +48,7 @@ state([
 $entreprise = computed(fn () => Entreprise::find(auth()->user()->entreprise_id));
 
 $villes = computed(fn () => Ville::where('entreprise_id', auth()->user()->entreprise_id)
-    ->with(['sites' => fn ($q) => $q->orderBy('activite')])->orderBy('code')->get());
+    ->with(['sites' => fn ($q) => $q->orderBy('nom')])->orderBy('code')->get());
 
 $sites = computed(fn () => Site::where('entreprise_id', auth()->user()->entreprise_id)->orderBy('nom')->get());
 
@@ -286,6 +288,77 @@ $cloreExercice = function (int $exerciceId) {
     $this->message = "Exercice {$exercice->annee} clos.";
 };
 
+/*
+|--------------------------------------------------------------------------
+| Listes déroulantes de l'entreprise
+|--------------------------------------------------------------------------
+| Les valeurs proposées à la saisie — activités, moyens de paiement, libellés
+| d'opération — se définissent ici et nulle part ailleurs. Une valeur inventée
+| sur le terrain ne serait connue que d'un seul poste ; définie ici, elle
+| s'impose à tous et les indicateurs restent comparables d'une ville à l'autre.
+*/
+$referentiels = computed(fn () => collect(Referentiel::LIBELLES)
+    ->map(fn ($libelle, $type) => [
+        'libelle' => $libelle,
+        'defauts' => Referentiel::DEFAUTS[$type] ?? [],
+        'ajoutees' => Referentiel::where('type', $type)->orderBy('rang')->orderBy('valeur')->get(),
+    ]));
+
+$ajouterValeurReferentiel = function (string $type) {
+    if (! array_key_exists($type, Referentiel::LIBELLES)) {
+        return;
+    }
+
+    $valeur = trim((string) ($this->nouvelleValeur[$type] ?? ''));
+
+    $this->validate(
+        ['nouvelleValeur.'.$type => ['required', 'string', 'max:60']],
+        [],
+        ['nouvelleValeur.'.$type => 'valeur']
+    );
+
+    $existe = Referentiel::estValeurParDefaut($type, $valeur)
+        || Referentiel::where('type', $type)->where('valeur', $valeur)->exists();
+
+    if ($existe) {
+        $this->message = "« $valeur » figure déjà dans cette liste.";
+
+        return;
+    }
+
+    Referentiel::create([
+        'entreprise_id' => auth()->user()->entreprise_id,
+        'type' => $type,
+        'valeur' => $valeur,
+        'rang' => (int) Referentiel::where('type', $type)->max('rang') + 1,
+        'est_actif' => true,
+    ]);
+
+    $this->nouvelleValeur[$type] = '';
+    unset($this->referentiels);
+    $this->message = "« $valeur » ajoutée à « ".Referentiel::LIBELLES[$type].' ».';
+};
+
+/** Bascule une valeur ajoutée : désactivée, elle disparaît des saisies à venir sans effacer l'historique. */
+$basculerValeurReferentiel = function (int $id) {
+    $valeur = Referentiel::findOrFail($id);
+    $valeur->update(['est_actif' => ! $valeur->est_actif]);
+    unset($this->referentiels);
+    $this->message = "« {$valeur->valeur} » ".($valeur->est_actif ? 'réactivée.' : 'désactivée.');
+};
+
+/**
+ * Suppression définitive : réservée aux valeurs ajoutées, jamais aux valeurs livrées
+ * avec l'application, dont dépendent les calculs par activité.
+ */
+$supprimerValeurReferentiel = function (int $id) {
+    $valeur = Referentiel::findOrFail($id);
+    $intitule = $valeur->valeur;
+    $valeur->delete();
+    unset($this->referentiels);
+    $this->message = "« $intitule » supprimée.";
+};
+
 $reouvrirExercice = function (int $exerciceId) {
     $exercice = Exercice::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($exerciceId);
     $exercice->update(['statut' => 'Ouvert', 'cloture_le' => null]);
@@ -297,7 +370,7 @@ $reouvrirExercice = function (int $exerciceId) {
 
 <div>
     <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;">
-        @foreach (['entreprise' => 'Fiche entreprise', 'compte' => 'Mon compte', 'villes' => 'Villes', 'personnel' => 'Personnel', 'acces' => 'Ajouter un accès', 'exercices' => 'Exercices'] as $cle => $libelle)
+        @foreach (['entreprise' => 'Fiche entreprise', 'compte' => 'Mon compte', 'villes' => 'Villes', 'personnel' => 'Personnel', 'acces' => 'Ajouter un accès', 'exercices' => 'Exercices', 'referentiels' => 'Listes déroulantes'] as $cle => $libelle)
             <button type="button" wire:click="$set('onglet', '{{ $cle }}')"
                 class="onglet {{ $onglet === $cle ? 'est-actif' : '' }}">{{ $libelle }}</button>
         @endforeach
@@ -408,7 +481,8 @@ $reouvrirExercice = function (int $exerciceId) {
     @if ($onglet === 'villes')
         <x-carte-section titre="Création d'une ville">
             <p style="font-size:13px; color:var(--th-gris,#6B6E76); margin:0 0 14px;">
-                Créer une ville crée aussitôt ses deux sites d'activité (Mécanique et Sinistre).
+                Créer une ville crée aussitôt son site : le lieu où se tiennent les deux activités
+                (Mécanique et Sinistre). Un second lieu s'ajoute ensuite si la ville en compte plusieurs.
             </p>
             <div class="bloc-saisie">
                 <x-champ label="Nom de la ville" model="villeNom" requis="true" placeholder="Ex : Bouaké" />
@@ -519,7 +593,7 @@ $reouvrirExercice = function (int $exerciceId) {
 
     {{-- ------------------------------------------------- Ajouter un accès --}}
     @if ($onglet === 'acces')
-        <livewire:acces-creer />
+        <livewire:pilotage.acces-creer />
     @endif
 
     {{-- -------------------------------------------------------- Exercices --}}
@@ -600,5 +674,71 @@ $reouvrirExercice = function (int $exerciceId) {
         @if ($this->exercices->isEmpty())
             <p class="legende-vide">Aucun exercice créé pour le moment.</p>
         @endif
+    @endif
+
+    {{-- ---------------------------------------------- Listes déroulantes --}}
+    @if ($onglet === 'referentiels')
+        <div class="carte" style="margin-bottom:16px;">
+            <h3 class="titre-section">Ce que règle cette page</h3>
+            <p style="font-size:13px; color:var(--th-gris,#6B6E76); margin:0; line-height:1.55;">
+                Les valeurs proposées à la saisie se définissent ici, et seulement ici. Une valeur
+                créée sur le terrain ne serait connue que d'un poste ; définie depuis la direction,
+                elle s'impose à toutes les villes et les indicateurs restent comparables.
+                Les valeurs livrées avec l'application ne sont ni modifiables ni supprimables :
+                les calculs par activité s'appuient dessus.
+            </p>
+        </div>
+
+        @foreach ($this->referentiels as $type => $liste)
+            <x-carte-section titre="{{ $liste['libelle'] }}" icone="liste" couleur="#2A2E35">
+                <div class="bloc-saisie">
+                    <x-champ label="Nouvelle valeur" model="nouvelleValeur.{{ $type }}" width="240"
+                        placeholder="Ex : Wave, Orange Money…" />
+                    <button type="button" wire:click="ajouterValeurReferentiel('{{ $type }}')"
+                        class="bouton bouton-sombre">+ Ajouter</button>
+                </div>
+
+                <div class="tableau-conteneur" style="margin-top:14px;">
+                    <table class="tableau">
+                        <thead><tr><th>Valeur</th><th>Origine</th><th>État</th><th style="text-align:right;">Actions</th></tr></thead>
+                        <tbody>
+                            @foreach ($liste['defauts'] as $valeur)
+                                <tr wire:key="def-{{ $type }}-{{ $valeur }}">
+                                    <td style="font-weight:600;">{{ $valeur }}</td>
+                                    <td><span class="pastille pastille-bleu">Livrée</span></td>
+                                    <td><span class="pastille pastille-vert">Active</span></td>
+                                    <td style="text-align:right; color:var(--th-gris,#6B6E76); font-size:12.5px;">Non modifiable</td>
+                                </tr>
+                            @endforeach
+
+                            @foreach ($liste['ajoutees'] as $valeur)
+                                <tr wire:key="ref-{{ $valeur->id }}">
+                                    <td style="font-weight:600;">{{ $valeur->valeur }}</td>
+                                    <td><span class="pastille">Ajoutée</span></td>
+                                    <td>
+                                        <span class="pastille {{ $valeur->est_actif ? 'pastille-vert' : 'pastille-rouge' }}">
+                                            {{ $valeur->est_actif ? 'Active' : 'Désactivée' }}
+                                        </span>
+                                    </td>
+                                    <td style="text-align:right; display:flex; gap:8px; justify-content:flex-end;">
+                                        <button type="button" wire:click="basculerValeurReferentiel({{ $valeur->id }})"
+                                            class="bouton bouton-secondaire bouton-petit">
+                                            {{ $valeur->est_actif ? 'Désactiver' : 'Réactiver' }}
+                                        </button>
+                                        <button type="button" wire:click="supprimerValeurReferentiel({{ $valeur->id }})"
+                                            wire:confirm="Supprimer « {{ $valeur->valeur }} » ? Les écritures déjà saisies avec cette valeur la conservent."
+                                            class="bouton bouton-secondaire bouton-petit">Supprimer</button>
+                                    </td>
+                                </tr>
+                            @endforeach
+
+                            @if ($liste['ajoutees']->isEmpty() && empty($liste['defauts']))
+                                <x-table-vide :colspan="4" texte="Aucune valeur." />
+                            @endif
+                        </tbody>
+                    </table>
+                </div>
+            </x-carte-section>
+        @endforeach
     @endif
 </div>

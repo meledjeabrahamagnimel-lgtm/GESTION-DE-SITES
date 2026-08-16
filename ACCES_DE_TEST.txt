@@ -28,7 +28,7 @@ responsableabidjansite1@gmail.com       Responsable de site — voit et saisit
                                         UNIQUEMENT sur Abidjan Site 1
 responsableabidjansite2@gmail.com       Responsable de site — voit et saisit
                                         UNIQUEMENT sur Abidjan Site 2
-comptabiliteabidjansite2@gmail.com      Comptabilite — toute la ville d'Abidjan
+comptabiliteabidjan@gmail.com           Comptabilite — toute la ville d'Abidjan
 commercialabidjan@gmail.com             Commercial — prospecte pour Abidjan
 
 BOUAKE (1 site, confondu avec la ville)
@@ -46,9 +46,9 @@ commercialsanpedro@gmail.com            Commercial
 
 DEUX PRECISIONS SUR CETTE LISTE
 --------------------------------------------------------------------------------
-a) « comptabiliteabidjansite2 » est rattache a la VILLE d'Abidjan, pas au site 2.
+a) « comptabiliteabidjan » est rattache a la VILLE d'Abidjan, pas a un site.
    La comptabilite couvre une ville entiere : une seule caisse par ville, quel que
-   soit le nombre de sites. Le nom du compte a ete conserve tel que demande.
+   soit le nombre de sites.
 
 b) Chacun des deux sites d'Abidjan a son propre responsable. Le superviseur de la
    ville, lui, couvre les deux : c'est la difference a verifier en vous connectant
@@ -87,6 +87,11 @@ commercial*@gmail.com
 comptabilite*@gmail.com
   Encaissements et decaissements de toute sa ville.
 
+superadmin@gmail.com
+  Acces > « Definir un mot de passe » : ecrase le mot de passe de quelqu'un qui
+  l'a perdu. La personne devra en choisir un autre a sa connexion suivante, et
+  l'operation apparait dans le Journal.
+
 
 ================================================================================
 3. LES DONNEES DE DEMONSTRATION (environ 60 jours d'historique)
@@ -121,6 +126,7 @@ Se placer dans le dossier de l'application, puis :
 
   cd ~/gestionsites            # ou le chemin reel de votre installation
   git pull
+  composer install --no-dev --optimize-autoloader
   php artisan migrate --force
 
   # ATTENTION : la commande suivante EFFACE TOUTE LA BASE avant de la recreer.
@@ -134,6 +140,33 @@ migrate:fresh. Utilisez seulement :
 
   php artisan migrate --force
   php artisan db:seed --force      # n'ajoute que ce qui manque, ne recree rien
+
+
+================================================================================
+4 bis. LE COURRIEL DE BIENVENUE
+================================================================================
+
+A chaque creation d'acces, le titulaire recoit un courriel : entete au logo de
+L'Artisan, message de bienvenue, et pied aux coordonnees de DC-KNOWING. Il ne
+contient JAMAIS le mot de passe — celui-ci se remet de vive voix.
+
+Pour qu'il parte reellement, le serveur doit etre configure. Dans le .env :
+
+  MAIL_MAILER=smtp
+  MAIL_HOST=mail.votredomaine.com      # SMTP fourni par LWS
+  MAIL_PORT=465
+  MAIL_USERNAME=contact@votredomaine.com
+  MAIL_PASSWORD=...
+  MAIL_ENCRYPTION=ssl
+  MAIL_FROM_ADDRESS=contact@votredomaine.com
+  MAIL_FROM_NAME="L'Artisan Automobile"
+
+Puis : php artisan config:clear
+
+Tant que MAIL_MAILER=log, aucun courriel ne part : il est seulement ecrit dans
+storage/logs/laravel.log. C'est le reglage actuel en developpement.
+
+Pour tester l'envoi une fois configure, creer un acces avec votre propre adresse.
 
 
 ================================================================================

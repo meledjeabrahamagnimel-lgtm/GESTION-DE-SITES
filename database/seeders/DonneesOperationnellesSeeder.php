@@ -189,6 +189,7 @@ class DonneesOperationnellesSeeder extends Seeder
                             'moyen' => ['Espèces', 'Mobile Money', 'Chèque', 'Virement'][array_rand(['Espèces', 'Mobile Money', 'Chèque', 'Virement'])],
                             'montant' => $facture->montant,
                             'client' => $facture->client,
+                            'activite' => $facture->activite,
                         ]);
                     }
                 }
@@ -303,6 +304,7 @@ class DonneesOperationnellesSeeder extends Seeder
                 'moyen' => ['Espèces', 'Mobile Money', 'Chèque', 'Virement'][random_int(0, 3)],
                 'montant' => $facture->montant,
                 'client' => $facture->client,
+                'activite' => $facture->activite,
             ]);
 
             return;
@@ -338,6 +340,7 @@ class DonneesOperationnellesSeeder extends Seeder
                 'moyen' => ['Espèces', 'Virement'][random_int(0, 1)],
                 'montant' => random_int(30, 260) * 1000,
                 'tiers' => $nature === 'Salaires & personnel' ? 'Personnel' : $libelles[array_rand($libelles)],
+                'activite' => self::activiteDeLaCharge($nature),
             ]);
 
             return;
@@ -433,6 +436,7 @@ class DonneesOperationnellesSeeder extends Seeder
             'moyen' => ['Espèces', 'Mobile Money', 'Chèque', 'Virement'][random_int(0, 3)],
             'montant' => $facture->montant,
             'client' => $client,
+            'activite' => $activite,
         ]);
     }
 
@@ -496,6 +500,17 @@ class DonneesOperationnellesSeeder extends Seeder
             'moyen' => ['Espèces', 'Virement'][array_rand(['Espèces', 'Virement'])],
             'montant' => random_int($min, $max) * 1000,
             'tiers' => $nature === 'Salaires & personnel' ? 'Personnel' : $libelles[array_rand($libelles)],
+            'activite' => self::activiteDeLaCharge($nature),
         ]);
+    }
+
+    /**
+     * Une pièce s'achète pour un chantier précis : la charge porte donc son activité.
+     * Un loyer, un salaire ou l'électricité servent aux deux à la fois — les ventiler
+     * reviendrait à inventer une clé de répartition, on les laisse « non ventilés ».
+     */
+    private static function activiteDeLaCharge(string $nature): ?string
+    {
+        return $nature === 'Achats pièces' ? self::activiteAuHasard() : null;
     }
 }

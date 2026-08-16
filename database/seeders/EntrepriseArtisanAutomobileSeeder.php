@@ -212,7 +212,7 @@ class EntrepriseArtisanAutomobileSeeder extends Seeder
             'entreprise_id' => $entreprise->id,
             'ville_id' => $ville->id,
             'name' => 'Fatou Diabaté',
-            'email' => 'comptabiliteabidjansite2@gmail.com',
+            'email' => 'comptabiliteabidjan@gmail.com',
             'password' => 'password',
             'email_verified_at' => now(),
         ]);

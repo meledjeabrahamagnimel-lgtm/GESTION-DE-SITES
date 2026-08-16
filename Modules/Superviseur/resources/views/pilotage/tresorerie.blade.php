@@ -4,6 +4,7 @@ use Modules\Noyau\Exploitation\Modeles\Charge;
 use Modules\Noyau\Exploitation\Modeles\Encaissement;
 use Modules\Noyau\Exploitation\Modeles\Facture;
 use Modules\Noyau\Commun\Services\PeriodeCalculateur;
+use Modules\Noyau\Commun\Services\VentilationActivite;
 use Modules\Noyau\Entreprises\Support\PerimetreSites;
 use function Livewire\Volt\{state, computed, mount};
 
@@ -76,11 +77,25 @@ $kpis = computed(function () {
     $decaisse = (int) (clone $this->chargesQ)->sum('montant');
     $facture = (int) (clone $this->facturesQ)->sum('montant');
 
+    // Un encaissement ou un décaissement ne porte son activité que si celui qui l'a
+    // saisi la connaissait : la part restante s'affiche « non ventilée » plutôt que
+    // d'être répartie au jugé.
+    $encaisseVentile = VentilationActivite::repartir($this->encaissementsQ);
+    $decaisseVentile = VentilationActivite::repartir($this->chargesQ);
+    $factureVentile = VentilationActivite::repartir($this->facturesQ);
+
     return [
         'encaisse' => $encaisse,
+        'encaisseVentile' => $encaisseVentile,
         'decaisse' => $decaisse,
+        'decaisseVentile' => $decaisseVentile,
         'net' => $encaisse - $decaisse,
+        'netVentile' => VentilationActivite::difference($encaisseVentile, $decaisseVentile),
         'nonEncaisse' => max(0, $facture - $encaisse),
+        'nonEncaisseVentile' => array_map(
+            fn ($v) => max(0, $v),
+            VentilationActivite::difference($factureVentile, $encaisseVentile),
+        ),
     ];
 });
 
@@ -126,10 +141,23 @@ $detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="Encaissements — {{ $this->libellePerimetre }}" :value="ae($this->kpis['encaisse'])" couleur="#0E9F6E" />
-        <x-kpi-card label="Décaissements — {{ $this->libellePerimetre }}" :value="ae($this->kpis['decaisse'])" couleur="#C8102E" />
-        <x-kpi-card label="Trésorerie nette — {{ $this->libellePerimetre }}" :value="ae($this->kpis['net'])" :accent="$this->kpis['net'] < 0" :couleur="$this->kpis['net'] >= 0 ? '#0E9F6E' : '#C8102E'" />
-        <x-kpi-card label="Facturé non encaissé — {{ $this->libellePerimetre }}" :value="ae($this->kpis['nonEncaisse'])" sub="Créances clients" />
+        @php $ventile = ! $activiteFiltre; @endphp
+        <x-kpi-card label="Encaissements — {{ $this->libellePerimetre }}" :value="ae($this->kpis['encaisse'])" couleur="#0E9F6E"
+            :mecanique="$ventile ? ae($this->kpis['encaisseVentile']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['encaisseVentile']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['encaisseVentile']['nonVentile'] ? ae($this->kpis['encaisseVentile']['nonVentile']) : null" />
+        <x-kpi-card label="Décaissements — {{ $this->libellePerimetre }}" :value="ae($this->kpis['decaisse'])" couleur="#C8102E"
+            :mecanique="$ventile ? ae($this->kpis['decaisseVentile']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['decaisseVentile']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['decaisseVentile']['nonVentile'] ? ae($this->kpis['decaisseVentile']['nonVentile']) : null" />
+        <x-kpi-card label="Trésorerie nette — {{ $this->libellePerimetre }}" :value="ae($this->kpis['net'])" :accent="$this->kpis['net'] < 0" :couleur="$this->kpis['net'] >= 0 ? '#0E9F6E' : '#C8102E'"
+            :mecanique="$ventile ? ae($this->kpis['netVentile']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['netVentile']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['netVentile']['nonVentile'] ? ae($this->kpis['netVentile']['nonVentile']) : null" />
+        <x-kpi-card label="Facturé non encaissé — {{ $this->libellePerimetre }}" :value="ae($this->kpis['nonEncaisse'])" sub="Créances clients"
+            :mecanique="$ventile ? ae($this->kpis['nonEncaisseVentile']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['nonEncaisseVentile']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['nonEncaisseVentile']['nonVentile'] ? ae($this->kpis['nonEncaisseVentile']['nonVentile']) : null" />
     </div>
 
     <div style="margin-bottom:20px;">

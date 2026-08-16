@@ -3,6 +3,7 @@
 use Modules\Noyau\Exploitation\Modeles\Charge;
 use Modules\Noyau\Exploitation\Modeles\Facture;
 use Modules\Noyau\Commun\Services\PeriodeCalculateur;
+use Modules\Noyau\Commun\Services\VentilationActivite;
 use Modules\Noyau\Entreprises\Support\PerimetreSites;
 use function Livewire\Volt\{state, computed, mount};
 
@@ -52,23 +53,36 @@ $requeteBase = computed(function () {
         ->whereBetween('date', [$debut, $fin]);
 });
 
-$caPeriode = computed(function () {
+$requeteCa = computed(function () {
     [$debut, $fin] = $this->plage;
 
-    return (int) Facture::whereIn('site_id', $this->idsSites)
+    return Facture::whereIn('site_id', $this->idsSites)
         ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
-        ->whereBetween('date', [$debut, $fin])->sum('montant');
+        ->whereBetween('date', [$debut, $fin]);
 });
+
+$caPeriode = computed(fn () => (int) (clone $this->requeteCa)->sum('montant'));
 
 $kpis = computed(function () {
     $lignes = (clone $this->requeteBase)->where('type_operation', 'Charges')->get();
     $total = (int) $lignes->sum('montant');
 
+    // Les lignes sont déjà en mémoire : on ventile ici plutôt que de relancer des
+    // requêtes d'agrégat pour des chiffres qu'on a sous la main.
+    $ventileTotal = VentilationActivite::repartirCollection($lignes);
+
     return [
         'total' => $total,
+        'totalVentile' => $ventileTotal,
         'pieces' => (int) $lignes->where('libelle', 'Achats pièces')->sum('montant'),
+        'piecesVentile' => VentilationActivite::repartirCollection($lignes->where('libelle', 'Achats pièces')),
         'salaires' => (int) $lignes->where('libelle', 'Salaires & personnel')->sum('montant'),
+        'salairesVentile' => VentilationActivite::repartirCollection($lignes->where('libelle', 'Salaires & personnel')),
         'resultat' => $this->caPeriode - $total,
+        'resultatVentile' => VentilationActivite::difference(
+            VentilationActivite::repartir($this->requeteCa),
+            $ventileTotal,
+        ),
     ];
 });
 
@@ -104,10 +118,23 @@ $detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('da
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">
-        <x-kpi-card label="Total charges — {{ $this->libellePerimetre }}" :value="ae($this->kpis['total'])" sub="Hors transferts et décaissements DG" />
-        <x-kpi-card label="Achats pièces" :value="ae($this->kpis['pieces'])" />
-        <x-kpi-card label="Salaires & personnel" :value="ae($this->kpis['salaires'])" />
-        <x-kpi-card label="Résultat net — {{ $this->libellePerimetre }}" :value="ae($this->kpis['resultat'])" :couleur="$this->kpis['resultat'] >= 0 ? '#0E9F6E' : '#C8102E'" sub="CA facturé − charges" />
+        @php $ventile = ! $activiteFiltre; @endphp
+        <x-kpi-card label="Total charges — {{ $this->libellePerimetre }}" :value="ae($this->kpis['total'])" sub="Hors transferts et décaissements DG"
+            :mecanique="$ventile ? ae($this->kpis['totalVentile']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['totalVentile']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['totalVentile']['nonVentile'] ? ae($this->kpis['totalVentile']['nonVentile']) : null" />
+        <x-kpi-card label="Achats pièces" :value="ae($this->kpis['pieces'])"
+            :mecanique="$ventile ? ae($this->kpis['piecesVentile']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['piecesVentile']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['piecesVentile']['nonVentile'] ? ae($this->kpis['piecesVentile']['nonVentile']) : null" />
+        <x-kpi-card label="Salaires & personnel" :value="ae($this->kpis['salaires'])"
+            :mecanique="$ventile ? ae($this->kpis['salairesVentile']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['salairesVentile']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['salairesVentile']['nonVentile'] ? ae($this->kpis['salairesVentile']['nonVentile']) : null" />
+        <x-kpi-card label="Résultat net — {{ $this->libellePerimetre }}" :value="ae($this->kpis['resultat'])" :couleur="$this->kpis['resultat'] >= 0 ? '#0E9F6E' : '#C8102E'" sub="CA facturé − charges"
+            :mecanique="$ventile ? ae($this->kpis['resultatVentile']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['resultatVentile']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['resultatVentile']['nonVentile'] ? ae($this->kpis['resultatVentile']['nonVentile']) : null" />
     </div>
 
     <div style="margin-bottom:20px;">

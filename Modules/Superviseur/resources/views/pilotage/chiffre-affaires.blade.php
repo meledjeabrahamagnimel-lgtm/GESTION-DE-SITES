@@ -4,6 +4,7 @@ use Modules\Noyau\Exploitation\Modeles\Charge;
 use Modules\Noyau\Exploitation\Modeles\Commercial;
 use Modules\Noyau\Exploitation\Modeles\Facture;
 use Modules\Noyau\Commun\Services\PeriodeCalculateur;
+use Modules\Noyau\Commun\Services\VentilationActivite;
 use Modules\Noyau\Entreprises\Support\PerimetreSites;
 use function Livewire\Volt\{state, computed, mount};
 
@@ -61,24 +62,33 @@ $requeteBase = computed(function () {
 $commerciaux = computed(fn () => Commercial::where('est_spontane', false)
     ->whereIn('ville_id', PerimetreSites::idsVillesRetenus(auth()->user(), $this->villeFiltre))->orderBy('nom')->get());
 
-$chargesPeriode = computed(function () {
+$requeteCharges = computed(function () {
     [$debut, $fin] = $this->plage;
 
-    return (int) Charge::where('type_operation', 'Charges')
+    return Charge::where('type_operation', 'Charges')
         ->whereIn('site_id', $this->idsSites)
         ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
-        ->whereBetween('date', [$debut, $fin])->sum('montant');
+        ->whereBetween('date', [$debut, $fin]);
 });
+
+$chargesPeriode = computed(fn () => (int) (clone $this->requeteCharges)->sum('montant'));
 
 $kpis = computed(function () {
     $lignes = (clone $this->requeteBase)->get();
     $ca = (int) $lignes->sum('montant');
 
+    // Une facture porte toujours son activité ; une charge, seulement si celui qui l'a
+    // saisie la connaissait. Le résultat net hérite donc du « non ventilé » des charges.
+    $caVentile = VentilationActivite::repartirCollection($lignes);
+    $chargesVentilees = VentilationActivite::repartir($this->requeteCharges);
+
     return [
         'total' => $ca,
-        'mecanique' => (int) $lignes->where('activite', 'Mécanique')->sum('montant'),
-        'sinistre' => (int) $lignes->where('activite', 'Sinistre')->sum('montant'),
+        'mecanique' => $caVentile['mecanique'],
+        'sinistre' => $caVentile['sinistre'],
+        'chargesVentilees' => $chargesVentilees,
         'resultat' => $ca - $this->chargesPeriode,
+        'resultatVentile' => VentilationActivite::difference($caVentile, $chargesVentilees),
     ];
 });
 
@@ -127,11 +137,19 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
         :mois-filtre="$moisFiltre" :semaine-filtre="$semaineFiltre" :jour-filtre="$jourFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px;">
+        @php $ventile = ! $activiteFiltre; @endphp
         <x-kpi-card label="CA — {{ $this->libellePerimetre }}" :value="ae($this->kpis['total'])" :sub="$this->detail->count().' facture(s)'"
-            :mecanique="$activiteFiltre ? null : ae($this->kpis['mecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['sinistre'])" />
-        <x-kpi-card label="Charges — {{ $this->libellePerimetre }}" :value="ae($this->chargesPeriode)" />
+            :mecanique="$ventile ? ae($this->kpis['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['sinistre']) : null" />
+        <x-kpi-card label="Charges — {{ $this->libellePerimetre }}" :value="ae($this->chargesPeriode)"
+            :mecanique="$ventile ? ae($this->kpis['chargesVentilees']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['chargesVentilees']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['chargesVentilees']['nonVentile'] ? ae($this->kpis['chargesVentilees']['nonVentile']) : null" />
         <x-kpi-card label="Résultat net (CA − charges)" :value="ae($this->kpis['resultat'])"
-            :bon="$this->kpis['resultat'] >= 0" :accent="$this->kpis['resultat'] < 0" />
+            :bon="$this->kpis['resultat'] >= 0" :accent="$this->kpis['resultat'] < 0"
+            :mecanique="$ventile ? ae($this->kpis['resultatVentile']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['resultatVentile']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['resultatVentile']['nonVentile'] ? ae($this->kpis['resultatVentile']['nonVentile']) : null" />
     </div>
 
     <div style="margin-bottom:20px;">

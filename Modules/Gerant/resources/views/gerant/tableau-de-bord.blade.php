@@ -8,6 +8,7 @@ use Modules\Noyau\Exploitation\Modeles\Commercial;
 use Modules\Noyau\Exploitation\Modeles\Prospection;
 use Modules\Noyau\Exploitation\Modeles\SaisieJournaliere;
 use Modules\Noyau\Commun\Services\PeriodeCalculateur;
+use Modules\Noyau\Commun\Services\VentilationActivite;
 use Modules\Noyau\Entreprises\Modeles\Site;
 use Modules\Noyau\Entreprises\Support\PerimetreSites;
 use function Livewire\Volt\{state, computed, mount};
@@ -24,6 +25,8 @@ state([
     'activiteFiltre' => '',
     'commercialFiltre' => '',
     'pageSynthese' => 1,
+    'pageAlertes' => 1,
+    'pageCommentaires' => [],
 ]);
 
 mount(function () {
@@ -126,19 +129,39 @@ $kpis = computed(function () {
         ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre))
         ->when($this->idsCommercialFiltre !== null, fn ($q) => $q->whereIn('commercial_id', $this->idsCommercialFiltre));
 
-    // Seuls le CA et le taux de transfo se ventilent systématiquement par activité, chaque
-    // facture et chaque devis portant la sienne. Les charges et les encaissements ne la
-    // renseignent que lorsqu'elle est connue de celui qui saisit, et les véhicules sans
-    // facture relèvent du lieu entier : leur ventilation resterait partielle, on ne
-    // l'affiche donc pas en sous-total.
+    // Factures et devis portent toujours leur activité. Charges et encaissements ne la
+    // renseignent que lorsque celui qui saisit la connaît : le reliquat apparaît alors
+    // sous « Non ventilé » plutôt que d'être réparti au jugé — les trois lignes refont
+    // ainsi toujours le total exact. Les véhicules sans facture, eux, relèvent du lieu
+    // entier et ne se ventilent pas du tout.
+    $chargesQ = Charge::whereIn('site_id', $idsSites)->where('type_operation', 'Charges')
+        ->whereBetween('date', [$debut, $fin])
+        ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre));
+
+    $sortiesQ = Charge::whereIn('site_id', $idsSites)->whereBetween('date', [$debut, $fin])
+        ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre));
+
+    $encaisseQ = Encaissement::whereIn('site_id', $idsSites)->whereBetween('date', [$debut, $fin])
+        ->when($this->activiteFiltre, fn ($q) => $q->where('activite', $this->activiteFiltre));
+
+    $ca = VentilationActivite::repartir($facturesQ);
+    $charges = VentilationActivite::repartir($chargesQ);
+    $sorties = VentilationActivite::repartir($sortiesQ);
+    $encaisse = VentilationActivite::repartir($encaisseQ);
+
     return [
         'ca' => $this->synthese->sum('ca'),
-        'caMecanique' => (int) (clone $facturesQ)->where('activite', 'Mécanique')->sum('montant'),
-        'caSinistre' => (int) (clone $facturesQ)->where('activite', 'Sinistre')->sum('montant'),
+        'caMecanique' => $ca['mecanique'],
+        'caSinistre' => $ca['sinistre'],
+        'caNonVentile' => $ca['nonVentile'],
         'charges' => $this->synthese->sum('charges'),
+        'chargesVentilees' => $charges,
         'resultat' => $this->synthese->sum('resultat'),
+        'resultatVentile' => VentilationActivite::difference($ca, $charges),
         'encaisse' => $this->synthese->sum('encaisse'),
+        'encaisseVentile' => $encaisse,
         'treso' => $this->synthese->sum('treso'),
+        'tresoVentilee' => VentilationActivite::difference($encaisse, $sorties),
         // Taux de transformation des devis émis sur la période.
         'tauxTransfo' => $nbEmis > 0 ? $nbValides / $nbEmis : null,
         'tauxTransfoMecanique' => $tauxTransfoActivite('Mécanique'),
@@ -253,18 +276,23 @@ $commentaires = computed(function () {
         ->whereBetween('date', [$debut, $fin])
         ->with('site')->orderByDesc('date')->get();
 
+    // Clés sans espace ni apostrophe : elles voyagent jusque dans le wire:click de la
+    // pagination, où « Chiffre d'affaires » romprait la chaîne JavaScript.
     $rubriques = [
-        'Prospects' => 'commentaire_prospects',
-        'Devis' => 'commentaire_devis',
-        "Chiffre d'affaires" => 'commentaire_ca',
-        'Trésorerie' => 'commentaire_tresorerie',
-        'Charges' => 'commentaire_charges',
+        'prospects' => ['Prospects', 'commentaire_prospects'],
+        'devis' => ['Devis', 'commentaire_devis'],
+        'ca' => ["Chiffre d'affaires", 'commentaire_ca'],
+        'tresorerie' => ['Trésorerie', 'commentaire_tresorerie'],
+        'charges' => ['Charges', 'commentaire_charges'],
     ];
 
-    return collect($rubriques)->map(fn ($colonne) => $saisies
-        ->filter(fn ($s) => filled($s->$colonne))
-        ->map(fn ($s) => ['site' => $s->site->nom, 'date' => $s->date, 'texte' => $s->$colonne])
-        ->take(6)->values());
+    return collect($rubriques)->map(fn ($rubrique) => [
+        'libelle' => $rubrique[0],
+        'lignes' => $saisies
+            ->filter(fn ($s) => filled($s->{$rubrique[1]}))
+            ->map(fn ($s) => ['site' => $s->site->nom, 'date' => $s->date, 'texte' => $s->{$rubrique[1]}])
+            ->values(),
+    ]);
 });
 
 ?>
@@ -276,16 +304,35 @@ $commentaires = computed(function () {
         :commerciaux="$this->commerciaux" :commercial-filtre="$commercialFiltre" />
 
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
+        {{-- Le détail par activité n'a plus de sens dès qu'on a filtré sur l'une d'elles :
+             il répéterait le total. On le masque alors sur toutes les cartes à la fois. --}}
+        @php $ventile = ! $activiteFiltre; @endphp
+
         <x-kpi-card label="CA — {{ $this->libellePerimetre }}" :value="ae($this->kpis['ca'])"
-            :mecanique="$activiteFiltre ? null : ae($this->kpis['caMecanique'])" :sinistre="$activiteFiltre ? null : ae($this->kpis['caSinistre'])" />
-        <x-kpi-card label="Charges — {{ $this->libellePerimetre }}" :value="ae($this->kpis['charges'])" />
+            :mecanique="$ventile ? ae($this->kpis['caMecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['caSinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['caNonVentile'] ? ae($this->kpis['caNonVentile']) : null" />
+        <x-kpi-card label="Charges — {{ $this->libellePerimetre }}" :value="ae($this->kpis['charges'])"
+            :mecanique="$ventile ? ae($this->kpis['chargesVentilees']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['chargesVentilees']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['chargesVentilees']['nonVentile'] ? ae($this->kpis['chargesVentilees']['nonVentile']) : null" />
         <x-kpi-card label="Résultat net — {{ $this->libellePerimetre }}" :value="ae($this->kpis['resultat'])"
-            sub="CA facturé − charges" :bon="$this->kpis['resultat'] >= 0" :accent="$this->kpis['resultat'] < 0" />
+            sub="CA facturé − charges" :bon="$this->kpis['resultat'] >= 0" :accent="$this->kpis['resultat'] < 0"
+            :mecanique="$ventile ? ae($this->kpis['resultatVentile']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['resultatVentile']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['resultatVentile']['nonVentile'] ? ae($this->kpis['resultatVentile']['nonVentile']) : null" />
         <x-kpi-card label="Encaissé — {{ $this->libellePerimetre }}" :value="ae($this->kpis['encaisse'])"
-            :sub="$this->kpis['ca'] > 0 ? an($this->kpis['encaisse'] / $this->kpis['ca']).' du CA facturé' : null" />
-        <x-kpi-card label="Trésorerie nette — {{ $this->libellePerimetre }}" :value="ae($this->kpis['treso'])" :accent="$this->kpis['treso'] < 0" />
+            :sub="$this->kpis['ca'] > 0 ? an($this->kpis['encaisse'] / $this->kpis['ca']).' du CA facturé' : null"
+            :mecanique="$ventile ? ae($this->kpis['encaisseVentile']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['encaisseVentile']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['encaisseVentile']['nonVentile'] ? ae($this->kpis['encaisseVentile']['nonVentile']) : null" />
+        <x-kpi-card label="Trésorerie nette — {{ $this->libellePerimetre }}" :value="ae($this->kpis['treso'])" :accent="$this->kpis['treso'] < 0"
+            :mecanique="$ventile ? ae($this->kpis['tresoVentilee']['mecanique']) : null"
+            :sinistre="$ventile ? ae($this->kpis['tresoVentilee']['sinistre']) : null"
+            :non-ventile="$ventile && $this->kpis['tresoVentilee']['nonVentile'] ? ae($this->kpis['tresoVentilee']['nonVentile']) : null" />
         <x-kpi-card label="Taux transfo devis — {{ $this->libellePerimetre }}" :value="an($this->kpis['tauxTransfo'])"
-            :mecanique="$activiteFiltre ? null : an($this->kpis['tauxTransfoMecanique'])" :sinistre="$activiteFiltre ? null : an($this->kpis['tauxTransfoSinistre'])" />
+            :mecanique="$ventile ? an($this->kpis['tauxTransfoMecanique']) : null"
+            :sinistre="$ventile ? an($this->kpis['tauxTransfoSinistre']) : null" />
         <x-kpi-card label="Véhicules sans facture — {{ $this->libellePerimetre }}" :value="$this->kpis['sansFacture']"
             :sub="$this->kpis['sansFacture'] > 0 ? 'Anomalie à signaler à la Direction' : 'Aucune anomalie'"
             :accent="$this->kpis['sansFacture'] > 0" :bon="$this->kpis['sansFacture'] === 0" />
@@ -301,7 +348,7 @@ $commentaires = computed(function () {
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:16px; margin-bottom:20px;">
         <div class="carte">
             <h3 class="titre-section">Alertes ({{ $this->alertes->count() }})</h3>
-            @forelse ($this->alertes as $alerte)
+            @forelse ($this->alertes->forPage($pageAlertes, 7) as $alerte)
                 @php
                     $couleur = ['CRITIQUE' => 'pastille-rouge', 'ÉLEVÉ' => 'pastille-ambre', 'MOYEN' => 'pastille-bleu'][$alerte['niveau']];
                 @endphp
@@ -314,6 +361,7 @@ $commentaires = computed(function () {
                     <span class="etat-vide-texte">Aucune alerte sur cette période.</span>
                 </div>
             @endforelse
+            <x-pagination :page="$pageAlertes" :total="$this->alertes->count()" prop="pageAlertes" :par-page="7" />
         </div>
 
         <div class="carte">
@@ -347,10 +395,11 @@ $commentaires = computed(function () {
     </div>
 
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px; margin-bottom:20px;">
-        @foreach ($this->commentaires as $rubrique => $lignes)
+        @foreach ($this->commentaires as $cle => $rubrique)
             <div class="carte">
-                <h3 class="titre-section">Commentaires — {{ $rubrique }}</h3>
-                @forelse ($lignes as $c)
+                <h3 class="titre-section">Commentaires — {{ $rubrique['libelle'] }}</h3>
+                @php $pageRubrique = (int) ($pageCommentaires[$cle] ?? 1); @endphp
+                @forelse ($rubrique['lignes']->forPage($pageRubrique, 7) as $c)
                     <div style="padding:7px 0; border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                         <div style="font-size:11.5px; color:var(--th-gris,#6B6E76); font-weight:600;">
                             {{ $c['site'] }} · {{ $c['date']->format('d/m/Y') }}
@@ -362,6 +411,8 @@ $commentaires = computed(function () {
                         <span class="etat-vide-texte">Aucun commentaire saisi sur la période.</span>
                     </div>
                 @endforelse
+                <x-pagination :page="$pageRubrique" :total="$rubrique['lignes']->count()"
+                    prop="pageCommentaires.{{ $cle }}" :par-page="7" />
             </div>
         @endforeach
     </div>

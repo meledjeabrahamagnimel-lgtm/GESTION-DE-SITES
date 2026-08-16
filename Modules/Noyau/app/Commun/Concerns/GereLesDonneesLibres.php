@@ -44,7 +44,7 @@ trait GereLesDonneesLibres
 
         // On ne fait pas confiance au type envoyé par le navigateur : il doit désigner
         // un modèle de l'application, et l'écriture doit appartenir à l'entreprise.
-        if (! is_subclass_of($modele, Model::class) || ! str_starts_with($modele, 'App\\Domain\\')) {
+        if (! is_subclass_of($modele, Model::class) || ! str_starts_with($modele, 'Modules\\Noyau\\')) {
             $this->fermerSaisieLibre();
 
             return;

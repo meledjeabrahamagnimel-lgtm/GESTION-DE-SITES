@@ -7,8 +7,11 @@ use Modules\Noyau\Exploitation\Services\GenerateurNumero;
 use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use Modules\Noyau\Entreprises\Modeles\Site;
 use Modules\Noyau\Entreprises\Modeles\Ville;
+use Modules\Noyau\Commun\Mails\BienvenueNouvelAcces;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -27,7 +30,28 @@ class CreerAcces
     /** Rôles dont le titulaire prospecte aussi : il doit donc exister comme commercial. */
     private const ROLES_COMMERCIAUX = ['responsable_ville', 'responsable_site', 'commercial'];
 
+    /** Intitulés lisibles des rôles, pour le courriel d'accueil. */
+    private const LIBELLES_ROLES = [
+        'gerant' => 'Gérant',
+        'responsable_ville' => 'Superviseur de ville',
+        'responsable_site' => 'Responsable de site',
+        'commercial' => 'Commercial',
+        'caissier' => 'Comptabilité',
+        'super_admin' => 'Super administrateur',
+    ];
+
     public function executer(Entreprise $entreprise, string $role, array $donnees): User
+    {
+        $utilisateur = $this->creer($entreprise, $role, $donnees);
+
+        // Hors transaction : un incident d'envoi ne doit jamais annuler la création d'un
+        // accès pourtant valide. L'accès existe, le courriel se renvoie au besoin.
+        $this->annoncerLAcces($entreprise, $utilisateur, $role);
+
+        return $utilisateur;
+    }
+
+    private function creer(Entreprise $entreprise, string $role, array $donnees): User
     {
         return DB::transaction(function () use ($entreprise, $role, $donnees) {
             $utilisateur = User::create([
@@ -53,6 +77,37 @@ class CreerAcces
 
             return $utilisateur;
         });
+    }
+
+    /**
+     * Souhaite la bienvenue au titulaire et lui indique où se connecter.
+     *
+     * Une adresse peut être erronée, le serveur de courrier indisponible : l'échec est
+     * journalisé, jamais propagé. Refuser un accès parce qu'un courriel n'est pas parti
+     * serait la pire des réponses pour celui qui attend de travailler.
+     */
+    private function annoncerLAcces(Entreprise $entreprise, User $utilisateur, string $role): void
+    {
+        try {
+            Mail::to($utilisateur->email)->send(new BienvenueNouvelAcces(
+                $utilisateur->fresh(),
+                $entreprise,
+                self::LIBELLES_ROLES[$role] ?? $role,
+                $this->libellePerimetre($utilisateur),
+            ));
+        } catch (\Throwable $e) {
+            Log::warning("Courriel de bienvenue non envoyé à {$utilisateur->email} : ".$e->getMessage());
+        }
+    }
+
+    /** « Abidjan — Site 2 » pour un responsable de lieu, « Abidjan » pour les autres. */
+    private function libellePerimetre(User $utilisateur): ?string
+    {
+        if ($utilisateur->site_id) {
+            return Site::find($utilisateur->site_id)?->nom;
+        }
+
+        return $utilisateur->ville_id ? Ville::find($utilisateur->ville_id)?->nom : null;
     }
 
     /**

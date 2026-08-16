@@ -3,6 +3,7 @@
 use Modules\Noyau\Exploitation\Modeles\Commercial;
 use Modules\Noyau\Exploitation\Modeles\Devis;
 use Modules\Noyau\Commun\Services\PeriodeCalculateur;
+use Modules\Noyau\Exploitation\Services\StatistiquesDevis;
 use Modules\Noyau\Entreprises\Support\PerimetreSites;
 use function Livewire\Volt\{state, computed, mount};
 
@@ -119,49 +120,22 @@ $kpis = computed(function () {
         'attenteMecanique' => $lignes->where('statut', 'En attente')->where('activite', 'Mécanique')->count(),
         'attenteSinistre' => $lignes->where('statut', 'En attente')->where('activite', 'Sinistre')->count(),
         'tauxTransfo' => $emis > 0 ? $valides->count() / $emis : null,
-        'tauxTransfoMecanique' => $this->tauxTransfo($lignes, 'Mécanique'),
-        'tauxTransfoSinistre' => $this->tauxTransfo($lignes, 'Sinistre'),
+        'tauxTransfoMecanique' => StatistiquesDevis::tauxTransformation($lignes, 'Mécanique'),
+        'tauxTransfoSinistre' => StatistiquesDevis::tauxTransformation($lignes, 'Sinistre'),
         // Écart moyen entre le montant proposé et le montant réellement validé.
         'differenciation' => $valides->count() > 0
             ? (int) round($valides->sum('montant_devis') - $valides->sum('montant_valide')) / $valides->count()
             : null,
-        'differenciationMecanique' => $this->differenciationMoyenne($valides, 'Mécanique'),
-        'differenciationSinistre' => $this->differenciationMoyenne($valides, 'Sinistre'),
+        'differenciationMecanique' => StatistiquesDevis::differenciationMoyenne($valides, 'Mécanique'),
+        'differenciationSinistre' => StatistiquesDevis::differenciationMoyenne($valides, 'Sinistre'),
         // Délai moyen, en jours, entre la réception du véhicule et l'émission du devis.
-        'delaiEnvoi' => $this->delaiMoyenEnvoi($lignes),
-        'delaiEnvoiMecanique' => $this->delaiMoyenEnvoi($lignes->where('activite', 'Mécanique')),
-        'delaiEnvoiSinistre' => $this->delaiMoyenEnvoi($lignes->where('activite', 'Sinistre')),
+        'delaiEnvoi' => StatistiquesDevis::delaiMoyenEnvoi($lignes),
+        'delaiEnvoiMecanique' => StatistiquesDevis::delaiMoyenEnvoi($lignes->where('activite', 'Mécanique')),
+        'delaiEnvoiSinistre' => StatistiquesDevis::delaiMoyenEnvoi($lignes->where('activite', 'Sinistre')),
     ];
 });
 
 /** Taux de transformation (validés ÷ émis) restreint à une activité. */
-$tauxTransfo = function ($lignes, $activite) {
-    $lignesActivite = $lignes->where('activite', $activite);
-    $emis = $lignesActivite->count();
-
-    return $emis > 0 ? $lignesActivite->where('statut', 'Validé')->count() / $emis : null;
-};
-
-/** Écart moyen devis → validé restreint à une activité, parmi les devis déjà validés. */
-$differenciationMoyenne = function ($valides, $activite) {
-    $lignesActivite = $valides->where('activite', $activite);
-
-    return $lignesActivite->count() > 0
-        ? (int) round($lignesActivite->sum('montant_devis') - $lignesActivite->sum('montant_valide')) / $lignesActivite->count()
-        : null;
-};
-
-/** Délai moyen réception → émission, en jours entiers (null si aucune date de réception connue). */
-$delaiMoyenEnvoi = function ($lignes) {
-    $avecReception = $lignes->filter(fn ($d) => $d->date_reception && $d->date_emission);
-
-    if ($avecReception->isEmpty()) {
-        return null;
-    }
-
-    return (int) round($avecReception->sum(fn ($d) => $d->date_reception->diffInDays($d->date_emission)) / $avecReception->count());
-};
-
 $graphique = computed(function () {
     [$debut, $fin] = $this->plage;
     $points = PeriodeCalculateur::points($debut, $fin);
