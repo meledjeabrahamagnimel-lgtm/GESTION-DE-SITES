@@ -34,6 +34,9 @@ state([
     'editionProsDevisApres' => false, 'editionProsDateDevis' => null,
     'editionProsObs' => '',
 
+    // Validation d'un devis : le montant retenu se saisit avant que le statut ne change.
+    'devisAValiderId' => null, 'montantValidation' => '',
+
     'devisSelection' => [], 'devisBrouillon' => [],
     'factureSelection' => [], 'factureBrouillon' => [],
 
@@ -254,6 +257,50 @@ $refuserProspection = function (int $id) {
     unset($this->prospectionsATraiter, $this->prospectionsDuJour);
 };
 
+/*
+|--------------------------------------------------------------------------
+| Corriger une transmission avant de la valider
+|--------------------------------------------------------------------------
+| Le commercial saisit depuis le terrain, parfois dans l'urgence : il oublie de
+| cocher le passage, ou coche un devis qui n'a pas eu lieu. Le responsable doit
+| pouvoir rectifier avant de valider — sans quoi il ne lui resterait qu'à refuser
+| une prospection réelle pour une case mal cochée.
+*/
+$basculerPassage = function (int $id) {
+    $p = Prospection::whereIn('site_id', $this->siteIdsActifs)->aTraiter()->findOrFail($id);
+
+    // Sans passage, il ne peut y avoir de devis après passage : la règle de la
+    // création vaut ici aussi, sinon la ligne deviendrait incohérente.
+    $passage = ! $p->passage;
+
+    $p->update([
+        'passage' => $passage,
+        'date_passage' => $passage ? ($p->date_passage ?? $p->date) : null,
+        'devis_apres_passage' => $passage ? $p->devis_apres_passage : false,
+        'date_devis' => $passage ? $p->date_devis : null,
+    ]);
+
+    unset($this->prospectionsATraiter, $this->prospectionsDuJour, $this->prospectionsAttenteDevis);
+};
+
+$basculerDevisApres = function (int $id) {
+    $p = Prospection::whereIn('site_id', $this->siteIdsActifs)->aTraiter()->findOrFail($id);
+
+    $devisApres = ! $p->devis_apres_passage;
+    $dateDevis = $devisApres ? ($p->date_devis ?? $p->date_passage ?? $p->date) : null;
+
+    // Un devis après passage suppose le passage : on le coche du même geste, à la
+    // même date, plutôt que d'enregistrer un devis né d'une visite qui n'a pas eu lieu.
+    $p->update([
+        'devis_apres_passage' => $devisApres,
+        'date_devis' => $dateDevis,
+        'passage' => $devisApres ? true : $p->passage,
+        'date_passage' => $devisApres ? $dateDevis : $p->date_passage,
+    ]);
+
+    unset($this->prospectionsATraiter, $this->prospectionsDuJour, $this->prospectionsAttenteDevis);
+};
+
 $validerToutesProspections = function () {
     $ids = Prospection::whereIn('site_id', $this->siteIdsActifs)->aTraiter()->pluck('id')->all();
     $this->avertirDuRetour($ids, 'Validée');
@@ -466,7 +513,7 @@ $enregistrerEditionProspection = function () {
     ]);
 
     $this->editionProspectionId = null;
-    unset($this->prospectionsDuJour);
+    unset($this->prospectionsDuJour, $this->prospectionsATraiter, $this->prospectionsAttenteDevis);
 };
 
 // 2. Devis
@@ -566,21 +613,55 @@ $changerStatutDevis = function (int $id, string $statut) {
     }
 
     $devis = Devis::whereIn('site_id', $this->siteIdsActifs)->findOrFail($id);
-    $devis->update([
-        'statut' => $statut,
-        // Le montant validé démarre égal au montant du devis — modifiable ensuite via le
-        // champ dédié — plutôt que de laisser un montant vide à chaque première validation.
-        'montant_valide' => $statut === 'Validé' ? ($devis->montant_valide ?? $devis->montant_devis) : null,
-    ]);
-};
 
-$changerMontantValide = function (int $id, $valeur) {
-    $devis = Devis::whereIn('site_id', $this->siteIdsActifs)->findOrFail($id);
-    if ($devis->statut !== 'Validé') {
+    // Valider un devis, c'est arrêter le montant réellement retenu par le client — il
+    // diffère souvent de celui proposé. On ne le devine donc pas : le statut ne change
+    // qu'une fois le montant saisi et confirmé, en deux temps.
+    if ($statut === 'Validé') {
+        $this->devisAValiderId = $devis->id;
+        $this->montantValidation = (string) ($devis->montant_valide ?? $devis->montant_devis);
+        $this->resetValidation();
+
         return;
     }
 
-    $devis->update(['montant_valide' => is_numeric($valeur) ? (int) $valeur : null]);
+    $this->annulerValidationDevis();
+
+    $devis->update(['statut' => $statut, 'montant_valide' => null]);
+
+    unset($this->devisDuJour, $this->devisEnAttente, $this->devisValidesNonFactures);
+};
+
+$confirmerValidationDevis = function () {
+    // Le champ n'apparaît qu'un devis désigné : un appel sans devis ne peut venir que
+    // d'une requête forgée, on l'ignore sans rien changer.
+    $devis = $this->devisAValiderId
+        ? Devis::whereIn('site_id', $this->siteIdsActifs)->find($this->devisAValiderId)
+        : null;
+
+    if (! $devis) {
+        $this->annulerValidationDevis();
+
+        return;
+    }
+
+    $this->validate([
+        'montantValidation' => ['required', 'numeric', 'min:1'],
+    ], [
+        'montantValidation.required' => 'Indiquez le montant retenu avant de valider le devis.',
+        'montantValidation.min' => 'Un devis validé porte forcément un montant.',
+    ], ['montantValidation' => 'montant validé']);
+
+    $devis->update(['statut' => 'Validé', 'montant_valide' => (int) $this->montantValidation]);
+
+    $this->annulerValidationDevis();
+    unset($this->devisDuJour, $this->devisEnAttente, $this->devisValidesNonFactures);
+};
+
+$annulerValidationDevis = function () {
+    $this->devisAValiderId = null;
+    $this->montantValidation = '';
+    $this->resetValidation();
 };
 
 /**
@@ -972,6 +1053,65 @@ $ajouterCharge = function () {
                         </thead>
                         <tbody>
                             @foreach ($this->prospectionsATraiter->forPage($pageProsATraiter, 7) as $p)
+                                @if ($editionProspectionId === $p->id)
+                                    {{-- Correction avant validation : mêmes champs que la saisie,
+                                         pour n'avoir jamais à refuser une prospection réelle
+                                         à cause d'une ligne mal remplie. --}}
+                                    <tr wire:key="a-traiter-edit-{{ $p->id }}" style="background:#FDF2F4;">
+                                        <td style="font-weight:700;">{{ $p->numero }}</td>
+                                        <td>{{ $p->date->format('d/m/Y') }}</td>
+                                        <td>
+                                            <select wire:model="editionProsCommercialId" class="champ">
+                                                @foreach ($this->commerciauxSelectables as $idCom => $nomCom)
+                                                    <option value="{{ $idCom }}">{{ $nomCom }}</option>
+                                                @endforeach
+                                            </select>
+                                        </td>
+                                        <td><input type="text" wire:model="editionProsClient" class="champ" style="min-width:130px;"></td>
+                                        <td><input type="text" wire:model="editionProsLocalisation" class="champ" style="min-width:110px;"></td>
+                                        <td>
+                                            <select wire:model="editionProsMoyen" class="champ">
+                                                @foreach ($this->optionsMoyenProspection as $valeur => $libelle)
+                                                    <option value="{{ $valeur }}">{{ $libelle }}</option>
+                                                @endforeach
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <select wire:model="editionProsActivite" class="champ">
+                                                @foreach ($this->optionsActivite as $valeur => $libelle)
+                                                    <option value="{{ $valeur }}">{{ $libelle }}</option>
+                                                @endforeach
+                                            </select>
+                                        </td>
+                                        <td style="white-space:normal; min-width:130px;">
+                                            <label style="display:flex; align-items:center; gap:5px; font-size:13px;">
+                                                <input type="checkbox" wire:model.live="editionProsPassage"> Passage
+                                            </label>
+                                            @if ($editionProsPassage && ! $editionProsDevisApres)
+                                                <input type="date" wire:model="editionProsDatePassage" class="champ" style="margin-top:4px;">
+                                            @endif
+                                        </td>
+                                        <td style="white-space:normal; min-width:170px;">
+                                            <label style="display:flex; align-items:center; gap:5px; font-size:13px;">
+                                                <input type="checkbox" wire:model.live="editionProsDevisApres"> Devis
+                                            </label>
+                                            @if ($editionProsDevisApres)
+                                                <input type="date" wire:model.live="editionProsDateDevis" class="champ" style="margin-top:4px;">
+                                            @endif
+                                        </td>
+                                        <td style="white-space:normal; min-width:170px;">
+                                            <textarea wire:model="editionProsObs" rows="2" placeholder="Observations"
+                                                style="width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13px;"></textarea>
+                                        </td>
+                                        <td>—</td>
+                                        <td style="text-align:right; white-space:nowrap;">
+                                            <button type="button" wire:click="enregistrerEditionProspection"
+                                                class="bouton bouton-petit bouton-vert" style="margin-right:5px;">Enregistrer</button>
+                                            <button type="button" wire:click="annulerEditionProspection"
+                                                class="bouton bouton-petit bouton-secondaire">Annuler</button>
+                                        </td>
+                                    </tr>
+                                @else
                                 <tr wire:key="a-traiter-{{ $p->id }}">
                                     <td style="font-weight:700;">{{ $p->numero }}</td>
                                     <td>{{ $p->date->format('d/m/Y') }}</td>
@@ -980,17 +1120,30 @@ $ajouterCharge = function () {
                                     <td style="color:var(--th-gris,#6B6E76);">{{ $p->localisation ?? '—' }}</td>
                                     <td>{{ $p->moyen }}</td>
                                     <td>{{ $p->activite }}</td>
-                                    <td>{{ $p->passage ? '☑' : '☐' }}</td>
-                                    <td>{{ $p->devis_apres_passage ? '☑' : '☐' }}</td>
+                                    {{-- Cases directement cliquables : cocher un passage oublié ne doit pas
+                                         obliger à ouvrir le formulaire d'édition complet. --}}
+                                    <td style="text-align:center;">
+                                        <input type="checkbox" wire:click="basculerPassage({{ $p->id }})"
+                                            @checked($p->passage) style="width:16px; height:16px; cursor:pointer;"
+                                            title="Le commercial est-il passé sur site ?">
+                                    </td>
+                                    <td style="text-align:center;">
+                                        <input type="checkbox" wire:click="basculerDevisApres({{ $p->id }})"
+                                            @checked($p->devis_apres_passage) style="width:16px; height:16px; cursor:pointer;"
+                                            title="Un devis doit-il suivre ce passage ? Cocher marque aussi le passage.">
+                                    </td>
                                     <td style="color:var(--th-gris,#6B6E76);">{{ $p->observations ?? '—' }}</td>
                                     <td><input type="text" wire:model="motifRefus.{{ $p->id }}" class="champ" style="width:150px;" placeholder="Facultatif"></td>
                                     <td style="text-align:right; white-space:nowrap;">
+                                        <button type="button" wire:click="modifierProspection({{ $p->id }})"
+                                            class="bouton bouton-petit bouton-secondaire" style="margin-right:5px;">Modifier</button>
                                         <button type="button" wire:click="validerProspection({{ $p->id }})"
                                             class="bouton bouton-petit bouton-vert" style="margin-right:5px;">Valider</button>
                                         <button type="button" wire:click="refuserProspection({{ $p->id }})"
                                             class="bouton bouton-petit bouton-secondaire">Refuser</button>
                                     </td>
                                 </tr>
+                                @endif
                             @endforeach
                         </tbody>
                     </table>
@@ -1288,7 +1441,7 @@ $ajouterCharge = function () {
                                     <th>Émission</th>
                                     <th>Montant</th>
                                     <th>Statut</th>
-                                    <th>Montant validé</th>
+                                    <th>Montant retenu</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1307,9 +1460,22 @@ $ajouterCharge = function () {
                                             </select>
                                         </td>
                                         <td>
-                                            @if ($d->statut === 'Validé')
-                                                <input type="number" value="{{ $d->montant_valide }}" wire:change="changerMontantValide({{ $d->id }}, $event.target.value)"
-                                                    style="padding:5px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13px; width:110px;">
+                                            {{-- Choisir « Validé » n'enregistre rien tant que le montant retenu
+                                                 n'est pas confirmé : c'est lui, et non le montant proposé, qui
+                                                 deviendra le chiffre d'affaires facturé. --}}
+                                            @if ($devisAValiderId === $d->id)
+                                                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                                    <input type="number" wire:model="montantValidation" min="1" autofocus
+                                                        placeholder="Montant retenu"
+                                                        style="padding:5px 8px; border:1px solid var(--th-accent,#C8102E); border-radius:6px; font-size:13px; width:120px;">
+                                                    <button type="button" wire:click="confirmerValidationDevis"
+                                                        class="bouton bouton-petit bouton-vert">Valider</button>
+                                                    <button type="button" wire:click="annulerValidationDevis"
+                                                        class="bouton bouton-petit bouton-secondaire">Annuler</button>
+                                                </div>
+                                                @error('montantValidation')
+                                                    <div style="font-size:11.5px; color:var(--th-accent,#C8102E); margin-top:4px;">{{ $message }}</div>
+                                                @enderror
                                             @else
                                                 —
                                             @endif
