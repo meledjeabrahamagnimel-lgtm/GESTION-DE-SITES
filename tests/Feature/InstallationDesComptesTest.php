@@ -52,6 +52,44 @@ class InstallationDesComptesTest extends TestCase
         }
     }
 
+    public function test_le_super_admin_installe_peut_reellement_ouvrir_la_plateforme(): void
+    {
+        $this->preparerEntreprise();
+        $this->artisan('demo:installer --comptes')->assertSuccessful();
+
+        app(PermissionRegistrar::class)->setPermissionsTeamId(\Database\Seeders\SuperAdminSeeder::EQUIPE_PLATEFORME);
+
+        $superAdmin = User::withoutGlobalScopes()->where('email', 'superadmin@gmail.com')->firstOrFail();
+
+        // Le rôle ne suffit pas : sans drapeau fondateur ni habilitation, le compte
+        // franchit le contrôle de rôle puis se heurte au contrôle de section, et toutes
+        // les pages de /super-admin répondent 403. C'est exactement ce qui est arrivé
+        // en production après une installation des comptes.
+        $this->assertTrue($superAdmin->estSuperAdmin());
+        $this->assertNotEmpty($superAdmin->sectionsAutorisees(), 'Un super admin sans section ne peut rien ouvrir.');
+
+        $this->actingAs($superAdmin)->get('/super-admin')->assertOk();
+        $this->actingAs($superAdmin)->get('/super-admin/acces')->assertOk();
+        $this->actingAs($superAdmin)->get('/super-admin/maintenance')->assertOk();
+    }
+
+    public function test_un_super_admin_prive_de_tout_est_repromu(): void
+    {
+        $this->preparerEntreprise();
+        $this->artisan('demo:installer --comptes')->assertSuccessful();
+
+        // On reproduit l'état où la plateforme s'était murée : plus aucun fondateur.
+        User::withoutGlobalScopes()->whereNull('entreprise_id')
+            ->update(['est_fondateur' => false, 'habilitations' => null]);
+
+        $this->artisan('demo:installer --comptes')->assertSuccessful();
+
+        app(PermissionRegistrar::class)->setPermissionsTeamId(\Database\Seeders\SuperAdminSeeder::EQUIPE_PLATEFORME);
+        $superAdmin = User::withoutGlobalScopes()->where('email', 'superadmin@gmail.com')->firstOrFail();
+
+        $this->assertTrue($superAdmin->est_fondateur, 'Sans fondateur, plus personne ne peut administrer la plateforme.');
+    }
+
     public function test_une_adresse_renommee_conserve_son_historique(): void
     {
         $entreprise = $this->preparerEntreprise();

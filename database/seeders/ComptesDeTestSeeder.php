@@ -63,8 +63,14 @@ class ComptesDeTestSeeder extends Seeder
         $this->renommerLesAnciennesAdresses();
 
         // --- Plateforme : hors de toute entreprise.
-        $this->compte(null, 'superadmin@gmail.com', 'Super Admin', 'super_admin');
-        $this->compte(null, 'support@gmail.com', 'Support Plateforme', 'super_admin', doitChanger: true);
+        //
+        // Le drapeau fondateur est indispensable, pas cosmétique : sans lui, et sans
+        // habilitations, sectionsAutorisees() ne renvoie rien et chaque page de
+        // /super-admin répond 403. Un compte créé ici sans ce drapeau rendait la
+        // plateforme inadministrable — c'est arrivé en production.
+        $this->compte(null, 'superadmin@gmail.com', 'Super Admin', 'super_admin', fondateur: true);
+        $this->compte(null, 'support@gmail.com', 'Support Plateforme', 'super_admin', doitChanger: true,
+            habilitations: ['dashboard', 'entreprises', 'journal']);
 
         // --- Direction.
         $this->compte($entreprise, 'gerant@gmail.com', 'Jean-Baptiste Kouassi', 'gerant');
@@ -122,8 +128,32 @@ class ComptesDeTestSeeder extends Seeder
         }
 
         $this->recalerCompteurCommerciaux($entreprise);
+        $this->garantirUnFondateur();
 
         $this->command?->info('Comptes de test alignés. Mot de passe : '.self::MOT_DE_PASSE);
+    }
+
+    /**
+     * Il faut toujours quelqu'un pour administrer la plateforme.
+     *
+     * Un super admin sans drapeau fondateur et sans habilitation traverse le contrôle
+     * de rôle puis se heurte au contrôle de section : il se connecte, et toutes les
+     * pages lui répondent 403. Si plus personne n'a le drapeau, on le rend au premier
+     * super admin inscrit — mieux vaut un accès ouvert qu'une plateforme murée.
+     */
+    private function garantirUnFondateur(): void
+    {
+        app(PermissionRegistrar::class)->setPermissionsTeamId(SuperAdminSeeder::EQUIPE_PLATEFORME);
+
+        $superAdmins = User::withoutGlobalScopes()->whereNull('entreprise_id')->orderBy('id')->get()
+            ->filter(fn (User $u) => $u->estSuperAdmin());
+
+        if ($superAdmins->isEmpty() || $superAdmins->contains->est_fondateur) {
+            return;
+        }
+
+        $superAdmins->first()->forceFill(['est_fondateur' => true])->save();
+        $this->command?->warn('  Aucun fondateur : '.$superAdmins->first()->email.' promu, sans quoi /super-admin répond 403.');
     }
 
     private function renommerLesAnciennesAdresses(): void
@@ -147,6 +177,8 @@ class ComptesDeTestSeeder extends Seeder
         ?Ville $ville = null,
         ?Site $site = null,
         bool $doitChanger = false,
+        bool $fondateur = false,
+        ?array $habilitations = null,
     ): User {
         $utilisateur = User::withoutGlobalScopes()->where('email', $email)->first() ?? new User(['email' => $email]);
 
@@ -160,6 +192,9 @@ class ComptesDeTestSeeder extends Seeder
             'doit_changer_mot_de_passe' => $doitChanger,
             'ville_id' => $ville?->id,
             'site_id' => $site?->id,
+            // On n'abaisse jamais un fondateur existant : le drapeau ne fait que monter.
+            'est_fondateur' => $fondateur || $utilisateur->est_fondateur,
+            'habilitations' => $habilitations ?? $utilisateur->habilitations,
         ])->save();
 
         // syncRoles plutôt qu'assignRole : un compte dont le rôle a changé en cours de
