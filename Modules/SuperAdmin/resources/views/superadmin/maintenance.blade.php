@@ -1,24 +1,52 @@
 <?php
 
+use App\Models\User;
+use Modules\Noyau\Entreprises\Actions\PurgerDonneesEntreprise;
+use Modules\Noyau\Entreprises\Actions\SupprimerEntreprise;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Site;
+use Modules\Noyau\Entreprises\Modeles\Ville;
 use Modules\Noyau\Exploitation\Modeles\Charge;
 use Modules\Noyau\Exploitation\Modeles\Devis;
 use Modules\Noyau\Exploitation\Modeles\Encaissement;
 use Modules\Noyau\Exploitation\Modeles\Facture;
 use Modules\Noyau\Exploitation\Modeles\Prospection;
-use Modules\Noyau\Entreprises\Actions\PurgerDonneesEntreprise;
-use Modules\Noyau\Entreprises\Modeles\Entreprise;
-use function Livewire\Volt\{state, computed};
+use function Livewire\Volt\{computed, state};
+
+/*
+|--------------------------------------------------------------------------
+| Maintenance : vider, ou effacer
+|--------------------------------------------------------------------------
+| Deux gestes de portée très différente, séparés à dessein.
+|
+| La purge vide les écritures et laisse l'entreprise debout : c'est ce qu'on
+| fait après une période d'essai, quand la structure est bonne mais que les
+| chiffres ne le sont pas.
+|
+| La suppression, elle, ne laisse rien. Les deux ont leur propre confirmation
+| par le nom, et leur propre bouton : un seul formulaire pour les deux aurait
+| tôt ou tard fait effacer une entreprise qu'on voulait seulement vider.
+*/
 
 state([
     'entrepriseId' => '',
     'purgerCommerciaux' => false,
+    'purgerAcces' => false,
     'confirmation' => '',
     'resultat' => null,
+
+    // Suppression définitive : son propre identifiant et sa propre confirmation,
+    // pour qu'aucun champ ne soit partagé avec la purge.
+    'suppressionId' => '',
+    'confirmationSuppression' => '',
+    'resultatSuppression' => null,
 ]);
 
 $entreprises = computed(fn () => Entreprise::orderBy('nom')->get());
 
 $cible = computed(fn () => $this->entrepriseId ? Entreprise::find($this->entrepriseId) : null);
+
+$cibleSuppression = computed(fn () => $this->suppressionId ? Entreprise::find($this->suppressionId) : null);
 
 $volumes = computed(function () {
     if (! $this->entrepriseId) {
@@ -36,6 +64,26 @@ $volumes = computed(function () {
     ];
 });
 
+/** Ce que la suppression emporterait : on le montre avant, pas après. */
+$portee = computed(function () {
+    if (! $this->suppressionId) {
+        return null;
+    }
+
+    $id = $this->suppressionId;
+
+    return [
+        'Villes' => Ville::withoutGlobalScopes()->where('entreprise_id', $id)->count(),
+        'Lieux' => Site::withoutGlobalScopes()->where('entreprise_id', $id)->count(),
+        'Accès' => User::withoutGlobalScopes()->where('entreprise_id', $id)->count(),
+        'Écritures' => Prospection::withoutGlobalScopes()->where('entreprise_id', $id)->count()
+            + Devis::withoutGlobalScopes()->where('entreprise_id', $id)->count()
+            + Facture::withoutGlobalScopes()->where('entreprise_id', $id)->count()
+            + Encaissement::withoutGlobalScopes()->where('entreprise_id', $id)->count()
+            + Charge::withoutGlobalScopes()->where('entreprise_id', $id)->count(),
+    ];
+});
+
 $purger = function (PurgerDonneesEntreprise $action) {
     $this->validate([
         'entrepriseId' => ['required', 'exists:entreprises,id'],
@@ -48,16 +96,52 @@ $purger = function (PurgerDonneesEntreprise $action) {
         return;
     }
 
-    $this->resultat = $action->executer($this->cible, $this->purgerCommerciaux);
+    $this->resultat = $action->executer($this->cible, $this->purgerCommerciaux, $this->purgerAcces);
 
     activity()
         ->causedBy(auth()->user())
         ->performedOn($this->cible)
         ->withProperties($this->resultat)
-        ->log('Purge des données d\'exploitation');
+        ->log("Purge des données d'exploitation");
 
-    $this->reset(['confirmation', 'purgerCommerciaux']);
+    $this->reset(['confirmation', 'purgerCommerciaux', 'purgerAcces']);
     unset($this->volumes);
+};
+
+$supprimer = function (SupprimerEntreprise $action) {
+    $this->validate([
+        'suppressionId' => ['required', 'exists:entreprises,id'],
+    ], [], ['suppressionId' => 'entreprise']);
+
+    $entreprise = $this->cibleSuppression;
+
+    if (trim($this->confirmationSuppression) !== $entreprise->nom) {
+        $this->addError('confirmationSuppression', "Saisissez exactement « {$entreprise->nom} » pour confirmer la suppression.");
+
+        return;
+    }
+
+    // Personne ne se supprime le sol sous les pieds : un super administrateur
+    // rattaché à cette entreprise perdrait sa propre session en cours de route.
+    if (auth()->user()->entreprise_id === $entreprise->id) {
+        $this->addError('confirmationSuppression', "Vous appartenez à cette entreprise : vous ne pouvez pas la supprimer.");
+
+        return;
+    }
+
+    $nom = $entreprise->nom;
+
+    // Le journal est écrit avant : la ligne de l'entreprise ne sera plus là après,
+    // et une trace qui disparaît avec son sujet ne prouve plus rien.
+    activity()
+        ->causedBy(auth()->user())
+        ->withProperties(['entreprise' => $nom, 'id' => $entreprise->id, 'portee' => $this->portee])
+        ->log("Suppression définitive de l'entreprise « $nom »");
+
+    $this->resultatSuppression = ['nom' => $nom, 'bilan' => $action->executer($entreprise)];
+
+    $this->reset(['suppressionId', 'confirmationSuppression']);
+    unset($this->entreprises, $this->portee, $this->volumes);
 };
 
 ?>
@@ -67,8 +151,7 @@ $purger = function (PurgerDonneesEntreprise $action) {
         <div class="encart encart-alerte">
             <b>Action irréversible.</b> Les écritures d'exploitation (prospections, devis, factures,
             encaissements, charges, saisies journalières) de l'entreprise choisie seront définitivement
-            supprimées, et la numérotation repartira à zéro. Les comptes, les sites et la fiche entreprise
-            sont conservés.
+            supprimées, et la numérotation repartira à zéro. Les lieux et la fiche entreprise sont conservés.
         </div>
 
         <div class="bloc-saisie">
@@ -84,10 +167,23 @@ $purger = function (PurgerDonneesEntreprise $action) {
             </div>
 
             <div style="margin-top:16px;">
-                <label style="display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:14px;">
+                <label style="display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:10px;">
                     <input type="checkbox" wire:model="purgerCommerciaux">
                     Supprimer également les fiches commerciales (les comptes utilisateurs sont conservés)
                 </label>
+
+                {{-- Le gérant est épargné à dessein : c'est lui qui recréera les autres.
+                     Une entreprise sans aucun accès ne se rouvre plus depuis l'application,
+                     il faudrait repasser ici pour chaque compte. --}}
+                <label style="display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:6px;">
+                    <input type="checkbox" wire:model="purgerAcces">
+                    Supprimer également <b>tous les accès sauf celui du gérant</b>
+                </label>
+                <p style="font-size:11.5px; color:#9A9DA5; margin:0 0 14px 26px;">
+                    Superviseurs, responsables de site, commerciaux et comptabilité sont effacés avec leurs
+                    fiches. Le gérant reste, pour pouvoir rouvrir les accès lui-même. Votre propre compte
+                    n'est jamais touché.
+                </p>
 
                 <label class="champ-libelle">
                     Pour confirmer, saisissez le nom exact de l'entreprise : <b>{{ $this->cible?->nom }}</b>
@@ -109,6 +205,53 @@ $purger = function (PurgerDonneesEntreprise $action) {
             <div class="encart encart-succes" style="margin-top:18px;">
                 <b>Purge effectuée.</b>
                 {{ collect($resultat)->map(fn ($n, $t) => "$t : $n")->implode(' · ') }}
+            </div>
+        @endif
+    </x-carte-section>
+
+    {{-- ------------------------------------------------ Suppression totale --}}
+    <x-carte-section titre="Supprimer définitivement une entreprise">
+        <div class="encart encart-alerte">
+            <b>Rien ne survit à cette action.</b> Supprimer une entreprise efface l'intégralité de ses
+            données : ses villes et ses lieux, toutes ses écritures, ses listes déroulantes, ses exercices,
+            ses conversations et ses notes — et <b>tous ses accès</b>, gérant compris. Les personnes
+            concernées ne pourront plus se connecter, et rien ne se récupère ensuite.
+            <br><br>
+            Pour ne vider que les chiffres en gardant l'organisation et les comptes, utilisez la purge
+            ci-dessus.
+        </div>
+
+        <div class="bloc-saisie">
+            <x-champ label="Entreprise à supprimer" model="suppressionId" type="select" live="true" width="280"
+                :options="collect(['' => '— Choisir une entreprise —'])->union($this->entreprises->pluck('nom', 'id'))" />
+        </div>
+
+        @if ($this->portee)
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin:18px 0;">
+                @foreach ($this->portee as $libelle => $nombre)
+                    <x-kpi-card :label="$libelle" :value="$nombre" :accent="$nombre > 0" />
+                @endforeach
+            </div>
+
+            <label class="champ-libelle">
+                Pour confirmer, saisissez le nom exact de l'entreprise : <b>{{ $this->cibleSuppression?->nom }}</b>
+            </label>
+            <input type="text" wire:model="confirmationSuppression" class="champ" style="max-width:420px;">
+            @error('confirmationSuppression') <span class="champ-erreur">{{ $message }}</span> @enderror
+
+            <div style="margin-top:16px;">
+                <button type="button" wire:click="supprimer"
+                    wire:confirm="Supprimer définitivement cette entreprise, ses données et tous ses accès ? Cette action ne se rattrape pas."
+                    class="bouton bouton-danger">
+                    Supprimer définitivement l'entreprise
+                </button>
+            </div>
+        @endif
+
+        @if ($resultatSuppression)
+            <div class="encart encart-succes" style="margin-top:18px;">
+                <b>« {{ $resultatSuppression['nom'] }} » supprimée.</b>
+                {{ collect($resultatSuppression['bilan'])->map(fn ($n, $t) => "$t : $n")->implode(' · ') }}
             </div>
         @endif
     </x-carte-section>

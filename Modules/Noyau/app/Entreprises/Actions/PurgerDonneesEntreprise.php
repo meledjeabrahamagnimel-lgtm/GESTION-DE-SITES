@@ -18,8 +18,11 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Purge des données d'exploitation d'une entreprise (jeux de test).
- * Réservé au Super Admin. Les comptes, les sites et la fiche entreprise sont conservés :
- * seules les écritures et les compteurs de numérotation sont remis à zéro.
+ *
+ * Réservé au Super Admin. Par défaut, les comptes, les lieux et la fiche entreprise
+ * sont conservés : seules les écritures et les compteurs de numérotation repartent à
+ * zéro. Deux options élargissent le geste, chacune explicitement demandée — effacer
+ * les fiches commerciales, et effacer les accès sauf ceux des gérants.
  */
 class PurgerDonneesEntreprise
 {
@@ -27,11 +30,15 @@ class PurgerDonneesEntreprise
     private const ROLES_COMMERCIAUX = ['responsable_ville', 'responsable_site', 'commercial'];
 
     /** @return array<string,int> nombre de lignes supprimées par table */
-    public function executer(Entreprise $entreprise, bool $purgerCommerciaux = false): array
+    public function executer(Entreprise $entreprise, bool $purgerCommerciaux = false, bool $purgerAcces = false): array
     {
-        return DB::transaction(function () use ($entreprise, $purgerCommerciaux) {
+        return DB::transaction(function () use ($entreprise, $purgerCommerciaux, $purgerAcces) {
             $id = $entreprise->id;
             $compte = [];
+
+            // Les informations libres pendent aux écritures : les laisser en place
+            // ferait des orphelines, rattachées à des lignes qui n'existent plus.
+            $compte['informations_libres'] = DB::table('donnees_libres')->where('entreprise_id', $id)->delete();
 
             // L'ordre suit les dépendances : encaissements -> factures -> devis -> prospections.
             $compte['encaissements'] = Encaissement::withoutGlobalScopes()->where('entreprise_id', $id)->delete();
@@ -51,12 +58,68 @@ class PurgerDonneesEntreprise
                 ->when(! $purgerCommerciaux, fn ($q) => $q->where('type', '!=', 'com'))
                 ->delete();
 
+            // Les accès partent avant que les fiches ne soient reconstituées, sinon on
+            // en recréerait pour des comptes qu'on s'apprête à supprimer.
+            if ($purgerAcces) {
+                $compte['acces'] = $this->supprimerLesAcces($entreprise);
+            }
+
             if ($purgerCommerciaux) {
                 $compte['commerciaux_recrees'] = $this->reconstituerCommerciaux($entreprise);
             }
 
             return $compte;
         });
+    }
+
+    /**
+     * Supprime les accès de l'entreprise, sauf ceux des gérants.
+     *
+     * Le gérant est épargné à dessein : c'est lui qui recréera les autres. Une
+     * entreprise sans aucun accès ne se rouvre plus depuis l'application — il
+     * faudrait repasser par le super administrateur pour chaque compte.
+     *
+     * Celui qui déclenche la purge est épargné lui aussi, même s'il n'est pas
+     * gérant : se supprimer soi-même en cours de route couperait la session et
+     * laisserait l'opération à mi-chemin.
+     *
+     * @return int nombre d'accès supprimés
+     */
+    private function supprimerLesAcces(Entreprise $entreprise): int
+    {
+        $comptes = User::where('entreprise_id', $entreprise->id)->get();
+        $roles = User::nomsRolesParUtilisateur($comptes->pluck('id'));
+
+        $aSupprimer = $comptes
+            ->reject(fn (User $u) => str_contains($roles[$u->id] ?? '', 'gerant'))
+            ->reject(fn (User $u) => $u->id === auth()->id())
+            ->pluck('id')
+            ->all();
+
+        if (empty($aSupprimer)) {
+            return 0;
+        }
+
+        // Les fiches commerciales de ces comptes partent avec eux : les laisser
+        // rattacherait des prospections à venir à des gens qui ne travaillent plus là.
+        Commercial::withoutGlobalScopes()->whereIn('user_id', $aSupprimer)->delete();
+
+        // Rien ne doit plus les désigner, sinon la suppression bute sur une clef.
+        DB::table('sites')->whereIn('responsable_id', $aSupprimer)->update(['responsable_id' => null]);
+        DB::table('villes')->whereIn('responsable_id', $aSupprimer)->update(['responsable_id' => null]);
+        DB::table('users')->whereIn('cree_par_id', $aSupprimer)->update(['cree_par_id' => null]);
+
+        DB::table('notifications_app')->whereIn('user_id', $aSupprimer)->delete();
+        DB::table('abonnements_push')->whereIn('user_id', $aSupprimer)->delete();
+        DB::table('compteurs_auteur')->whereIn('user_id', $aSupprimer)->delete();
+        DB::table('notes')->whereIn('user_id', $aSupprimer)->delete();
+        DB::table('dossiers_notes')->whereIn('user_id', $aSupprimer)->delete();
+
+        $morph = (new User)->getMorphClass();
+        DB::table('model_has_roles')->whereIn('model_id', $aSupprimer)->where('model_type', $morph)->delete();
+        DB::table('model_has_permissions')->whereIn('model_id', $aSupprimer)->where('model_type', $morph)->delete();
+
+        return User::whereIn('id', $aSupprimer)->delete();
     }
 
     /**
