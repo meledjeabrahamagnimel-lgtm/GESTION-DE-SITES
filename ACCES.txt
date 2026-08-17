@@ -1,0 +1,139 @@
+================================================================================
+                    L'ARTISAN AUTOMOBILE — GESTION DE SITES
+                          LISTE DES ACCES (14 comptes)
+================================================================================
+
+  Mot de passe de TOUS les comptes : password
+  Adresse de connexion             : https://gestionsites.dc-knowing.com/connexion
+
+  Toutes les adresses sont en @gmail.com (et non @gamil.com). Elles sont ecrites
+  ci-dessous exactement telles qu'il faut les saisir a la connexion.
+
+
+================================================================================
+ PLATEFORME
+================================================================================
+
++-----------------------------------+----------------------------+--------------------+
+| ADRESSE                           | ROLE                       | NOM                |
++-----------------------------------+----------------------------+--------------------+
+| superadmin@gmail.com              | Super administrateur       | Super Admin        |
+| support@gmail.com                 | Super admin secondaire     | Support Plateforme |
++-----------------------------------+----------------------------+--------------------+
+
+  support@gmail.com demande un changement de mot de passe des la premiere
+  connexion : c'est volontaire, il sert a montrer ce comportement.
+
+
+================================================================================
+ DIRECTION
+================================================================================
+
++-----------------------------------+----------------------------+------------------------+
+| ADRESSE                           | ROLE                       | NOM                    |
++-----------------------------------+----------------------------+------------------------+
+| gerant@gmail.com                  | Gerant — les 3 villes      | Jean-Baptiste Kouassi  |
++-----------------------------------+----------------------------+------------------------+
+
+  Le gerant consulte tout, mais ne saisit rien : aucun ecran de saisie chez lui.
+
+
+================================================================================
+ ABIDJAN — 2 sites
+================================================================================
+
++-----------------------------------+------------------------+-------------------+---------------------+
+| ADRESSE                           | ROLE                   | PERIMETRE         | NOM                 |
++-----------------------------------+------------------------+-------------------+---------------------+
+| superviseurabidjan@gmail.com      | Superviseur de ville   | Site 1 ET Site 2  | Marie-Claire Aya    |
+| responsableabidjansite1@gmail.com | Responsable de site    | Site 1 SEUL       | Sylvain Kouassi     |
+| responsableabidjansite2@gmail.com | Responsable de site    | Site 2 SEUL       | Estelle Kacou       |
+| commercialabidjan@gmail.com       | Commercial             | Toute la ville    | Koffi Yao           |
+| comptabiliteabidjan@gmail.com     | Comptabilite           | Toute la ville    | Fatou Diabate       |
++-----------------------------------+------------------------+-------------------+---------------------+
+
+
+================================================================================
+ BOUAKE — 1 site, confondu avec la ville
+================================================================================
+
++-----------------------------------+------------------------+---------------------+
+| ADRESSE                           | ROLE                   | NOM                 |
++-----------------------------------+------------------------+---------------------+
+| superviseurbouake@gmail.com       | Superviseur de ville   | Aminata Kone        |
+| commercialbouake@gmail.com        | Commercial             | Ibrahim Traore      |
+| comptabilitebouake@gmail.com      | Comptabilite           | Adama Coulibaly     |
++-----------------------------------+------------------------+---------------------+
+
+
+================================================================================
+ SAN PEDRO — 1 site, confondu avec la ville
+================================================================================
+
++-----------------------------------+------------------------+---------------------+
+| ADRESSE                           | ROLE                   | NOM                 |
++-----------------------------------+------------------------+---------------------+
+| superviseursanpedro@gmail.com     | Superviseur de ville   | Chantal Bamba       |
+| commercialsanpedro@gmail.com      | Commercial             | Paul Zadi           |
+| comptabilitesanpedro@gmail.com    | Comptabilite           | Serge Gnahore       |
++-----------------------------------+------------------------+---------------------+
+
+
+================================================================================
+ TROIS POINTS A RETENIR
+================================================================================
+
+1. LA COMPTABILITE COUVRE UNE VILLE, JAMAIS UN SITE
+   comptabiliteabidjan@gmail.com est rattache a la VILLE d'Abidjan, pas au
+   site 2. Une seule caisse par ville, quel que soit le nombre de lieux.
+   (L'ancien nom « comptabiliteabidjansite2 » n'existe plus.)
+
+2. LES RESPONSABLES SONT AUSSI DES COMMERCIAUX
+   Marie-Claire Aya, Sylvain Kouassi, Estelle Kacou, Aminata Kone et Chantal
+   Bamba figurent parmi les commerciaux, avec leurs propres objectifs : ils
+   prospectent eux aussi, et leur chiffre d'affaires doit leur etre
+   rattachable. Le « Client spontane » recueille les ventes sans commercial
+   nomme — une par ville.
+
+3. UN SITE EST UN LIEU, PAS UNE ACTIVITE
+   Chaque site pratique LES DEUX activites, Mecanique et Sinistre. Seule
+   Abidjan compte deux lieux ; Bouake et San Pedro en ont un, confondu avec
+   la ville.
+
+
+================================================================================
+ LE TEST LE PLUS PARLANT
+================================================================================
+
+  Connectez-vous successivement avec :
+
+      responsableabidjansite1@gmail.com
+      responsableabidjansite2@gmail.com
+
+  Leurs chiffres doivent DIFFERER, et leur somme doit EGALER ce que voit
+  superviseurabidjan@gmail.com.
+
+  C'est la preuve que le cloisonnement par site fonctionne : chacun ne voit
+  que son lieu, le superviseur voit les deux.
+
+
+================================================================================
+ AVANT LA MISE EN SERVICE REELLE
+================================================================================
+
+  AUCUN de ces comptes ne doit conserver le mot de passe « password ».
+
+  Pour les changer : se connecter en superadmin@gmail.com, aller dans
+  Acces, puis, sur la ligne de la personne, cliquer :
+
+      « Definir un mot de passe »  -> vous saisissez vous-meme le nouveau
+      « Generer »                  -> l'application en tire un au hasard
+
+  Dans les deux cas, la personne devra en choisir un autre a sa premiere
+  connexion, et l'operation apparait dans le Journal.
+
+
+--------------------------------------------------------------------------------
+  Les procedures d'installation, les donnees de demonstration et la
+  configuration du courriel sont dans ACCES_DE_TEST.txt.
+--------------------------------------------------------------------------------

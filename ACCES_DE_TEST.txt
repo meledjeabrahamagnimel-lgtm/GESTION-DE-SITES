@@ -11,48 +11,14 @@ sont ecrites ci-dessous exactement telles qu'il faut les saisir a la connexion.
 1. LES COMPTES
 ================================================================================
 
-PLATEFORME
---------------------------------------------------------------------------------
-superadmin@gmail.com                    Super Admin (gere l'application)
-support@gmail.com                       Super Admin secondaire (habilitations reduites)
+La liste complete des 14 acces, presentee en tableaux, est dans le fichier :
 
-DIRECTION
---------------------------------------------------------------------------------
-gerant@gmail.com                        Gerant — voit les 3 villes, ne saisit pas
+        ACCES.txt
 
-ABIDJAN (2 sites)
---------------------------------------------------------------------------------
-superviseurabidjan@gmail.com            Superviseur de ville — voit et saisit sur
-                                        Abidjan Site 1 ET Abidjan Site 2
-responsableabidjansite1@gmail.com       Responsable de site — voit et saisit
-                                        UNIQUEMENT sur Abidjan Site 1
-responsableabidjansite2@gmail.com       Responsable de site — voit et saisit
-                                        UNIQUEMENT sur Abidjan Site 2
-comptabiliteabidjan@gmail.com           Comptabilite — toute la ville d'Abidjan
-commercialabidjan@gmail.com             Commercial — prospecte pour Abidjan
+Elle y est tenue a jour a un seul endroit, pour eviter que deux listes finissent
+par se contredire.
 
-BOUAKE (1 site, confondu avec la ville)
---------------------------------------------------------------------------------
-superviseurbouake@gmail.com             Superviseur de ville
-comptabilitebouake@gmail.com            Comptabilite
-commercialbouake@gmail.com              Commercial
-
-SAN PEDRO (1 site, confondu avec la ville)
---------------------------------------------------------------------------------
-superviseursanpedro@gmail.com           Superviseur de ville
-comptabilitesanpedro@gmail.com          Comptabilite
-commercialsanpedro@gmail.com            Commercial
-
-
-DEUX PRECISIONS SUR CETTE LISTE
---------------------------------------------------------------------------------
-a) « comptabiliteabidjan » est rattache a la VILLE d'Abidjan, pas a un site.
-   La comptabilite couvre une ville entiere : une seule caisse par ville, quel que
-   soit le nombre de sites.
-
-b) Chacun des deux sites d'Abidjan a son propre responsable. Le superviseur de la
-   ville, lui, couvre les deux : c'est la difference a verifier en vous connectant
-   avec l'un puis l'autre.
+Rappel : mot de passe de tous les comptes = password
 
 
 ================================================================================
