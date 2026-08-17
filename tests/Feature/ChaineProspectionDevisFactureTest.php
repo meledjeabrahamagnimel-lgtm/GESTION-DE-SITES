@@ -109,6 +109,24 @@ class ChaineProspectionDevisFactureTest extends TestCase
         $this->assertFalse($prospection->devis_apres_passage, 'Un devis après passage sans passage serait incohérent.');
     }
 
+    public function test_le_tableau_unique_montre_tous_les_statuts(): void
+    {
+        $transmise = $this->prospectionTransmise();
+        $validee = $this->prospectionTransmise(['numero' => 'P-0002', 'statut_validation' => 'Validée']);
+        $refusee = $this->prospectionTransmise(['numero' => 'P-0003', 'statut_validation' => 'Refusée', 'motif_refus' => 'Doublon']);
+
+        $lignes = $this->ecran()->instance()->prospectionsDuJour;
+
+        // Un seul tableau : la ligne à valider, celle déjà validée et celle refusée
+        // s'y trouvent toutes — la refusée reste lisible avec son motif.
+        $this->assertTrue($lignes->contains('id', $transmise->id));
+        $this->assertTrue($lignes->contains('id', $validee->id));
+        $this->assertTrue($lignes->contains('id', $refusee->id));
+
+        // Les transmissions en tête : c'est là qu'une décision est attendue.
+        $this->assertSame($transmise->id, $lignes->first()->id);
+    }
+
     public function test_une_prospection_validee_change_de_tableau(): void
     {
         $prospection = $this->prospectionTransmise(['passage' => true, 'devis_apres_passage' => true]);
@@ -121,6 +139,30 @@ class ChaineProspectionDevisFactureTest extends TestCase
         $this->assertFalse($ecran->instance()->prospectionsATraiter->contains('id', $prospection->id));
         $this->assertTrue($ecran->instance()->prospectionsDuJour->contains('id', $prospection->id));
         $this->assertTrue($ecran->instance()->prospectionsAttenteDevis->contains('id', $prospection->id));
+    }
+
+    public function test_valider_une_prospection_avec_devis_ouvre_aussitot_le_devis(): void
+    {
+        $prospection = $this->prospectionTransmise(['passage' => true, 'devis_apres_passage' => true]);
+
+        $ecran = $this->ecran()->call('validerProspection', $prospection->id);
+
+        $brouillon = $ecran->instance()->devisBrouillon;
+        $this->assertCount(1, $brouillon, 'Le devis annonce doit s ouvrir sans avoir a le rechercher.');
+        $this->assertSame($prospection->id, $brouillon[0]['prospection_id']);
+        $this->assertSame($prospection->client, $brouillon[0]['client']);
+    }
+
+    public function test_valider_une_prospection_sans_devis_n_ouvre_rien(): void
+    {
+        // Toutes les visites ne débouchent pas sur un devis : sans la case cochée,
+        // la validation s'arrête là.
+        $prospection = $this->prospectionTransmise(['passage' => true, 'devis_apres_passage' => false]);
+
+        $ecran = $this->ecran()->call('validerProspection', $prospection->id);
+
+        $this->assertSame('Validée', $prospection->fresh()->statut_validation);
+        $this->assertEmpty($ecran->instance()->devisBrouillon);
     }
 
     public function test_un_devis_ne_se_valide_pas_sans_montant_retenu(): void
@@ -175,21 +217,21 @@ class ChaineProspectionDevisFactureTest extends TestCase
     {
         $devis = $this->devis(montant: 800_000);
 
-        $this->ecran()
+        $ecran = $this->ecran()
             ->call('changerStatutDevis', $devis->id, 'Validé')
             ->set('montantValidation', '750000')
             ->call('confirmerValidationDevis');
 
-        $ecran = $this->ecran();
-        $this->assertFalse($ecran->instance()->devisEnAttente->contains('id', $devis->id));
-        $this->assertTrue($ecran->instance()->devisValidesNonFactures->contains('id', $devis->id));
-
-        // La facturation reste un geste volontaire : on choisit le devis, puis on émet.
-        $ecran->set('factureSelection', [$devis->id => true])->call('genererBrouillonsFactures');
-
+        // Le devis validé ouvre aussitôt sa facture, au montant retenu : plus besoin
+        // d'aller le rechercher dans la liste des devis à facturer.
         $brouillon = $ecran->instance()->factureBrouillon;
         $this->assertCount(1, $brouillon);
+        $this->assertSame($devis->id, $brouillon[0]['devis_id']);
         $this->assertSame(750_000, (int) $brouillon[0]['montant'], 'La facture part du montant retenu, pas du montant proposé.');
+
+        $controle = $this->ecran();
+        $this->assertFalse($controle->instance()->devisEnAttente->contains('id', $devis->id));
+        $this->assertTrue($controle->instance()->devisValidesNonFactures->contains('id', $devis->id));
 
         $ecran->call('validerFactures');
 
@@ -219,6 +261,7 @@ class ChaineProspectionDevisFactureTest extends TestCase
             'commercial_id' => $this->commercial->id,
             'numero' => 'P-0001',
             'date' => $this->jour,
+            'motif_refus' => null,
             'client' => 'Client Chaîne',
             'localisation' => 'Zone 4',
             'moyen' => 'RDV',

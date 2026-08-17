@@ -15,12 +15,25 @@ use Illuminate\Support\Facades\Artisan;
 class InstallerDemo extends Command
 {
     protected $signature = 'demo:installer
-        {--fraiche : Vide et recrée toute la base avant d\'installer les données}';
+        {--fraiche : Vide et recrée toute la base avant d\'installer les données}
+        {--comptes : N\'aligne que les 14 accès, sans toucher aux écritures}';
 
     protected $description = 'Installe le jeu de données de démonstration (L\'Artisan Automobile)';
 
     public function handle(): int
     {
+        // Rattrapage seul : le serveur a déjà ses données, seuls les comptes ont divergé
+        // (adresse renommée, rôle changé, compte ajouté depuis l'installation).
+        if ($this->option('comptes')) {
+            $this->components->info('Alignement des accès sur la liste de référence…');
+            Artisan::call('db:seed', [
+                '--class' => ComptesDeTestSeeder::class,
+                '--force' => true,
+            ], $this->output);
+
+            return self::SUCCESS;
+        }
+
         if ($this->option('fraiche')) {
             if (! $this->option('no-interaction') && ! $this->confirm('Cette action EFFACE toutes les données existantes. Continuer ?', false)) {
                 $this->warn('Installation annulée.');

@@ -245,7 +245,16 @@ $validerProspection = function (int $id) {
 
     Prospection::whereIn('site_id', $this->siteIdsActifs)->aTraiter()->where('id', $id)
         ->update(['statut_validation' => 'Validée', 'motif_refus' => null]);
-    unset($this->prospectionsATraiter, $this->prospectionsDuJour);
+    unset($this->prospectionsATraiter, $this->prospectionsDuJour, $this->prospectionsAttenteDevis);
+
+    // Valider une prospection qui annonce un devis, c'est s'engager à l'établir : le
+    // brouillon s'ouvre donc aussitôt, prérempli. Sans « devis après passage », la
+    // validation s'arrête là — toutes les visites ne débouchent pas sur un devis.
+    $prospection = Prospection::whereIn('site_id', $this->siteIdsActifs)->find($id);
+
+    if ($prospection?->devis_apres_passage && ! $prospection->devis()->exists()) {
+        $this->devisBrouillon = $this->brouillonsDevisPour([$id]);
+    }
 };
 
 $refuserProspection = function (int $id) {
@@ -310,7 +319,23 @@ $validerToutesProspections = function () {
     unset($this->prospectionsATraiter, $this->prospectionsDuJour);
 };
 
-$prospectionsDuJour = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)->visibles()->whereDate('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
+/**
+ * Toutes les prospections de la journée, quel que soit leur statut — à valider,
+ * validées, refusées. Une refusée reste visible avec son motif : la faire disparaître
+ * empêcherait de comprendre pourquoi le compte du commercial ne tombe pas juste.
+ * Seuls les brouillons restent cachés : ils appartiennent encore au commercial, qui
+ * ne les a pas transmis.
+ */
+$prospectionsDuJour = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)
+    ->whereIn('statut_validation', ['Transmise', 'Validée', 'Refusée'])
+    ->whereDate('date', $this->date)
+    ->with(['commercial', 'donneesLibres'])
+    ->orderByDesc('id')->get()
+    // Les transmissions d'abord : c'est là qu'on attend une décision. Le tri se fait
+    // en mémoire — la journée tient en quelques lignes — plutôt qu'en SQL, dont la
+    // syntaxe de tri par valeur diffère d'un moteur à l'autre.
+    ->sortBy(fn ($p) => ['Transmise' => 0, 'Validée' => 1, 'Refusée' => 2][$p->statut_validation] ?? 3)
+    ->values());
 
 $prospectionsAttenteDevis = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)->where('statut_validation', 'Validée')->where('devis_apres_passage', true)->doesntHave('devis')->with('commercial')->orderBy('date')->get());
 
@@ -524,7 +549,19 @@ $genererBrouillonsDevis = function () {
         return;
     }
 
-    $this->devisBrouillon = Prospection::whereIn('site_id', $this->siteIdsActifs)->whereIn('id', $ids)->get()->map(fn ($p) => [
+    $this->devisBrouillon = $this->brouillonsDevisPour($ids);
+    $this->devisSelection = [];
+};
+
+/**
+ * Prépare les lignes de devis à partir de prospections. Extrait pour être appelé aussi
+ * bien depuis la sélection manuelle que depuis la validation d'une prospection, sans
+ * dupliquer la correspondance prospection → devis.
+ *
+ * @param  array<int, int>  $ids
+ */
+$brouillonsDevisPour = function (array $ids): array {
+    return Prospection::whereIn('site_id', $this->siteIdsActifs)->whereIn('id', $ids)->get()->map(fn ($p) => [
         'prospection_id' => $p->id,
         'prospection_numero' => $p->numero,
         'date_reception' => now()->toDateString(),
@@ -538,8 +575,6 @@ $genererBrouillonsDevis = function () {
         'activite' => $p->activite,
         'observations' => '',
     ])->values()->all();
-
-    $this->devisSelection = [];
 };
 
 $annulerBrouillonsDevis = function () {
@@ -656,6 +691,13 @@ $confirmerValidationDevis = function () {
 
     $this->annulerValidationDevis();
     unset($this->devisDuJour, $this->devisEnAttente, $this->devisValidesNonFactures);
+
+    // Un devis validé a vocation à être facturé : le brouillon de facture s'ouvre
+    // aussitôt, au montant retenu. Reste à choisir le type (FNE ou HT) et à émettre —
+    // c'est là que se décide le numéro, on ne l'attribue donc pas d'office.
+    if (! $devis->facture()->exists()) {
+        $this->factureBrouillon = $this->brouillonsFacturesPour([$devis->id]);
+    }
 };
 
 $annulerValidationDevis = function () {
@@ -737,7 +779,18 @@ $genererBrouillonsFactures = function () {
         return;
     }
 
-    $this->factureBrouillon = Devis::whereIn('site_id', $this->siteIdsActifs)->whereIn('id', $ids)->get()->map(fn ($d) => [
+    $this->factureBrouillon = $this->brouillonsFacturesPour($ids);
+    $this->factureSelection = [];
+};
+
+/**
+ * Prépare les lignes de facture à partir de devis. Le montant part de celui qui a été
+ * retenu à la validation, jamais de celui qui avait été proposé.
+ *
+ * @param  array<int, int>  $ids
+ */
+$brouillonsFacturesPour = function (array $ids): array {
+    return Devis::whereIn('site_id', $this->siteIdsActifs)->whereIn('id', $ids)->get()->map(fn ($d) => [
         'devis_id' => $d->id,
         'devis_numero' => $d->numero,
         'commercial_id' => $d->commercial_id,
@@ -747,8 +800,6 @@ $genererBrouillonsFactures = function () {
         'montant' => $d->montant_valide ?? $d->montant_devis,
         'observations' => '',
     ])->values()->all();
-
-    $this->factureSelection = [];
 };
 
 $annulerBrouillonsFactures = function () {
@@ -1033,130 +1084,26 @@ $ajouterCharge = function () {
         @error('exercice') <div class="encart encart-alerte" style="margin-bottom:16px;">{{ $message }}</div> @enderror
 
         <x-carte-section titre="Flux commercial" icone="commercial" couleur="var(--th-ink,#191B20)">
+            {{-- Un seul tableau pour toutes les prospections de la journée, quel que soit
+                 leur statut. Deux tableaux affichaient les mêmes lignes — les transmissions
+                 d'un côté, la journée de l'autre — et il fallait deviner où agir. --}}
+            <x-sous-titre n="1" t="Prospections" />
+
             @if ($this->prospectionsATraiter->isNotEmpty())
-                <x-sous-titre n="1" t="Prospections transmises par vos commerciaux" />
                 <p style="font-size:12.5px; font-weight:700; color:var(--th-bleu,#2563EB); margin:0 0 8px;">
                     {{ $this->prospectionsATraiter->count() }} prospection(s) en attente de votre validation.
                     <button type="button" wire:click="validerToutesProspections"
                         wire:confirm="Valider toutes les prospections transmises ?"
                         class="bouton bouton-petit" style="margin-left:10px;">Tout valider</button>
                 </p>
-                <div class="tableau-conteneur">
-                    <table class="tableau">
-                        <thead>
-                            <tr>
-                                <th>N°</th><th>Date</th><th>Commercial</th><th>Clients visités</th>
-                                <th>Localisation</th><th>Moyens</th><th>Activité</th>
-                                <th>Passage</th><th>Devis après passage</th><th>Observations</th>
-                                <th>Motif si refus</th><th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach ($this->prospectionsATraiter->forPage($pageProsATraiter, 7) as $p)
-                                @if ($editionProspectionId === $p->id)
-                                    {{-- Correction avant validation : mêmes champs que la saisie,
-                                         pour n'avoir jamais à refuser une prospection réelle
-                                         à cause d'une ligne mal remplie. --}}
-                                    <tr wire:key="a-traiter-edit-{{ $p->id }}" style="background:#FDF2F4;">
-                                        <td style="font-weight:700;">{{ $p->numero }}</td>
-                                        <td>{{ $p->date->format('d/m/Y') }}</td>
-                                        <td>
-                                            <select wire:model="editionProsCommercialId" class="champ">
-                                                @foreach ($this->commerciauxSelectables as $idCom => $nomCom)
-                                                    <option value="{{ $idCom }}">{{ $nomCom }}</option>
-                                                @endforeach
-                                            </select>
-                                        </td>
-                                        <td><input type="text" wire:model="editionProsClient" class="champ" style="min-width:130px;"></td>
-                                        <td><input type="text" wire:model="editionProsLocalisation" class="champ" style="min-width:110px;"></td>
-                                        <td>
-                                            <select wire:model="editionProsMoyen" class="champ">
-                                                @foreach ($this->optionsMoyenProspection as $valeur => $libelle)
-                                                    <option value="{{ $valeur }}">{{ $libelle }}</option>
-                                                @endforeach
-                                            </select>
-                                        </td>
-                                        <td>
-                                            <select wire:model="editionProsActivite" class="champ">
-                                                @foreach ($this->optionsActivite as $valeur => $libelle)
-                                                    <option value="{{ $valeur }}">{{ $libelle }}</option>
-                                                @endforeach
-                                            </select>
-                                        </td>
-                                        <td style="white-space:normal; min-width:130px;">
-                                            <label style="display:flex; align-items:center; gap:5px; font-size:13px;">
-                                                <input type="checkbox" wire:model.live="editionProsPassage"> Passage
-                                            </label>
-                                            @if ($editionProsPassage && ! $editionProsDevisApres)
-                                                <input type="date" wire:model="editionProsDatePassage" class="champ" style="margin-top:4px;">
-                                            @endif
-                                        </td>
-                                        <td style="white-space:normal; min-width:170px;">
-                                            <label style="display:flex; align-items:center; gap:5px; font-size:13px;">
-                                                <input type="checkbox" wire:model.live="editionProsDevisApres"> Devis
-                                            </label>
-                                            @if ($editionProsDevisApres)
-                                                <input type="date" wire:model.live="editionProsDateDevis" class="champ" style="margin-top:4px;">
-                                            @endif
-                                        </td>
-                                        <td style="white-space:normal; min-width:170px;">
-                                            <textarea wire:model="editionProsObs" rows="2" placeholder="Observations"
-                                                style="width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13px;"></textarea>
-                                        </td>
-                                        <td>—</td>
-                                        <td style="text-align:right; white-space:nowrap;">
-                                            <button type="button" wire:click="enregistrerEditionProspection"
-                                                class="bouton bouton-petit bouton-vert" style="margin-right:5px;">Enregistrer</button>
-                                            <button type="button" wire:click="annulerEditionProspection"
-                                                class="bouton bouton-petit bouton-secondaire">Annuler</button>
-                                        </td>
-                                    </tr>
-                                @else
-                                <tr wire:key="a-traiter-{{ $p->id }}">
-                                    <td style="font-weight:700;">{{ $p->numero }}</td>
-                                    <td>{{ $p->date->format('d/m/Y') }}</td>
-                                    <td>{{ $p->commercial->nom }}</td>
-                                    <td>{{ $p->client }}</td>
-                                    <td style="color:var(--th-gris,#6B6E76);">{{ $p->localisation ?? '—' }}</td>
-                                    <td>{{ $p->moyen }}</td>
-                                    <td>{{ $p->activite }}</td>
-                                    {{-- Cases directement cliquables : cocher un passage oublié ne doit pas
-                                         obliger à ouvrir le formulaire d'édition complet. --}}
-                                    <td style="text-align:center;">
-                                        <input type="checkbox" wire:click="basculerPassage({{ $p->id }})"
-                                            @checked($p->passage) style="width:16px; height:16px; cursor:pointer;"
-                                            title="Le commercial est-il passé sur site ?">
-                                    </td>
-                                    <td style="text-align:center;">
-                                        <input type="checkbox" wire:click="basculerDevisApres({{ $p->id }})"
-                                            @checked($p->devis_apres_passage) style="width:16px; height:16px; cursor:pointer;"
-                                            title="Un devis doit-il suivre ce passage ? Cocher marque aussi le passage.">
-                                    </td>
-                                    <td style="color:var(--th-gris,#6B6E76);">{{ $p->observations ?? '—' }}</td>
-                                    <td><input type="text" wire:model="motifRefus.{{ $p->id }}" class="champ" style="width:150px;" placeholder="Facultatif"></td>
-                                    <td style="text-align:right; white-space:nowrap;">
-                                        <button type="button" wire:click="modifierProspection({{ $p->id }})"
-                                            class="bouton bouton-petit bouton-secondaire" style="margin-right:5px;">Modifier</button>
-                                        <button type="button" wire:click="validerProspection({{ $p->id }})"
-                                            class="bouton bouton-petit bouton-vert" style="margin-right:5px;">Valider</button>
-                                        <button type="button" wire:click="refuserProspection({{ $p->id }})"
-                                            class="bouton bouton-petit bouton-secondaire">Refuser</button>
-                                    </td>
-                                </tr>
-                                @endif
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-                <x-pagination :page="$pageProsATraiter" :total="$this->prospectionsATraiter->count()" prop="pageProsATraiter" :par-page="7" />
             @endif
 
-            <x-sous-titre n="1" t="Prospections" />
             <div class="tableau-conteneur">
                 <table class="tableau">
                     <thead>
                         <tr>
                             <th>N°</th>
+                            <th>Statut</th>
                             <th>Clients visités</th>
                             <th>Localisation</th>
                             <th>Moyens</th>
@@ -1170,9 +1117,12 @@ $ajouterCharge = function () {
                     </thead>
                     <tbody>
                         @forelse ($this->prospectionsDuJour->forPage($pageProsDuJour, 7) as $p)
+                            @php $aTraiter = $p->statut_validation === 'Transmise'; @endphp
+
                             @if ($editionProspectionId === $p->id)
                                 <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); background:#FDF2F4;" wire:key="pros-edit-{{ $p->id }}">
                                     <td style="font-weight:700;">{{ $p->numero }}</td>
+                                    <td>—</td>
                                     <td><input type="text" wire:model="editionProsClient" class="champ" style="min-width:130px;"></td>
                                     <td><input type="text" wire:model="editionProsLocalisation" class="champ" style="min-width:110px;"></td>
                                     <td>
@@ -1184,8 +1134,8 @@ $ajouterCharge = function () {
                                     </td>
                                     <td>
                                         <select wire:model="editionProsCommercialId" class="champ">
-                                            @foreach ($this->commerciauxSelectables as $id => $nom)
-                                                <option value="{{ $id }}">{{ $nom }}</option>
+                                            @foreach ($this->commerciauxSelectables as $idCom => $nomCom)
+                                                <option value="{{ $idCom }}">{{ $nomCom }}</option>
                                             @endforeach
                                         </select>
                                     </td>
@@ -1213,7 +1163,7 @@ $ajouterCharge = function () {
                                             <span style="font-size:10.5px; color:#9A9DA5;">= date de passage</span>
                                         @endif
                                     </td>
-                                    <td style="white-space:normal; min-width:220px;">
+                                    <td style="white-space:normal; min-width:200px;">
                                         <textarea wire:model="editionProsObs" rows="2" placeholder="Observations"
                                             style="width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13px;"></textarea>
                                     </td>
@@ -1225,25 +1175,66 @@ $ajouterCharge = function () {
                             @else
                                 <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="pros-{{ $p->id }}">
                                     <td style="font-weight:700;">{{ $p->numero }}</td>
+                                    <td>
+                                        @if ($aTraiter)
+                                            <span class="pastille pastille-bleu">À valider</span>
+                                        @elseif ($p->statut_validation === 'Refusée')
+                                            <span class="pastille pastille-rouge" title="{{ $p->motif_refus }}">Refusée</span>
+                                        @else
+                                            <span class="pastille pastille-vert">Validée</span>
+                                        @endif
+                                    </td>
                                     <td>{{ $p->client }}</td>
                                     <td style="color:#6B6E76;">{{ $p->localisation ?? '—' }}</td>
                                     <td>{{ $p->moyen }}</td>
                                     <td>{{ $p->commercial->nom }}</td>
                                     <td>{{ $p->activite }}</td>
-                                    <td>{{ $p->passage ? '☑' : '☐' }} {{ $p->date_passage?->format('d/m/Y') }}</td>
-                                    <td>{{ $p->devis_apres_passage ? '☑' : '☐' }} {{ $p->date_devis?->format('d/m/Y') }}</td>
-                                    <td style="white-space:normal; min-width:220px;">
-                                        <x-saisie-libre :sujet="$p"
-                                            :ouvert="$libreSujetId === $p->id && $libreSujetType === get_class($p)" />
+
+                                    {{-- Tant que la ligne est à valider, les cases se cochent d'un clic :
+                                         corriger un passage oublié ne doit pas obliger à tout rouvrir.
+                                         Une fois validée, la ligne se fige et passe par « Modifier ». --}}
+                                    <td style="text-align:center;">
+                                        @if ($aTraiter)
+                                            <input type="checkbox" wire:click="basculerPassage({{ $p->id }})"
+                                                @checked($p->passage) style="width:16px; height:16px; cursor:pointer;"
+                                                title="Le commercial est-il passé sur site ?">
+                                        @else
+                                            {{ $p->passage ? '☑' : '☐' }} {{ $p->date_passage?->format('d/m/Y') }}
+                                        @endif
+                                    </td>
+                                    <td style="text-align:center;">
+                                        @if ($aTraiter)
+                                            <input type="checkbox" wire:click="basculerDevisApres({{ $p->id }})"
+                                                @checked($p->devis_apres_passage) style="width:16px; height:16px; cursor:pointer;"
+                                                title="Un devis doit-il suivre ? Cocher marque aussi le passage, et la validation ouvrira le devis.">
+                                        @else
+                                            {{ $p->devis_apres_passage ? '☑' : '☐' }} {{ $p->date_devis?->format('d/m/Y') }}
+                                        @endif
+                                    </td>
+
+                                    <td style="white-space:normal; min-width:200px;">
+                                        @if ($aTraiter)
+                                            <input type="text" wire:model="motifRefus.{{ $p->id }}" class="champ"
+                                                style="width:150px;" placeholder="Motif si refus">
+                                        @else
+                                            <x-saisie-libre :sujet="$p"
+                                                :ouvert="$libreSujetId === $p->id && $libreSujetType === get_class($p)" />
+                                        @endif
                                     </td>
                                     <td style="text-align:right; white-space:nowrap;">
                                         <a href="{{ route('prospection.voir', $p) }}" wire:navigate class="bouton bouton-petit bouton-secondaire" style="margin-right:5px;">Voir</a>
-                                        <button type="button" wire:click="modifierProspection({{ $p->id }})" class="bouton bouton-petit bouton-secondaire">Modifier</button>
+                                        <button type="button" wire:click="modifierProspection({{ $p->id }})" class="bouton bouton-petit bouton-secondaire" style="margin-right:5px;">Modifier</button>
+                                        @if ($aTraiter)
+                                            <button type="button" wire:click="validerProspection({{ $p->id }})"
+                                                class="bouton bouton-petit bouton-vert" style="margin-right:5px;">Valider</button>
+                                            <button type="button" wire:click="refuserProspection({{ $p->id }})"
+                                                class="bouton bouton-petit bouton-secondaire">Refuser</button>
+                                        @endif
                                     </td>
                                 </tr>
                             @endif
                         @empty
-                            <x-table-vide :colspan="10" texte="Aucune prospection saisie pour cette journée." />
+                            <x-table-vide :colspan="11" texte="Aucune prospection saisie pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>
@@ -1655,7 +1646,7 @@ $ajouterCharge = function () {
             </div>
         </x-carte-section>
 
-        <x-carte-section titre="Encaissements du jour" icone="encaissement" couleur="var(--th-bleu,#2563EB)">
+        <x-carte-section titre="Encaissements" icone="encaissement" couleur="var(--th-bleu,#2563EB)">
             <div class="tableau-conteneur">
                 <table class="tableau">
                     <thead>
@@ -1734,7 +1725,7 @@ $ajouterCharge = function () {
             </div>
         </x-carte-section>
 
-        <x-carte-section titre="Charges &amp; décaissements du jour" icone="charge" couleur="var(--th-accent,#C8102E)">
+        <x-carte-section titre="Charges &amp; décaissements" icone="charge" couleur="var(--th-accent,#C8102E)">
             <div class="tableau-conteneur">
                 <table class="tableau">
                     <thead>

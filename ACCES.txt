@@ -118,6 +118,64 @@
 
 
 ================================================================================
+ INSTALLER CES ACCES SUR LE SERVEUR
+================================================================================
+
+  Se placer dans le dossier de l'application, puis :
+
+      cd ~/GESTION-DE-SITES
+      git pull
+      composer install --no-dev --optimize-autoloader
+      php artisan migrate --force
+
+
+  CAS 1 — Les donnees sont bonnes, seuls les acces manquent ou sont faux
+  ------------------------------------------------------------------------
+  C'est le cas le plus frequent : le serveur a ete installe avant que la liste
+  ne change (adresse renommee, compte ajoute, role corrige).
+
+      php artisan demo:installer --comptes
+      php artisan optimize:clear
+
+  Cette commande NE TOUCHE A AUCUNE ECRITURE. Prospections, devis, factures,
+  encaissements et charges restent intacts. Elle se contente de :
+    - creer les comptes manquants ;
+    - renommer comptabiliteabidjansite2 en comptabiliteabidjan (l'historique du
+      compte est conserve, il n'est pas recree) ;
+    - remettre le bon role et le bon rattachement ville/site ;
+    - remettre le mot de passe « password » ;
+    - recreer les fiches commerciales et les « Client spontane » manquants.
+
+  Elle est rejouable autant de fois que voulu, sans jamais creer de doublon.
+
+
+  CAS 2 — Tout reinstaller, acces ET donnees de demonstration
+  ------------------------------------------------------------------------
+  ATTENTION : la commande suivante EFFACE TOUTE LA BASE avant de la recreer.
+  A n'utiliser que sur un serveur de test, JAMAIS sur des donnees reelles.
+
+      php artisan demo:installer --fraiche
+      php artisan optimize:clear
+
+  Vous obtenez alors les 14 acces ci-dessus ET environ 60 jours d'historique
+  pour les trois villes (prospections, devis, factures, encaissements, charges,
+  commentaires de saisie journaliere).
+
+
+  CAS 3 — La base est vide, on installe pour la premiere fois
+  ------------------------------------------------------------------------
+      php artisan demo:installer
+      php artisan optimize:clear
+
+
+  VERIFIER APRES COUP
+  ------------------------------------------------------------------------
+      php artisan tinker --execute="App\Models\User::orderBy('id')->pluck('email')->each(fn(\$e) => print(\$e.PHP_EOL));"
+
+  Vous devez lire les 14 adresses listees plus haut.
+
+
+================================================================================
  AVANT LA MISE EN SERVICE REELLE
 ================================================================================
 

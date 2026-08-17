@@ -58,26 +58,28 @@ class DemoCompletSeeder extends Seeder
 
     public function run(): void
     {
-        // 1. Plateforme et entreprise pilote, 2. écritures d'exploitation.
+        // 1. Plateforme et entreprise pilote, 2. écritures d'exploitation d'Abidjan,
+        // 3. les deux autres villes avec leur propre historique.
         $this->call([
             SuperAdminSeeder::class,
             EntrepriseArtisanAutomobileSeeder::class,
             DonneesOperationnellesSeeder::class,
+            VillesBouakeSanPedroSeeder::class,
         ]);
 
-        // 3. Saisies journalières : commentaires et véhicules restitués sans facture.
+        // 4. Saisies journalières : commentaires et véhicules restitués sans facture.
         $this->genererSaisiesJournalieres();
 
-        // 4. Messagerie, notifications, notes et Super Admin secondaire d'exemple.
+        // 5. Messagerie, notifications, notes et Super Admin secondaire d'exemple.
         $this->call(MessagerieEtNotesSeeder::class);
 
+        // 6. Dernier passage sur les comptes : les seeders ci-dessus s'arrêtent dès que
+        // l'entreprise existe, celui-ci rattrape ce qui a changé depuis l'installation.
+        $this->call(ComptesDeTestSeeder::class);
+
         $this->command?->info('Jeu de démonstration complet installé.');
-        $this->command?->info('Support (Super Admin secondaire) : support@plateforme.local / password');
-        $this->command?->info('Gérant      : direction@artisan-automobile.ci / password');
-        $this->command?->info('Responsable : david.k@artisan-automobile.ci / password');
-        $this->command?->info('Commercial  : k-aya@artisan-automobile.ci / password');
-        $this->command?->info('Super Admin : superadmin@plateforme.local / password');
-        $this->command?->info('Code entreprise (auto-inscription) : ART-2026CI');
+        $this->command?->info('La liste des 14 accès est dans ACCES.txt — mot de passe : password');
+        $this->command?->info("Code entreprise (auto-inscription) : ART-2026CI");
     }
 
     private function genererSaisiesJournalieres(): void
