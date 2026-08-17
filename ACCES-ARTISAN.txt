@@ -1,0 +1,205 @@
+================================================================================
+              L'ARTISAN AUTOMOBILE - ACCES A CREER (entreprise reelle)
+                        Document etabli le 17 aout 2026
+================================================================================
+
+Les adresses suivent toutes la meme regle, verifiee sur les onze noms fournis :
+
+        premiere lettre du NOM  .  prenom  @lartisanauto.com
+
+        y.ella      ->  YAO Ella
+        k.djeneba   ->  KONE Djeneba
+        m.yannick   ->  MINLIN Yannick
+
+C'est cette regle qui a permis de rapprocher chaque adresse de son titulaire.
+Trois lignes n'ont pas pu l'etre : elles sont signalees par (?) et regroupees
+en fin de document.
+
+
+--------------------------------------------------------------------------------
+1. DIRECTION
+--------------------------------------------------------------------------------
+
++---------------------+--------------------------------+--------------------+
+| Role dans l'appli   | Adresse                        | Nom et prenoms     |
++---------------------+--------------------------------+--------------------+
+| Gerant              | m.yannick@lartisanauto.com     | MINLIN Yannick     |
++---------------------+--------------------------------+--------------------+
+
+Perimetre : l'entreprise entiere. Aucune ville a choisir.
+
+
+--------------------------------------------------------------------------------
+2. SUPERVISEUR DE VILLE
+--------------------------------------------------------------------------------
+
++---------------------+--------------------------------+--------------------+
+| Ville               | Adresse                        | Nom et prenoms     |
++---------------------+--------------------------------+--------------------+
+| Abidjan             | k.desiree@lartisanauto.com     | (?) a confirmer    |
++---------------------+--------------------------------+--------------------+
+
+Le tableau source indique "Superviseur (Gerant)" ; vous avez precise qu'il
+s'agit du superviseur d'Abidjan. Bouake et San Pedro n'ont pas de superviseur :
+seul leur responsable de site y repond.
+
+
+--------------------------------------------------------------------------------
+3. RESPONSABLES DE SITE   (dans votre tableau : "Gestionnaire de site")
+--------------------------------------------------------------------------------
+
++---------------------+--------------------------------+--------------------+
+| Lieu                | Adresse                        | Nom et prenoms     |
++---------------------+--------------------------------+--------------------+
+| Abidjan - Site 1    | g.ange@lartisanauto.com        | GNANGBY Ange       |
+| Abidjan - Site 2    | k.djeneba@lartisanauto.com     | KONE Djeneba       |
+| Bouake              | k.david@lartisanauto.com       | KRAGBA David       |
+| San Pedro           | admin-sanpedro@lartisanauto.com| (?) GAIHO Rama     |
++---------------------+--------------------------------+--------------------+
+
+Le perimetre est un LIEU, pas une ville : c'est le seul role dans ce cas.
+
+
+--------------------------------------------------------------------------------
+4. COMMERCIAUX
+--------------------------------------------------------------------------------
+
++--------------------------------+----------------------------+-------------+
+| Adresse                        | Nom et prenoms             | Ville       |
++--------------------------------+----------------------------+-------------+
+| y.ella@lartisanauto.com        | YAO Ella                   | (?) a dire  |
+| k.karel@lartisanauto.com       | KRAGBE Karel               | (?) a dire  |
+| o.mariam@lartisanauto.com      | OUATTARA Taki Mariam       | (?) a dire  |
+| a.leaticia@lartisanauto.com    | AMAN Leaticia              | (?) a dire  |
+| a.vanessa@lartisanauto.com     | FINI-ADOU Vanessa          | (?) a dire  |
+| a.melina@lartisanauto.com      | AKOUE Melina               | (?) a dire  |
+| t.tou@lartisanauto.com         | TOU Tahirou                | (?) a dire  |
++--------------------------------+----------------------------+-------------+
+
+Votre tableau ne dit pas dans quelle ville travaille chacun. En l'absence de
+precision, mettez-les tous a Abidjan : le gerant peut ensuite en reaffecter
+a Bouake ou San Pedro depuis Parametres > Commerciaux, sans rien perdre.
+
+Deux remarques sur les noms :
+  - le tableau ecrit "ADOU VANESSA", la liste nominative "Vanessa FINI-ADOU".
+    J'ai retenu FINI-ADOU, qui est le nom complet ; corrigez si l'usage courant
+    dans la maison est ADOU.
+  - le tableau ecrit "OUATTARA TAKI MARIAM", la liste "Mariam Taki OUATTARA".
+    Meme personne, meme lecture.
+
+
+--------------------------------------------------------------------------------
+5. COMPTABILITE
+--------------------------------------------------------------------------------
+
++---------------------+--------------------------------+--------------------+
+| Ville               | Adresse                        | Nom et prenoms     |
++---------------------+--------------------------------+--------------------+
+| Abidjan             | comptabilite@lartisanauto.com  | (?) a confirmer    |
++---------------------+--------------------------------+--------------------+
+
+Adresse de fonction, sans nom dans la liste fournie. Si plusieurs personnes
+tiennent la caisse, mieux vaut un acces nominatif chacune : le code auteur
+porte sur chaque ligne saisie le nom de qui l'a saisie, et une adresse
+partagee rend cette trace inutile.
+
+
+================================================================================
+                        LES TROIS (?) A TRANCHER
+================================================================================
+
+  1. k.desiree@lartisanauto.com  -  Superviseur d'Abidjan
+     Sous la regle "premiere lettre du nom . prenom", il s'agit d'une personne
+     dont le nom commence par K et le prenom est Desiree. Aucun nom de votre
+     liste ne correspond : KRAGBA David, KONE Djeneba et KRAGBE Karel sont deja
+     places ailleurs. Il manque donc ce nom.
+
+  2. admin-sanpedro@lartisanauto.com  -  Responsable de San Pedro
+     Adresse de fonction, hors regle. Le seul nom de votre liste qui reste sans
+     adresse est Rama GAIHO : c'est vraisemblablement cette personne, mais je
+     n'en ai pas la preuve. A confirmer avant activation.
+
+  3. comptabilite@lartisanauto.com  -  Comptabilite
+     Adresse de fonction, aucun nom fourni.
+
+Ces noms comptent : ils forment le code auteur inscrit sur chaque ligne saisie
+(ville - role - initiales - rang). Une fois l'acces ouvert et des saisies
+faites, corriger le nom ne corrige pas les codes deja poses.
+
+
+================================================================================
+                        UNE ADRESSE SANS ROLE
+================================================================================
+
+  receptionmecanique@lartisanauto.com  -  "Reception Mecanique"
+
+Elle figure dans votre liste nominative mais dans aucune ligne du tableau des
+roles. Je ne lui ai donc creee aucun acces. Dites-moi si elle doit en avoir un,
+et lequel.
+
+
+================================================================================
+                        COMMENT LES CREER
+================================================================================
+
+Deux chemins, au choix.
+
+--- A. A la main, depuis l'application -----------------------------------------
+
+    Super Admin  >  Acces  >  Creer un acces
+
+    Pour chaque ligne ci-dessus :
+      1. Entreprise ......... L'Artisan Automobile   (PAS celle marquee "Test")
+      2. Role ............... l'onglet correspondant
+      3. Nom et prenoms ..... colonne "Nom et prenoms"
+      4. Adresse e-mail ..... colonne "Adresse"
+      5. Telephone .......... facultatif
+      6. Mot de passe ....... n'importe lequel, 8 caracteres minimum.
+                              Il ne servira pas : le titulaire choisira le sien
+                              par le lien du courriel d'accueil.
+      7. Ville ou lieu ...... selon le role
+      8. Ouverture .......... INACTIF
+
+    Sur "Inactif", le compte est cree mais aucun courriel ne part et la
+    connexion est refusee. Le jour ou la personne doit commencer, bouton
+    "Activer" dans la liste des acces : c'est a ce moment-la que part son
+    courriel de bienvenue, une seule fois.
+
+--- B. En une commande, sur le serveur -----------------------------------------
+
+    php artisan artisan-reel:installer
+
+    Elle cree l'entreprise si besoin, ses trois villes, ses quatre lieux et les
+    quatorze acces ci-dessus, tous inactifs. Elle est rejouable : relancee, elle
+    ne duplique rien et ne touche a aucune ecriture.
+
+    Les noms marques (?) y figurent tels quels ; corrigez-les ensuite par le
+    bouton "Modifier" de la liste des acces, avant d'activer.
+
+
+================================================================================
+                        STRUCTURE ATTENDUE
+================================================================================
+
+    Abidjan  (ABJ)  --  Abidjan - Site 1   (ABJ-1)
+                    \-  Abidjan - Site 2   (ABJ-2)
+    Bouake   (BOU)  --  Bouake             (BOU)
+    San Pedro(SPD)  --  San Pedro          (SPD)
+
+Un lieu accueille les DEUX activites, Mecanique et Sinistre : elles se
+saisissent ligne par ligne, ce n'est pas le lieu qui les porte.
+
+
+================================================================================
+                        A NE PAS CONFONDRE
+================================================================================
+
+  L'Artisan Automobile ............ la vraie exploitation, ces acces-ci
+  L'Artisan Automobile - Test ..... la demonstration, ses 568 prospections
+
+Les deux ne communiquent pas : chaque ecriture porte son entreprise et un
+filtre s'applique a toute requete. Un gerant de l'une ne voit rien de l'autre.
+Verifiez seulement de choisir la bonne dans la liste deroulante au moment de
+creer un acces.
+
+================================================================================

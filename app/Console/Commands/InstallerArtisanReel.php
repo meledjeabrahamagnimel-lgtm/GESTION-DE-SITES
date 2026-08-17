@@ -89,7 +89,9 @@ class InstallerArtisanReel extends Command
         ['email' => 'k.karel@lartisanauto.com', 'nom' => 'KRAGBE Karel', 'role' => 'commercial', 'ville' => 'ABJ'],
         ['email' => 'o.mariam@lartisanauto.com', 'nom' => 'OUATTARA Taki Mariam', 'role' => 'commercial', 'ville' => 'ABJ'],
         ['email' => 'a.leaticia@lartisanauto.com', 'nom' => 'AMAN Leaticia', 'role' => 'commercial', 'ville' => 'ABJ'],
-        ['email' => 'a.vanessa@lartisanauto.com', 'nom' => 'ADOU Vanessa', 'role' => 'commercial', 'ville' => 'ABJ'],
+        // Le tableau des rôles écrit « ADOU Vanessa », la liste nominative
+        // « Vanessa FINI-ADOU » : on retient le nom complet.
+        ['email' => 'a.vanessa@lartisanauto.com', 'nom' => 'FINI-ADOU Vanessa', 'role' => 'commercial', 'ville' => 'ABJ'],
         ['email' => 'a.melina@lartisanauto.com', 'nom' => 'AKOUE Mélina', 'role' => 'commercial', 'ville' => 'ABJ'],
         ['email' => 't.tou@lartisanauto.com', 'nom' => 'TOU Tahirou', 'role' => 'commercial', 'ville' => 'ABJ'],
     ];
