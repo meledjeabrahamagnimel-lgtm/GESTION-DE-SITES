@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use Database\Seeders\ComptesDeTestSeeder;
 use Database\Seeders\DemoCompletSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;

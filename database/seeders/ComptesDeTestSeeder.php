@@ -10,6 +10,7 @@ use Modules\Noyau\Exploitation\Modeles\CompteurDocument;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -50,6 +51,14 @@ class ComptesDeTestSeeder extends Seeder
         }
 
         app(PermissionRegistrar::class)->setPermissionsTeamId($entreprise->id);
+
+        // Le rôle plateforme n'appartient à aucune entreprise : il vit dans l'équipe
+        // conventionnelle 0. On s'assure qu'il existe avant d'y rattacher quiconque.
+        Role::firstOrCreate([
+            'name' => 'super_admin',
+            'guard_name' => 'web',
+            'entreprise_id' => SuperAdminSeeder::EQUIPE_PLATEFORME,
+        ]);
 
         $this->renommerLesAnciennesAdresses();
 
