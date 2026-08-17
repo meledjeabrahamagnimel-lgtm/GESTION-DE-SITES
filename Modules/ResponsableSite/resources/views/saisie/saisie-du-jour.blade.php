@@ -376,6 +376,17 @@ $facturesAvecReste = computed(fn () => Facture::whereIn('site_id', $this->siteId
 
 $chargesDuJour = computed(fn () => Charge::whereIn('site_id', $this->siteIdsActifs)->whereDate('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
 
+/**
+ * Les numéros que porteront les factures en cours de saisie.
+ *
+ * Simple aperçu : le compteur n'est pas touché ici, il ne l'est qu'à la validation.
+ * Réserver un numéro pour une facture qu'on renonce ensuite à établir creuserait un
+ * trou dans la séquence — ce qu'une facturation ne pardonne pas.
+ */
+$numerosFacturePrevus = computed(fn () => GenerateurNumero::apercus(
+    auth()->user()->entreprise_id, 'nfa', count($this->factureBrouillon),
+));
+
 $clientsConnus = computed(function () {
     return Prospection::whereIn('site_id', $this->siteIdsActifs)->latest('id')->limit(200)->pluck('client')
         ->merge(Devis::whereIn('site_id', $this->siteIdsActifs)->latest('id')->limit(200)->pluck('client'))
@@ -1428,7 +1439,7 @@ $ajouterCharge = function () {
                         <p style="font-size:12.5px; font-weight:700; margin:0 0 8px;">Devis saisi directement — sans prospection d'origine :</p>
                         <div class="bloc-saisie">
                             <x-champ label="Client" model="devLibreClient" />
-                            <x-champ label="Commercial" model="devLibreCommercialId" type="select" :options="$this->commerciauxSelectables" width="170" />
+                            <x-champ label="Commercial" model="devLibreCommercialId" type="select" :options="$this->commerciauxSelectables" width="170" vide="— Choisir" />
                             <x-champ label="Activité" model="devLibreActivite" type="select" :options="$this->optionsActivite" width="140" />
                             <x-champ label="Date de réception" model="devLibreDateReception" type="date" width="150" />
                             <x-champ label="N° fiche de réception" model="devLibreFiche" width="140" />
@@ -1590,9 +1601,17 @@ $ajouterCharge = function () {
                             <x-champ label="Commercial" model="factureBrouillon.{{ $i }}.commercial_id" type="select" :options="$this->commerciauxSelectables" width="160" />
                             <x-champ label="Clients" model="factureBrouillon.{{ $i }}.client" />
                             <x-champ label="Type" model="factureBrouillon.{{ $i }}.type" type="select" :options="['FNE' => 'FNE', 'HT' => 'HT']" width="90" />
-                            <div style="display:flex; flex-direction:column; gap:4px;">
+                            {{-- Le numéro se voit avant d'enregistrer, dans un champ grisé :
+                                 il n'est pas saisissable, mais on doit pouvoir le lire pour
+                                 l'annoncer au client ou le noter sur un bon. Il n'est pas
+                                 réservé pour autant — réserver puis abandonner laisserait un
+                                 trou dans la séquence. --}}
+                            <div style="display:flex; flex-direction:column; gap:4px; width:170px;">
                                 <label style="font-size:12.5px; font-weight:600; color:#4B4E55;">N° de facture</label>
-                                <span style="padding:8px 10px; color:#9A9DA5; font-style:italic;">généré automatiquement</span>
+                                <input type="text" class="champ" disabled
+                                    value="{{ $this->numerosFacturePrevus[$i] ?? '' }}"
+                                    style="background:#F1EFE9; color:#6B6E76; font-weight:700;">
+                                <span style="font-size:11px; color:#9A9DA5;">généré automatiquement</span>
                             </div>
                             <x-champ label="Activité" model="factureBrouillon.{{ $i }}.activite" type="select" :options="['Mécanique' => 'Mécanique', 'Sinistre' => 'Sinistre']" width="140" />
                             <x-champ label="Montant de la facture" model="factureBrouillon.{{ $i }}.montant" type="number" width="140" />
@@ -1624,7 +1643,7 @@ $ajouterCharge = function () {
                         <p style="font-size:12.5px; font-weight:700; margin:0 0 8px;">Facture saisie directement — indiquer le N° de devis s'il existe :</p>
                         <div class="bloc-saisie">
                             <x-champ label="Client" model="facLibreClient" />
-                            <x-champ label="Commercial" model="facLibreCommercialId" type="select" :options="$this->commerciauxSelectables" width="170" />
+                            <x-champ label="Commercial" model="facLibreCommercialId" type="select" :options="$this->commerciauxSelectables" width="170" vide="— Choisir" />
                             <x-champ label="Activité" model="facLibreActivite" type="select" :options="$this->optionsActivite" width="140" />
                             <x-champ label="Type" model="facLibreType" type="select" :options="['FNE' => 'FNE', 'HT' => 'HT']" width="90" />
                             <x-champ label="N° de facture (vide = généré)" model="facLibreNumero" width="170" />
@@ -1736,7 +1755,7 @@ $ajouterCharge = function () {
             <div class="bloc-saisie">
                 <x-champ label="Type d'encaissement" model="encType" type="select" live="true" :options="$this->optionsTypeEncaissement" width="140" />
                 @if ($encType === 'Client')
-                    <x-champ label="Facture à encaisser" model="encFactureId" type="select" width="260"
+                    <x-champ label="Facture à encaisser" model="encFactureId" type="select" width="260" vide="— Choisir une facture"
                         :options="$this->facturesAvecReste->mapWithKeys(fn ($f) => [$f->id => $f->n_facture.' — '.$f->client.' — reste '.ae($f->resteAEncaisser())])" />
                 @endif
                 <x-champ label="Moyens" model="encMoyen" type="select" :options="$this->optionsMoyenPaiement" width="150" />

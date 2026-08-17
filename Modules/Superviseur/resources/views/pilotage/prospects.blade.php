@@ -149,7 +149,7 @@ $graphique = computed(function () {
     ];
 });
 
-$detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'site'])->latest('date')->latest('id')->get());
+$detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'site', 'devis'])->latest('date')->latest('id')->get());
 
 ?>
 
@@ -227,6 +227,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                         @endif
                         <th>Passage</th>
                         <th>Devis après passage</th>
+                        <th>Suite donnée</th>
                         <th>Observations</th>
                     </tr>
                 </thead>
@@ -244,10 +245,28 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                             @endif
                             <td>{{ $ligne->passage ? '✓' : '—' }}</td>
                             <td>{{ $ligne->devis_apres_passage ? '✓' : '—' }}</td>
+
+                            {{-- Toutes les prospections ne débouchent pas sur un devis, et c'est
+                                 normal : une visite reste une visite. Ce badge le dit, pour qu'on
+                                 ne cherche pas un devis là où il n'en a jamais été annoncé. --}}
+                            <td style="white-space:nowrap;">
+                                @if ($ligne->statut_validation === 'Refusée')
+                                    <span class="pastille pastille-rouge" title="{{ $ligne->motif_refus }}">Refusée</span>
+                                @elseif ($ligne->statut_validation !== 'Validée')
+                                    <span class="pastille pastille-bleu">{{ $ligne->statut_validation }}</span>
+                                @elseif (! $ligne->devis_apres_passage)
+                                    <span class="pastille pastille-gris">Prospection seule</span>
+                                @elseif ($ligne->devis)
+                                    <span class="pastille pastille-vert">Devis {{ $ligne->devis->numero }}</span>
+                                @else
+                                    <span class="pastille pastille-ambre">Devis attendu</span>
+                                @endif
+                            </td>
+
                             <td style="color:#6B6E76;">{{ $ligne->observations ?? '—' }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="count($this->idsSites) > 1 ? 10 : 9" texte="Aucune prospection enregistrée sur cette période." />
+                        <x-table-vide :colspan="count($this->idsSites) > 1 ? 11 : 10" texte="Aucune prospection enregistrée sur cette période." />
                     @endforelse
                 </tbody>
             </table>

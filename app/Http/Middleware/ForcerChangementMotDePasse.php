@@ -23,6 +23,10 @@ class ForcerChangementMotDePasse
             && $utilisateur->doit_changer_mot_de_passe
             && $request->isMethod('GET')
             && ! $request->routeIs('mot-de-passe.modifier')
+            // Le lien signé du courriel d'accueil mène ici : c'est déjà un écran de
+            // choix de mot de passe, le renvoyer vers l'autre ferait réclamer un mot
+            // de passe actuel que le titulaire n'a précisément pas encore.
+            && ! $request->routeIs('mot-de-passe.definir')
             && ! $request->routeIs('logout')
         ) {
             return redirect()->route('mot-de-passe.modifier');

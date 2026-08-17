@@ -316,6 +316,8 @@ header nav a.nav-actif:hover { filter: brightness(1.12); }
 .pastille-rouge { background: #FDF2F4; color: var(--th-accent); border: 1px solid #C8102E55; }
 .pastille-ambre { background: #FFFBEA; color: var(--th-ambre); border: 1px solid #D9770655; }
 .pastille-bleu { background: #EFF4FE; color: var(--th-bleu); border: 1px solid #2563EB55; }
+/* Un état qui n'appelle rien : ni un succès, ni une alerte, juste un fait. */
+.pastille-gris { background: #F1EFE9; color: var(--th-gris, #6B6E76); border: 1px solid #E2E0D8; }
 
 /* Bandeau d'alerte / de succès. */
 .encart { border-radius: 8px; padding: 11px 14px; font-size: 14px; margin-bottom: 14px; }

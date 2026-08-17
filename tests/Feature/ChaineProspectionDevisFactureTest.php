@@ -7,6 +7,7 @@ use Modules\Noyau\Entreprises\Modeles\Site;
 use Modules\Noyau\Entreprises\Modeles\Ville;
 use Modules\Noyau\Entreprises\Services\ProvisionneurEntreprise;
 use Modules\Noyau\Exploitation\Modeles\Commercial;
+use Modules\Noyau\Exploitation\Modeles\CompteurDocument;
 use Modules\Noyau\Exploitation\Modeles\Devis;
 use Modules\Noyau\Exploitation\Modeles\Facture;
 use Modules\Noyau\Exploitation\Modeles\Prospection;
@@ -322,6 +323,45 @@ class ChaineProspectionDevisFactureTest extends TestCase
     private function ecran()
     {
         return Volt::test('saisie.saisie-du-jour')->set('date', $this->jour);
+    }
+
+    public function test_la_liste_des_factures_a_encaisser_ne_preselectionne_rien(): void
+    {
+        Facture::create([
+            'entreprise_id' => $this->entreprise->id,
+            'site_id' => $this->site->id,
+            'commercial_id' => $this->commercial->id,
+            'numero' => 'F-0001', 'n_facture' => 'NF-0001', 'type' => 'FNE',
+            'date' => $this->jour, 'client' => 'Client Chaîne',
+            'activite' => 'Mécanique', 'montant' => 100_000,
+        ]);
+
+        // Sans ligne vide en tête, le navigateur affiche la première facture alors que
+        // le serveur ne détient rien : on obtenait « le champ facture est obligatoire »
+        // sur une facture qui paraissait pourtant choisie.
+        $this->ecran()->assertSeeHtml('<option value="">— Choisir une facture</option>');
+    }
+
+    public function test_le_numero_de_la_future_facture_est_lisible_avant_de_valider(): void
+    {
+        $devis = $this->devis(montant: 900_000, attributs: ['statut' => 'Validé', 'montant_valide' => 850_000]);
+
+        $ecran = $this->ecran()
+            ->set('factureSelection.'.$devis->id, true)
+            ->call('genererBrouillonsFactures');
+
+        // Le numéro se lit avant d'enregistrer — pour l'annoncer au client — mais le
+        // compteur n'est pas touché tant que la facturation n'est pas validée.
+        $ecran->assertSee('NF-0001');
+        $this->assertSame(
+            0,
+            (int) CompteurDocument::where('entreprise_id', $this->entreprise->id)->where('type', 'nfa')->value('dernier_numero'),
+            'Un numéro réservé puis abandonné creuserait un trou dans la séquence.'
+        );
+
+        $ecran->call('validerFactures');
+
+        $this->assertSame('NF-0001', Facture::firstOrFail()->n_facture, "L'aperçu annonçait bien le numéro définitif.");
     }
 
     private function prospectionTransmise(array $attributs = []): Prospection

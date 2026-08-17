@@ -9,6 +9,7 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\URL;
 
 /**
  * Courriel d'accueil envoyé au titulaire d'un accès nouvellement créé.
@@ -20,6 +21,9 @@ use Illuminate\Queue\SerializesModels;
 class BienvenueNouvelAcces extends Mailable
 {
     use Queueable, SerializesModels;
+
+    /** Au-delà, mieux vaut réouvrir un accès que laisser un lien dormir dans une boîte. */
+    private const VALIDITE_DU_LIEN_EN_JOURS = 7;
 
     /**
      * L'entreprise est passée explicitement plutôt que lue depuis l'utilisateur : le
@@ -46,12 +50,37 @@ class BienvenueNouvelAcces extends Mailable
             view: 'noyau::emails.bienvenue',
             with: [
                 'nom' => $this->utilisateur->name,
-                'lienConnexion' => route('connexion'),
+                'lienConnexion' => $this->lienPremiereConnexion(),
                 'cabinet' => config('cabinet'),
                 // Le logo est joint au message : une image appelée par URL reste blanche
                 // dans la plupart des messageries, qui bloquent les contenus distants.
                 'logo' => $this->entreprise->logoChemin(),
             ],
+        );
+    }
+
+    /**
+     * Le lien du courriel ne mène pas à la connexion mais à l'écran où l'on choisit
+     * son mot de passe : le titulaire n'en a pas encore, lui en demander un pour
+     * entrer n'aurait pas de sens.
+     *
+     * L'adresse est signée avec la clé de l'application — infalsifiable, on ne peut
+     * pas y glisser l'identifiant d'un autre compte — et périme au bout d'une
+     * semaine. Un accès qui n'a pas servi en sept jours mérite qu'on le renouvelle
+     * plutôt qu'il traîne, ouvert, dans une boîte aux lettres.
+     */
+    private function lienPremiereConnexion(): string
+    {
+        // Un compte dont le mot de passe est déjà choisi n'a plus rien à définir :
+        // on le renvoie simplement à la connexion.
+        if (! $this->utilisateur->doit_changer_mot_de_passe) {
+            return route('connexion');
+        }
+
+        return URL::temporarySignedRoute(
+            'mot-de-passe.definir',
+            now()->addDays(self::VALIDITE_DU_LIEN_EN_JOURS),
+            ['utilisateur' => $this->utilisateur->id],
         );
     }
 }

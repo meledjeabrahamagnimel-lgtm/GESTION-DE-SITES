@@ -58,9 +58,9 @@
                         </table>
 
                         <p style="margin:0 0 20px; font-size:14.5px; line-height:1.65;">
-                            Suivez le lien ci-dessous pour vous connecter. À votre <b>première connexion</b>,
-                            l'application vous demandera de <b>changer votre mot de passe</b> : choisissez-en
-                            un que vous seul connaissez.
+                            Suivez le lien ci-dessous pour <b>choisir votre mot de passe</b>. Il n'y en a pas
+                            encore : c'est vous qui le créez, et vous seul le connaîtrez. Vous serez ensuite
+                            invité à vous connecter avec.
                         </p>
 
                         <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;">
@@ -69,7 +69,7 @@
                                     <a href="{{ $lienConnexion }}"
                                         style="display:inline-block; padding:13px 30px; font-size:15px; font-weight:700;
                                                color:#FFFFFF; text-decoration:none; border-radius:7px;">
-                                        Me connecter
+                                        Choisir mon mot de passe
                                     </a>
                                 </td>
                             </tr>
@@ -81,8 +81,9 @@
                         </p>
 
                         <p style="margin:0 0 4px; font-size:12.5px; color:#6B6E76; line-height:1.6;">
-                            Pour votre sécurité, ce message ne contient pas votre mot de passe : il vous est
-                            remis séparément. Ne le communiquez à personne.
+                            Ce lien vous est personnel et reste valable <b>sept jours</b>. Il ne sert qu'une
+                            fois : une fois votre mot de passe choisi, il cesse de fonctionner. Ne le
+                            transmettez à personne, et ne communiquez jamais votre mot de passe.
                         </p>
                     </td>
                 </tr>

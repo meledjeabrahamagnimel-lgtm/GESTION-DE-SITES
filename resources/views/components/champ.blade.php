@@ -10,6 +10,7 @@
     'aide' => null,
     'liste' => null,
     'disabled' => false,
+    'vide' => null,
 ])
 
 @php
@@ -29,6 +30,13 @@
         </label>
         @if ($type === 'select')
             <select {{ $wire }}="{{ $model }}" class="champ" @if ($disabled) disabled @endif>
+                {{-- Sans cette ligne vide, un champ encore non renseigné affiche la
+                     première option alors que le serveur ne détient rien : le navigateur
+                     ne prévient pas d'un choix que personne n'a fait. On voyait donc
+                     « ce champ est obligatoire » sur une valeur qui semblait choisie. --}}
+                @if ($vide !== null)
+                    <option value="">{{ $vide }}</option>
+                @endif
                 @foreach ($options as $valeur => $libelle)
                     <option value="{{ $valeur }}">{{ $libelle }}</option>
                 @endforeach

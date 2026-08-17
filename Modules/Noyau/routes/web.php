@@ -19,6 +19,20 @@ Route::redirect('/', '/connexion');
 // Alias francophone de la route de connexion générée par Fortify (name: login).
 Route::get('/connexion', fn () => redirect()->route('login'))->name('connexion');
 
+/*
+ * Première connexion : le lien du courriel d'accueil mène ici, pas à la page de
+ * connexion. Le titulaire n'a pas encore de mot de passe — lui en réclamer un pour
+ * entrer, puis un autre pour en changer, était le parcours qu'il fallait défaire.
+ *
+ * L'adresse est signée avec la clé de l'application et vaut une semaine ; « signed »
+ * la vérifie avant même d'atteindre l'écran. Volontairement hors du groupe « guest » :
+ * quelqu'un déjà connecté sur un poste partagé doit pouvoir ouvrir son propre lien
+ * sans être renvoyé ailleurs sans explication.
+ */
+Route::middleware(['signed'])->group(function () {
+    Volt::route('/premiere-connexion/{utilisateur}', 'commun.definir-mot-de-passe')->name('mot-de-passe.definir');
+});
+
 Route::get('/auth/google', [GoogleAuthController::class, 'rediriger'])->name('auth.google');
 Route::get('/auth/callback', [GoogleAuthController::class, 'callback'])->name('auth.callback');
 
