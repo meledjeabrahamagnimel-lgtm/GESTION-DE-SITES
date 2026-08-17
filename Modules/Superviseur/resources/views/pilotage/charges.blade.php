@@ -108,7 +108,7 @@ $graphique = computed(function () {
     ];
 });
 
-$detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('date')->get());
+$detail = computed(fn () => (clone $this->requeteBase)->with('site')->latest('date')->latest('id')->get());
 
 ?>
 

@@ -371,6 +371,31 @@ $supprimer = function (int $id) {
     $this->message = 'Brouillon supprimé.';
 };
 
+/**
+ * Transmettre une seule ligne, depuis sa propre colonne Actions.
+ *
+ * Le commercial ne « valide » pas : il transmet. La validation appartient au
+ * responsable, qui arbitre. C'est pour lui le geste équivalent — la ligne quitte
+ * son brouillon et part à l'arbitrage.
+ */
+$transmettre = function (int $id) {
+    $nombre = Prospection::where('commercial_id', $this->commercial?->id ?? 0)
+        ->where('statut_validation', 'Brouillon')
+        ->where('id', $id)
+        ->update(['statut_validation' => 'Transmise', 'transmise_le' => now()]);
+
+    if ($nombre === 0) {
+        // Déjà transmise, ou pas à lui : rien à faire, et surtout aucune notification
+        // à envoyer pour un geste qui n'a rien changé.
+        return;
+    }
+
+    $this->prevenirLeResponsable(1);
+
+    unset($this->selection[$id]);
+    $this->message = 'Prospection transmise à votre responsable.';
+};
+
 $transmettreSelection = function () {
     $ids = $this->selectionnes;
 
@@ -576,15 +601,18 @@ $transmettreSelection = function () {
 
                                 {{-- Sur un brouillon, la case se coche d'un clic. Une fois transmise,
                                      la ligne se fige : elle ne doit pas changer sous les yeux du
-                                     responsable en train de l'arbitrer. --}}
+                                     responsable en train de l'arbitrer. Dans les deux cas la date
+                                     reste affichée sous la case : une coche sans date laisse croire
+                                     que la date n'a pas été enregistrée. --}}
                                 <td style="text-align:center;">
                                     @if ($brouillon)
                                         <input type="checkbox" wire:click="basculerPassage({{ $ligne->id }})"
                                             @checked($ligne->passage) style="width:16px; height:16px; cursor:pointer;"
                                             title="Êtes-vous passé sur site ?">
                                     @else
-                                        {{ $ligne->passage ? '☑' : '☐' }} {{ $ligne->date_passage?->format('d/m/Y') }}
+                                        {{ $ligne->passage ? '☑' : '☐' }}
                                     @endif
+                                    <x-date-sous-case :date="$ligne->date_passage" />
                                 </td>
                                 <td style="text-align:center;">
                                     @if ($brouillon)
@@ -592,8 +620,9 @@ $transmettreSelection = function () {
                                             @checked($ligne->devis_apres_passage) style="width:16px; height:16px; cursor:pointer;"
                                             title="Un devis doit-il suivre ? Cocher marque aussi le passage.">
                                     @else
-                                        {{ $ligne->devis_apres_passage ? '☑' : '☐' }} {{ $ligne->date_devis?->format('d/m/Y') }}
+                                        {{ $ligne->devis_apres_passage ? '☑' : '☐' }}
                                     @endif
+                                    <x-date-sous-case :date="$ligne->date_devis" />
                                 </td>
 
                                 <td style="color:var(--th-gris,#6B6E76);">{{ $ligne->observations ?? '—' }}</td>
@@ -609,6 +638,12 @@ $transmettreSelection = function () {
                                 </td>
                                 <td style="text-align:right; white-space:nowrap;">
                                     @if ($brouillon)
+                                        {{-- Transmettre une seule ligne sans passer par la sélection :
+                                             cocher puis remonter au bouton du haut faisait trois gestes
+                                             pour un brouillon isolé, ce qui est le cas courant. --}}
+                                        <button type="button" wire:click="transmettre({{ $ligne->id }})"
+                                            wire:confirm="Transmettre cette prospection à votre responsable ?"
+                                            class="bouton bouton-petit bouton-vert" style="margin-right:5px;">Transmettre</button>
                                         <button type="button" wire:click="modifier({{ $ligne->id }})"
                                             class="bouton bouton-secondaire bouton-petit" style="margin-right:5px;">Modifier</button>
                                         <button type="button" wire:click="supprimer({{ $ligne->id }})"

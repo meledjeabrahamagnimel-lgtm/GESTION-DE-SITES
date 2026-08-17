@@ -203,7 +203,7 @@ $dateLabel = computed(function () {
 $commerciauxSelectables = computed(fn () => Commercial::whereIn('ville_id', $this->sitesActifs->pluck('ville_id')->unique())->where('statut', 'Actif')->orderBy('numero')->pluck('nom', 'id'));
 
 $prospectionsATraiter = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)
-    ->aTraiter()->with('commercial')->orderBy('date')->get());
+    ->aTraiter()->with('commercial')->latest('date')->latest('id')->get());
 
 /**
  * Prévient les commerciaux concernés du sort réservé à leurs transmissions.
@@ -322,32 +322,23 @@ $validerToutesProspections = function () {
 };
 
 /**
- * L'en-cours des prospections : ce sur quoi il reste quelque chose à faire.
+ * Les prospections qui attendent votre décision — celles-là seulement.
  *
- *   - transmise, donc en attente de votre décision ;
- *   - validée en annonçant un devis, qui n'est pas encore établi.
- *
- * Une prospection refusée, ou validée sans suite attendue, quitte l'écran de saisie :
- * son histoire est finie, elle se consulte dans la page Prospects. Un écran de saisie
- * encombré de lignes closes fait perdre de vue celles qui attendent vraiment.
+ * Dès qu'une ligne est tranchée, validée comme refusée, elle quitte ce tableau :
+ * son sort est scellé, elle se consulte dans la page Prospects. Celle qui annonçait
+ * un devis n'est pas perdue de vue pour autant — elle réapparaît juste en dessous,
+ * dans « Devis à effectuer », qui est l'endroit où il reste quelque chose à en faire.
+ * Laisser une ligne dans deux tableaux à la fois oblige à deviner où agir.
  *
  * Aucun filtre sur la date : une transmission d'hier restée sans réponse doit sauter
  * aux yeux aujourd'hui, pas disparaître avec le changement de journée.
  */
 $prospectionsDuJour = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)
-    ->where(fn ($q) => $q
-        ->where('statut_validation', 'Transmise')
-        ->orWhere(fn ($r) => $r->where('statut_validation', 'Validée')
-            ->where('devis_apres_passage', true)->doesntHave('devis')))
+    ->where('statut_validation', 'Transmise')
     ->with(['commercial', 'donneesLibres'])
-    ->orderByDesc('id')->get()
-    // Les transmissions d'abord : c'est là qu'on attend une décision. Le tri se fait
-    // en mémoire — quelques lignes — plutôt qu'en SQL, dont la syntaxe de tri par
-    // valeur diffère d'un moteur à l'autre.
-    ->sortBy(fn ($p) => $p->statut_validation === 'Transmise' ? 0 : 1)
-    ->values());
+    ->latest('date')->latest('id')->get());
 
-$prospectionsAttenteDevis = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)->where('statut_validation', 'Validée')->where('devis_apres_passage', true)->doesntHave('devis')->with('commercial')->orderBy('date')->get());
+$prospectionsAttenteDevis = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)->where('statut_validation', 'Validée')->where('devis_apres_passage', true)->doesntHave('devis')->with('commercial')->latest('date')->latest('id')->get());
 
 /**
  * L'en-cours des devis : ceux dont le sort n'est pas scellé.
@@ -364,20 +355,24 @@ $devisDuJour = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)
         ->where('statut', 'En attente')
         ->orWhere(fn ($r) => $r->where('statut', 'Validé')->doesntHave('facture')))
     ->with('commercial')
-    ->orderByDesc('id')->get()
+    ->latest('date_emission')->latest('id')->get()
+    // Les devis sans réponse d'abord : c'est là qu'on attend une décision. Le tri se
+    // fait en mémoire — quelques lignes — plutôt qu'en SQL, dont la syntaxe de tri
+    // par valeur diffère d'un moteur à l'autre. Il est stable : à l'intérieur de
+    // chaque groupe, le plus récent reste en tête.
     ->sortBy(fn ($d) => $d->statut === 'En attente' ? 0 : 1)
     ->values());
 
-$devisEnAttente = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)->where('statut', 'En attente')->with('commercial')->orderBy('date_emission')->get());
+$devisEnAttente = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)->where('statut', 'En attente')->with('commercial')->latest('date_emission')->latest('id')->get());
 
-$devisValidesNonFactures = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)->where('statut', 'Validé')->doesntHave('facture')->with('commercial')->orderBy('date_emission')->get());
+$devisValidesNonFactures = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)->where('statut', 'Validé')->doesntHave('facture')->with('commercial')->latest('date_emission')->latest('id')->get());
 
 $facturesDuJour = computed(fn () => Facture::whereIn('site_id', $this->siteIdsActifs)->whereDate('date', $this->date)->with(['commercial', 'donneesLibres'])->orderByDesc('id')->get());
 
 $encaissementsDuJour = computed(fn () => Encaissement::whereIn('site_id', $this->siteIdsActifs)->whereDate('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
 
 /** Factures encore soldables sur les sites actifs : c'est la garde-fou anti-double-saisie avec le caissier. */
-$facturesAvecReste = computed(fn () => Facture::whereIn('site_id', $this->siteIdsActifs)->avecResteAEncaisser()->orderByDesc('date')->get());
+$facturesAvecReste = computed(fn () => Facture::whereIn('site_id', $this->siteIdsActifs)->avecResteAEncaisser()->latest('date')->latest('id')->get());
 
 $chargesDuJour = computed(fn () => Charge::whereIn('site_id', $this->siteIdsActifs)->whereDate('date', $this->date)->with('donneesLibres')->orderByDesc('id')->get());
 
@@ -1152,10 +1147,11 @@ $ajouterCharge = function () {
         @error('exercice') <div class="encart encart-alerte" style="margin-bottom:16px;">{{ $message }}</div> @enderror
 
         <x-carte-section titre="Flux commercial" icone="commercial" couleur="var(--th-ink,#191B20)">
-            {{-- Un seul tableau pour toutes les prospections de la journée, quel que soit
-                 leur statut. Deux tableaux affichaient les mêmes lignes — les transmissions
-                 d'un côté, la journée de l'autre — et il fallait deviner où agir. --}}
-            <x-sous-titre n="1" t="Prospections" />
+            {{-- Ce tableau ne montre que les prospections à arbitrer. Une ligne tranchée,
+                 validée comme refusée, s'en va aussitôt : celle qui annonçait un devis
+                 réapparaît en « Devis à effectuer » juste dessous, les autres se
+                 consultent dans la page Prospects. --}}
+            <x-sous-titre n="1" t="Prospections à valider" />
 
             @if ($this->prospectionsATraiter->isNotEmpty())
                 <p style="font-size:12.5px; font-weight:700; color:var(--th-bleu,#2563EB); margin:0 0 8px;">
@@ -1260,15 +1256,18 @@ $ajouterCharge = function () {
 
                                     {{-- Tant que la ligne est à valider, les cases se cochent d'un clic :
                                          corriger un passage oublié ne doit pas obliger à tout rouvrir.
-                                         Une fois validée, la ligne se fige et passe par « Modifier ». --}}
+                                         Une fois validée, la ligne se fige et passe par « Modifier ».
+                                         La date saisie par le commercial reste visible dans les deux
+                                         cas : c'est elle qui dit quand la visite a eu lieu. --}}
                                     <td style="text-align:center;">
                                         @if ($aTraiter)
                                             <input type="checkbox" wire:click="basculerPassage({{ $p->id }})"
                                                 @checked($p->passage) style="width:16px; height:16px; cursor:pointer;"
                                                 title="Le commercial est-il passé sur site ?">
                                         @else
-                                            {{ $p->passage ? '☑' : '☐' }} {{ $p->date_passage?->format('d/m/Y') }}
+                                            {{ $p->passage ? '☑' : '☐' }}
                                         @endif
+                                        <x-date-sous-case :date="$p->date_passage" />
                                     </td>
                                     <td style="text-align:center;">
                                         @if ($aTraiter)
@@ -1276,8 +1275,9 @@ $ajouterCharge = function () {
                                                 @checked($p->devis_apres_passage) style="width:16px; height:16px; cursor:pointer;"
                                                 title="Un devis doit-il suivre ? Cocher marque aussi le passage, et la validation ouvrira le devis.">
                                         @else
-                                            {{ $p->devis_apres_passage ? '☑' : '☐' }} {{ $p->date_devis?->format('d/m/Y') }}
+                                            {{ $p->devis_apres_passage ? '☑' : '☐' }}
                                         @endif
+                                        <x-date-sous-case :date="$p->date_devis" />
                                     </td>
 
                                     <td style="white-space:normal; min-width:200px;">
@@ -1302,7 +1302,7 @@ $ajouterCharge = function () {
                                 </tr>
                             @endif
                         @empty
-                            <x-table-vide :colspan="11" texte="Aucune prospection saisie pour cette journée." />
+                            <x-table-vide :colspan="11" texte="Aucune prospection en attente de votre validation." />
                         @endforelse
                     </tbody>
                 </table>

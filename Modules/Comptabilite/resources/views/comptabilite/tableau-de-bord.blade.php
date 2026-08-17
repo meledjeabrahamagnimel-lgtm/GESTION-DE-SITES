@@ -41,7 +41,7 @@ $libellePerimetre = computed(fn () => PerimetreSites::libellePerimetre(auth()->u
 $facturesEnAttente = computed(fn () => Facture::whereIn('site_id', $this->idsSites)
     ->avecResteAEncaisser()
     ->withSum('encaissements', 'montant')
-    ->orderByDesc('date')->get());
+    ->latest('date')->latest('id')->get());
 
 $kpis = computed(function () {
     [$debut, $fin] = $this->plage;

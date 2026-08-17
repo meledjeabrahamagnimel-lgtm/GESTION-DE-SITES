@@ -131,6 +131,40 @@ class BrouillonsDuCommercialTest extends TestCase
         $this->assertFalse($prospection->devis_apres_passage, 'Sans passage, plus de devis annoncé.');
     }
 
+    public function test_le_bouton_transmettre_envoie_une_seule_ligne(): void
+    {
+        $partante = $this->brouillon(['numero' => 'P-0001']);
+        $gardee = $this->brouillon(['numero' => 'P-0002']);
+
+        $this->ecran()->call('transmettre', $partante->id);
+
+        $this->assertSame('Transmise', $partante->fresh()->statut_validation);
+        $this->assertNotNull($partante->fresh()->transmise_le);
+        $this->assertSame('Brouillon', $gardee->fresh()->statut_validation, 'Les autres brouillons ne bougent pas.');
+    }
+
+    public function test_transmettre_une_ligne_deja_partie_ne_fait_rien(): void
+    {
+        $prospection = $this->brouillon(['statut_validation' => 'Transmise', 'transmise_le' => now()->subDay()]);
+        $envoiInitial = $prospection->transmise_le;
+
+        // Un appel forgé ne doit ni re-dater la transmission, ni renotifier le responsable.
+        $this->ecran()->call('transmettre', $prospection->id);
+
+        $this->assertEquals($envoiInitial, $prospection->fresh()->transmise_le);
+    }
+
+    public function test_la_date_de_passage_reste_lisible_sur_un_brouillon(): void
+    {
+        // Une case cochée sans sa date laisse croire que la date n'a pas été retenue.
+        $this->brouillon([
+            'passage' => true, 'date_passage' => '2026-08-12',
+            'devis_apres_passage' => true, 'date_devis' => '2026-08-12',
+        ]);
+
+        $this->ecran()->assertSee('12/08/2026');
+    }
+
     private function ecran()
     {
         return Volt::test('commercial.mes-prospections');

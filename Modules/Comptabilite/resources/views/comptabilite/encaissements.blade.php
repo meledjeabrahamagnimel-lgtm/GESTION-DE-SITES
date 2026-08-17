@@ -32,7 +32,7 @@ $optionsMoyenPaiement = computed(fn () => Referentiel::options(Referentiel::MOYE
  */
 $facturesEnAttente = computed(function () {
     $q = Facture::whereIn('site_id', $this->idsSites)->avecResteAEncaisser()
-        ->withSum('encaissements', 'montant')->with('site')->orderByDesc('date');
+        ->withSum('encaissements', 'montant')->with('site')->latest('date')->latest('id');
 
     if ($this->recherche) {
         $q->where('client', 'like', '%'.$this->recherche.'%');

@@ -119,18 +119,47 @@ class ChaineProspectionDevisFactureTest extends TestCase
         $sansSuite = $this->prospectionTransmise(['numero' => 'P-0003', 'statut_validation' => 'Validée']);
         $refusee = $this->prospectionTransmise(['numero' => 'P-0004', 'statut_validation' => 'Refusée', 'motif_refus' => 'Doublon']);
 
-        $lignes = $this->ecran()->instance()->prospectionsDuJour;
+        $ecran = $this->ecran()->instance();
+        $lignes = $ecran->prospectionsDuJour;
 
-        // Reste ce sur quoi il y a encore quelque chose à faire.
+        // Ne reste que ce qui attend une décision.
         $this->assertTrue($lignes->contains('id', $transmise->id), 'Une transmission attend une décision.');
-        $this->assertTrue($lignes->contains('id', $attendUnDevis->id), 'Un devis annoncé reste à établir.');
 
-        // Sort ce dont l'histoire est finie : cela se consulte dans la page Prospects.
+        // Tout ce qui est tranché s'en va, y compris ce qui est validé : cela se
+        // consulte dans la page Prospects.
+        $this->assertFalse($lignes->contains('id', $attendUnDevis->id), 'Une prospection validée quitte le tableau.');
         $this->assertFalse($lignes->contains('id', $sansSuite->id), 'Validée sans suite attendue : rien à faire.');
         $this->assertFalse($lignes->contains('id', $refusee->id), 'Une prospection refusée est close.');
 
-        // Les transmissions en tête : c'est là qu'une décision est attendue.
-        $this->assertSame($transmise->id, $lignes->first()->id);
+        // Le devis annoncé n'est pas perdu de vue pour autant : il reparaît là où il
+        // reste quelque chose à en faire.
+        $this->assertTrue(
+            $ecran->prospectionsAttenteDevis->contains('id', $attendUnDevis->id),
+            "Une prospection validée qui annonçait un devis passe en « Devis à effectuer »."
+        );
+    }
+
+    public function test_la_date_saisie_par_le_commercial_reste_lisible_a_l_arrivee(): void
+    {
+        // La ligne arrive « à valider » : la case est cliquable, mais la date que le
+        // commercial a saisie doit rester sous les yeux de celui qui arbitre.
+        $this->prospectionTransmise([
+            'passage' => true, 'date_passage' => '2026-08-12',
+            'devis_apres_passage' => true, 'date_devis' => '2026-08-12',
+        ]);
+
+        $this->ecran()->assertSee('12/08/2026');
+    }
+
+    public function test_les_lignes_les_plus_recentes_sont_en_haut(): void
+    {
+        $ancienne = $this->prospectionTransmise(['numero' => 'P-0001', 'date' => now()->subDays(2)->toDateString()]);
+        $recente = $this->prospectionTransmise(['numero' => 'P-0002']);
+
+        $lignes = $this->ecran()->instance()->prospectionsDuJour;
+
+        $this->assertSame($recente->id, $lignes->first()->id, 'La dernière saisie doit être sous les yeux, pas en bas de page.');
+        $this->assertSame($ancienne->id, $lignes->last()->id);
     }
 
     public function test_la_saisie_ne_garde_que_les_devis_en_cours(): void
@@ -156,7 +185,10 @@ class ChaineProspectionDevisFactureTest extends TestCase
 
         $ecran = $this->ecran();
         $this->assertFalse($ecran->instance()->prospectionsATraiter->contains('id', $prospection->id));
-        $this->assertTrue($ecran->instance()->prospectionsDuJour->contains('id', $prospection->id));
+        $this->assertFalse(
+            $ecran->instance()->prospectionsDuJour->contains('id', $prospection->id),
+            'Une fois tranchée, la ligne quitte le tableau des prospections à valider.'
+        );
         $this->assertTrue($ecran->instance()->prospectionsAttenteDevis->contains('id', $prospection->id));
     }
 

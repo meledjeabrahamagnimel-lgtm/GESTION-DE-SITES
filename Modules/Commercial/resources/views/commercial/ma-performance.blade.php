@@ -46,7 +46,7 @@ $factures = computed(function () {
         $q->where('activite', $this->activiteFiltre);
     }
 
-    return $q->latest('date')->get();
+    return $q->latest('date')->latest('id')->get();
 });
 
 $kpis = computed(function () {

@@ -274,7 +274,7 @@ $commentaires = computed(function () {
 
     $saisies = SaisieJournaliere::whereIn('site_id', $this->sitesRetenus->pluck('id'))
         ->whereBetween('date', [$debut, $fin])
-        ->with('site')->orderByDesc('date')->get();
+        ->with('site')->latest('date')->latest('id')->get();
 
     // Clés sans espace ni apostrophe : elles voyagent jusque dans le wire:click de la
     // pagination, où « Chiffre d'affaires » romprait la chaîne JavaScript.

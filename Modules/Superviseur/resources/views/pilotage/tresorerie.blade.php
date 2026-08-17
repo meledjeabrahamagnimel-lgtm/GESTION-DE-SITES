@@ -130,8 +130,8 @@ $graphique = computed(function () {
     ];
 });
 
-$detailEncaissements = computed(fn () => (clone $this->encaissementsQ)->with('site')->latest('date')->get());
-$detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->latest('date')->get());
+$detailEncaissements = computed(fn () => (clone $this->encaissementsQ)->with('site')->latest('date')->latest('id')->get());
+$detailDecaissements = computed(fn () => (clone $this->chargesQ)->with('site')->latest('date')->latest('id')->get());
 
 ?>
 

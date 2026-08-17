@@ -167,7 +167,7 @@ $graphique = computed(function () {
 });
 
 $detail = computed(function () {
-    $q = (clone $this->requeteBase)->with(['commercial', 'site', 'facture'])->latest('date_emission');
+    $q = (clone $this->requeteBase)->with(['commercial', 'site', 'facture'])->latest('date_emission')->latest('id');
 
     if ($this->statutFiltre) {
         $q->where('statut', $this->statutFiltre);
