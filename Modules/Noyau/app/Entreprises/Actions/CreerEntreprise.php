@@ -18,6 +18,42 @@ class CreerEntreprise
     public function executer(array $donnees): User
     {
         return DB::transaction(function () use ($donnees) {
+            $entreprise = $this->creerLeTenant($donnees);
+
+            app(PermissionRegistrar::class)->setPermissionsTeamId($entreprise->id);
+
+            $gerant = User::create([
+                'entreprise_id' => $entreprise->id,
+                'name' => trim(($donnees['gerant_prenom'] ?? '').' '.($donnees['gerant_nom'] ?? '')) ?: $donnees['nom'],
+                'email' => $donnees['compte_email'],
+                'password' => $donnees['compte_mot_de_passe'],
+                'telephone' => $donnees['telephone'] ?? null,
+                'email_verified_at' => now(),
+            ]);
+            $gerant->assignRole('gerant');
+
+            return $gerant;
+        });
+    }
+
+    /**
+     * Crée l'entreprise seule, sans compte gérant.
+     *
+     * Le super administrateur ouvre parfois un dossier avant d'en connaître le
+     * titulaire : on n'a alors que la raison sociale, les accès viendront ensuite.
+     * Exiger un gérant pour créer l'entreprise obligerait à inventer une adresse,
+     * qu'il faudrait retrouver et corriger plus tard.
+     */
+    public function creerSeule(array $donnees): Entreprise
+    {
+        // Les rôles sont posés au passage par creerLeTenant : sans eux, le premier
+        // accès créé dans cette entreprise échouerait sur un rôle introuvable.
+        return $this->creerLeTenant($donnees);
+    }
+
+    private function creerLeTenant(array $donnees): Entreprise
+    {
+        return DB::transaction(function () use ($donnees) {
             $entreprise = Entreprise::create([
                 'nom' => $donnees['nom'],
                 'code_entreprise' => $donnees['code_entreprise'] ?? Entreprise::genererCode($donnees['nom']),
@@ -41,19 +77,8 @@ class CreerEntreprise
             ]);
 
             ProvisionneurEntreprise::creerRoles($entreprise);
-            app(PermissionRegistrar::class)->setPermissionsTeamId($entreprise->id);
 
-            $gerant = User::create([
-                'entreprise_id' => $entreprise->id,
-                'name' => trim(($donnees['gerant_prenom'] ?? '').' '.($donnees['gerant_nom'] ?? '')) ?: $donnees['nom'],
-                'email' => $donnees['compte_email'],
-                'password' => $donnees['compte_mot_de_passe'],
-                'telephone' => $donnees['telephone'] ?? null,
-                'email_verified_at' => now(),
-            ]);
-            $gerant->assignRole('gerant');
-
-            return $gerant;
+            return $entreprise;
         });
     }
 }
