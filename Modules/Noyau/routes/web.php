@@ -30,7 +30,11 @@ Route::get('/connexion', fn () => redirect()->route('login'))->name('connexion')
  * sans être renvoyé ailleurs sans explication.
  */
 Route::middleware(['signed'])->group(function () {
-    Volt::route('/premiere-connexion/{utilisateur}', 'commun.definir-mot-de-passe')->name('mot-de-passe.definir');
+    // Mise en page nue, sans la navigation de l'application : on n'y est pas encore
+    // entré. Afficher les menus autour d'un écran de création de mot de passe donnait
+    // à croire que le compte était déjà ouvert.
+    Volt::route('/premiere-connexion/{utilisateur}', 'commun.definir-mot-de-passe')
+        ->name('mot-de-passe.definir');
 });
 
 Route::get('/auth/google', [GoogleAuthController::class, 'rediriger'])->name('auth.google');

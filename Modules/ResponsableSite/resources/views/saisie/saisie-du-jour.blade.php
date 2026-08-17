@@ -1196,7 +1196,7 @@ $ajouterCharge = function () {
 
                             @if ($editionProspectionId === $p->id)
                                 <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8); background:#FDF2F4;" wire:key="pros-edit-{{ $p->id }}">
-                                    <td style="font-weight:700;">{{ $p->numero }}</td>
+                                    <td><x-numero-ligne :ligne="$p" /></td>
                                     <td>—</td>
                                     <td><input type="text" wire:model="editionProsClient" class="champ" style="min-width:130px;"></td>
                                     <td><input type="text" wire:model="editionProsLocalisation" class="champ" style="min-width:110px;"></td>
@@ -1249,7 +1249,7 @@ $ajouterCharge = function () {
                                 </tr>
                             @else
                                 <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="pros-{{ $p->id }}">
-                                    <td style="font-weight:700;">{{ $p->numero }}</td>
+                                    <td><x-numero-ligne :ligne="$p" /></td>
                                     <td>
                                         @if ($aTraiter)
                                             <span class="pastille pastille-bleu">À valider</span>
@@ -1372,7 +1372,7 @@ $ajouterCharge = function () {
                                 @foreach ($this->prospectionsAttenteDevis->forPage($pageAttenteDevis, 7) as $p)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="attente-devis-{{ $p->id }}">
                                         <td><input type="checkbox" wire:model="devisSelection.{{ $p->id }}"></td>
-                                        <td style="font-weight:700;">{{ $p->numero }}</td>
+                                        <td><x-numero-ligne :ligne="$p" /></td>
                                         <td>{{ $p->client }}</td>
                                         <td>{{ $p->date->format('d/m/Y') }}</td>
                                         <td>{{ $p->commercial->nom }}</td>
@@ -1481,7 +1481,7 @@ $ajouterCharge = function () {
                     <tbody>
                         @forelse ($this->devisDuJour->forPage($pageDevisDuJour, 7) as $d)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="devis-{{ $d->id }}">
-                                <td style="font-weight:700;">{{ $d->numero }}</td>
+                                <td><x-numero-ligne :ligne="$d" /></td>
                                 <td>{{ $d->date_reception?->format('d/m/Y') ?? '—' }}</td>
                                 <td>{{ $d->n_fiche_reception ?? '—' }}</td>
                                 <td>{{ $d->client }}</td>
@@ -1571,7 +1571,7 @@ $ajouterCharge = function () {
                                 @foreach ($this->devisValidesNonFactures->forPage($pageValidesNonFactures, 7) as $d)
                                     <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="valide-non-facture-{{ $d->id }}">
                                         <td><input type="checkbox" wire:model="factureSelection.{{ $d->id }}"></td>
-                                        <td style="font-weight:700;">{{ $d->numero }}</td>
+                                        <td><x-numero-ligne :ligne="$d" /></td>
                                         <td>{{ $d->client }}</td>
                                         <td>{{ ae($d->montant_valide ?? $d->montant_devis) }}</td>
                                         <td>{{ $d->commercial->nom }}</td>
@@ -1684,7 +1684,7 @@ $ajouterCharge = function () {
                     <tbody>
                         @forelse ($this->facturesDuJour->forPage($pageFacturesDuJour, 7) as $f)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                                <td style="font-weight:700;">{{ $f->numero }}</td>
+                                <td><x-numero-ligne :ligne="$f" /></td>
                                 <td>{{ $f->commercial->nom }}</td>
                                 <td>{{ $f->client }}</td>
                                 <td>{{ $f->type }}</td>
@@ -1719,6 +1719,7 @@ $ajouterCharge = function () {
                 <table class="tableau">
                     <thead>
                         <tr>
+                            <th>N°</th>
                             <th>Type d'encaissement</th>
                             <th>Activité</th>
                             <th>Moyens</th>
@@ -1732,6 +1733,7 @@ $ajouterCharge = function () {
                     <tbody>
                         @forelse ($this->encaissementsDuJour->forPage($pageEncaissementsDuJour, 7) as $e)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                                <td><x-numero-ligne :ligne="$e" /></td>
                                 <td>{{ $e->type }}</td>
                                 <td>{{ $e->activite ?? '—' }}</td>
                                 <td>{{ $e->moyen }}</td>
@@ -1745,7 +1747,7 @@ $ajouterCharge = function () {
                                 </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="8" texte="Aucun encaissement saisi pour cette journée." />
+                            <x-table-vide :colspan="9" texte="Aucun encaissement saisi pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>
@@ -1798,6 +1800,7 @@ $ajouterCharge = function () {
                 <table class="tableau">
                     <thead>
                         <tr>
+                            <th>N°</th>
                             <th>Date</th>
                             <th>Type d'opération</th>
                             <th>Activité</th>
@@ -1813,6 +1816,7 @@ $ajouterCharge = function () {
                     <tbody>
                         @forelse ($this->chargesDuJour->forPage($pageChargesDuJour, 7) as $c)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                                <td><x-numero-ligne :ligne="$c" /></td>
                                 <td>{{ $c->date->format('d/m/Y') }}</td>
                                 <td>{{ $c->type_operation === 'Charges' ? 'Charges' : 'Décaissements' }}</td>
                                 <td>{{ $c->activite ?? '—' }}</td>
@@ -1828,7 +1832,7 @@ $ajouterCharge = function () {
                                 </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="10" texte="Aucune charge ni décaissement saisi pour cette journée." />
+                            <x-table-vide :colspan="11" texte="Aucune charge ni décaissement saisi pour cette journée." />
                         @endforelse
                     </tbody>
                 </table>

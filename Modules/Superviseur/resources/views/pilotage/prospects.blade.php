@@ -234,7 +234,7 @@ $detail = computed(fn () => (clone $this->requeteBase)->with(['commercial', 'sit
                 <tbody>
                     @forelse ($this->detail->forPage($pageDetail, 10) as $ligne)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                            <td style="font-weight:700;">{{ $ligne->numero }}</td>
+                            <td><x-numero-ligne :ligne="$ligne" /></td>
                             <td>{{ $ligne->client }}</td>
                             <td style="color:#6B6E76;">{{ $ligne->localisation ?? '—' }}</td>
                             <td>{{ $ligne->moyen }}</td>

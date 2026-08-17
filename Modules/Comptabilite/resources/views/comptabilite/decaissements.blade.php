@@ -161,13 +161,14 @@ $ajouterCharge = function () {
                 <table class="tableau">
                     <thead>
                         <tr>
-                            <th>Type d'opération</th><th>Activité</th><th>Libellé</th><th>Moyens</th>
+                            <th>N°</th><th>Type d'opération</th><th>Activité</th><th>Libellé</th><th>Moyens</th>
                             <th>Montant</th><th>Tiers</th><th>Origine / référence</th><th>Observations</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->decaissementsDuJour->forPage($pageDuJour, 10) as $c)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                                <td><x-numero-ligne :ligne="$c" /></td>
                                 <td>{{ $c->type_operation }}</td>
                                 <td>{{ $c->activite ?? '—' }}</td>
                                 <td>{{ $c->libelle }}</td>
@@ -189,17 +190,18 @@ $ajouterCharge = function () {
         <x-carte-section titre="Mes décaissements du jour, tous sites" icone="liste" couleur="#2A2E35">
             <div class="tableau-conteneur">
                 <table class="tableau">
-                    <thead><tr><th>Type</th><th>Libellé</th><th>Montant</th><th>Tiers</th></tr></thead>
+                    <thead><tr><th>N°</th><th>Type</th><th>Libellé</th><th>Montant</th><th>Tiers</th></tr></thead>
                     <tbody>
                         @forelse ($this->mesDecaissementsDuJour->forPage($pageTousSites, 10) as $c)
                             <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                                <td><x-numero-ligne :ligne="$c" /></td>
                                 <td>{{ $c->type_operation }}</td>
                                 <td>{{ $c->libelle }}</td>
                                 <td style="font-weight:700; color:#C8102E; font-variant-numeric:tabular-nums;">{{ ae($c->montant) }}</td>
                                 <td>{{ $c->tiers ?? '—' }}</td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="4" texte="Aucun décaissement saisi aujourd'hui." />
+                            <x-table-vide :colspan="5" texte="Aucun décaissement saisi aujourd'hui." />
                         @endforelse
                     </tbody>
                 </table>

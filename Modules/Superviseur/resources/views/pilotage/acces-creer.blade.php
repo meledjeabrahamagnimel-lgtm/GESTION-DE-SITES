@@ -11,6 +11,9 @@ state([
     'nom' => '',
     'email' => '',
     'motDePasse' => '',
+    // Un acces prepare n'est pas un acces ouvert : cree inactif, il attend qu'on
+    // l'active. Aucun courriel ne part, et la connexion est refusee entre-temps.
+    'ouverture' => 'actif',
     'villeChoix' => '',
     'siteChoix' => '',
     'objectifGlobal' => Commercial::OBJECTIF_MENSUEL_DEFAUT,
@@ -101,7 +104,18 @@ $basculerActif = function (int $utilisateurId) {
     }
 
     $utilisateur = \App\Models\User::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($utilisateurId);
-    $utilisateur->update(['est_actif' => ! $utilisateur->est_actif]);
+
+    if ($utilisateur->est_actif) {
+        $utilisateur->update(['est_actif' => false]);
+        $this->dispatch('annonce', texte: "Accès de {$utilisateur->name} révoqué.", ton: 'alerte');
+
+        return;
+    }
+
+    // C'est l'action qui ouvre l'accès, car c'est elle qui sait souhaiter la bienvenue :
+    // un accès préparé inactif n'a reçu aucun courriel, il le reçoit maintenant.
+    app(CreerAcces::class)->activer($utilisateur);
+    $this->dispatch('annonce', texte: "Accès de {$utilisateur->name} activé — courriel de bienvenue envoyé.");
 };
 
 $choisirRole = function (string $role) {
@@ -148,13 +162,16 @@ $creer = function (CreerAcces $action) {
         'site_id' => $donnees['siteChoix'] ?? null,
         'objectif_mecanique' => $this->objectifMecanique,
         'objectif_sinistre' => $this->objectifSinistre,
+        'est_actif' => $this->ouverture === 'actif',
     ]);
 
     $this->reset(['nom', 'email', 'motDePasse', 'siteChoix']);
     $this->villeChoix = count($this->optionsVilleCommercial) === 1 ? array_key_first($this->optionsVilleCommercial) : '';
     $this->objectifGlobal = Commercial::OBJECTIF_MENSUEL_DEFAUT;
     $this->pourcentageMecanique = (int) (Commercial::PART_MECANIQUE_DEFAUT * 100);
-    $this->confirmation = "Accès créé — mot de passe à changer à la première connexion.";
+    $this->confirmation = $this->ouverture === 'actif'
+        ? "Accès créé — courriel envoyé, mot de passe à choisir à la première connexion."
+        : "Accès préparé, non activé — aucun courriel envoyé. Activez-le quand la place sera prête.";
 };
 
 ?>
@@ -199,6 +216,19 @@ $creer = function (CreerAcces $action) {
             <input type="password" wire:model="motDePasse"
                 style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px; margin-bottom:4px;">
             @error('motDePasse') <div style="color:#C8102E; font-size:13.5px; margin-bottom:8px;">{{ $message }}</div> @enderror
+
+            {{-- Un accès préparé n'est pas un accès ouvert. Créé inactif, il existe avec
+                 son rôle et son périmètre, mais son titulaire n'en sait rien : aucun
+                 courriel ne part, et la connexion lui est refusée. C'est le brouillon
+                 d'un accès — utile quand on prépare une arrivée à l'avance. --}}
+            <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin:10px 0 6px;">Ouverture de l'accès</label>
+            <select wire:model.live="ouverture" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:15.5px;">
+                <option value="actif">Actif — courriel envoyé, le titulaire peut se connecter</option>
+                <option value="inactif">Inactif — accès préparé, aucun courriel, connexion refusée</option>
+            </select>
+            <p style="font-size:11.5px; color:#9A9DA5; margin:5px 0 0;">
+                Le courriel de bienvenue partira le jour où vous activerez l'accès, pas avant.
+            </p>
 
             @if ($roleActif === 'responsable_site')
                 {{-- Un responsable de site répond d'un lieu précis ; les autres rôles

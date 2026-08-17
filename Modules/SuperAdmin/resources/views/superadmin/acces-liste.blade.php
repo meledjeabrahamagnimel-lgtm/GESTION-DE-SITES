@@ -44,10 +44,18 @@ $basculerActif = function (int $id) {
     }
 
     $utilisateur = User::findOrFail($id);
-    $utilisateur->update(['est_actif' => ! $utilisateur->est_actif]);
-    $this->message = $utilisateur->est_actif
-        ? "Accès de {$utilisateur->name} réactivé."
-        : "Accès de {$utilisateur->name} révoqué.";
+
+    if ($utilisateur->est_actif) {
+        $utilisateur->update(['est_actif' => false]);
+        $this->message = "Accès de {$utilisateur->name} révoqué.";
+
+        return;
+    }
+
+    // C'est l'action qui ouvre l'accès, car c'est elle qui sait souhaiter la bienvenue :
+    // un accès préparé inactif n'a reçu aucun courriel, il le reçoit maintenant.
+    app(\Modules\Noyau\Entreprises\Actions\CreerAcces::class)->activer($utilisateur);
+    $this->message = "Accès de {$utilisateur->name} activé — courriel de bienvenue envoyé.";
 };
 
 $forcerReinitialisation = function (int $id) {

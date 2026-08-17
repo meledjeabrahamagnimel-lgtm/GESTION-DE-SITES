@@ -44,11 +44,48 @@ class CreerAcces
     {
         $utilisateur = $this->creer($entreprise, $role, $donnees);
 
-        // Hors transaction : un incident d'envoi ne doit jamais annuler la création d'un
-        // accès pourtant valide. L'accès existe, le courriel se renvoie au besoin.
-        $this->annoncerLAcces($entreprise, $utilisateur, $role);
+        // Un accès créé inactif est un accès préparé, pas ouvert : on ne souhaite la
+        // bienvenue à personne tant qu'il ne peut pas entrer. Le courriel partira à
+        // l'activation, quand la place sera réellement prête.
+        if ($utilisateur->est_actif) {
+            // Hors transaction : un incident d'envoi ne doit jamais annuler la création
+            // d'un accès pourtant valide. L'accès existe, le courriel se renvoie au besoin.
+            $this->annoncerLAcces($entreprise, $utilisateur, $role);
+        }
 
         return $utilisateur;
+    }
+
+    /**
+     * Ouvre un accès préparé et souhaite la bienvenue à son titulaire.
+     *
+     * C'est le pendant du brouillon : l'accès existait déjà, avec son rôle et son
+     * périmètre, mais son titulaire n'en savait rien. L'activation est le moment où
+     * il l'apprend — et le courriel ne part qu'une fois, à la première ouverture.
+     */
+    public function activer(User $utilisateur): bool
+    {
+        if ($utilisateur->est_actif) {
+            return false;
+        }
+
+        $entreprise = $utilisateur->entreprise()->withoutGlobalScopes()->first();
+
+        $utilisateur->forceFill(['est_actif' => true])->save();
+
+        if ($entreprise) {
+            $this->annoncerLAcces($entreprise, $utilisateur, $this->roleDe($utilisateur));
+        }
+
+        return true;
+    }
+
+    /** Le rôle, lu sans dépendre de l'équipe posée dans la requête en cours. */
+    private function roleDe(User $utilisateur): string
+    {
+        app(PermissionRegistrar::class)->setPermissionsTeamId($utilisateur->entreprise_id);
+
+        return $utilisateur->getRoleNames()->first() ?? '';
     }
 
     private function creer(Entreprise $entreprise, string $role, array $donnees): User
@@ -64,6 +101,9 @@ class CreerAcces
                 // Un accès créé par un administrateur impose un changement de mot de passe ;
                 // une inscription volontaire (par code entreprise) non, le mot de passe étant déjà choisi.
                 'doit_changer_mot_de_passe' => $donnees['doit_changer_mot_de_passe'] ?? true,
+                // Par défaut l'accès s'ouvre tout de suite ; créé inactif, il attend
+                // qu'on l'active — aucun courriel ne part, et la connexion est refusée.
+                'est_actif' => $donnees['est_actif'] ?? true,
             ]);
 
             app(PermissionRegistrar::class)->setPermissionsTeamId($entreprise->id);

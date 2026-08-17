@@ -20,7 +20,6 @@ state([
     'activite' => '', 'passage' => false, 'datePassage' => null,
     'devisApres' => false, 'dateDevis' => null, 'observations' => '',
     'commentaire' => '',
-    'message' => null,
     'selection' => [],
 
     // Édition en ligne d'un brouillon, tant qu'il n'est pas parti chez le responsable.
@@ -213,9 +212,20 @@ $enregistrerProspection = function (string $statut) {
 
     $this->reset(['client', 'localisation', 'observations', 'passage', 'datePassage', 'devisApres', 'dateDevis']);
     $this->resetPage();
-    $this->message = $statut === 'Transmise'
+    $this->annoncer($statut === 'Transmise'
         ? 'Prospection transmise à votre responsable.'
-        : "Prospection enregistrée en brouillon — modifiable tant qu'elle n'est pas transmise.";
+        : "Prospection enregistrée en brouillon — modifiable tant qu'elle n'est pas transmise.");
+};
+
+/**
+ * Dit ce qui vient de se passer, trois secondes, puis s'efface.
+ *
+ * Remplace le bandeau qui restait à l'écran jusqu'au geste suivant, et les boîtes
+ * de dialogue de confirmation sur les gestes réversibles : transmettre n'efface
+ * rien, c'est le responsable qui arbitre ensuite.
+ */
+$annoncer = function (string $texte, string $ton = 'succes') {
+    $this->dispatch('annonce', texte: $texte, ton: $ton);
 };
 
 /** Le responsable est prévenu tout de suite : sans cela, une transmission peut dormir des jours. */
@@ -330,7 +340,7 @@ $enregistrerEdition = function () {
     ]);
 
     $this->editionId = null;
-    $this->message = 'Brouillon modifié.';
+    $this->annoncer('Brouillon modifié.');
 };
 
 /** Cocher directement dans la liste, sans ouvrir le formulaire pour une seule case. */
@@ -368,7 +378,7 @@ $supprimer = function (int $id) {
         ->where('statut_validation', 'Brouillon')->where('id', $id)->delete();
 
     unset($this->selection[$id]);
-    $this->message = 'Brouillon supprimé.';
+    $this->annoncer('Brouillon supprimé.');
 };
 
 /**
@@ -393,14 +403,14 @@ $transmettre = function (int $id) {
     $this->prevenirLeResponsable(1);
 
     unset($this->selection[$id]);
-    $this->message = 'Prospection transmise à votre responsable.';
+    $this->annoncer('Prospection transmise à votre responsable.');
 };
 
 $transmettreSelection = function () {
     $ids = $this->selectionnes;
 
     if (empty($ids)) {
-        $this->message = 'Sélectionnez au moins un brouillon à transmettre.';
+        $this->annoncer('Sélectionnez au moins un brouillon à transmettre.', 'alerte');
 
         return;
     }
@@ -418,9 +428,10 @@ $transmettreSelection = function () {
     }
 
     $this->selection = [];
-    $this->message = $nombre > 0
-        ? "$nombre prospection(s) transmise(s) à votre responsable de site."
-        : 'Aucun brouillon transmis.';
+    $this->annoncer(
+        $nombre > 0 ? "$nombre prospection(s) transmise(s) à votre responsable de site." : 'Aucun brouillon transmis.',
+        $nombre > 0 ? 'succes' : 'alerte',
+    );
 };
 
 ?>
@@ -448,16 +459,11 @@ $transmettreSelection = function () {
                 </button>
                 <button type="button" wire:click="toutDeselectionner" class="bouton bouton-secondaire bouton-petit">Aucun</button>
                 <button type="button" wire:click="transmettreSelection"
-                    wire:confirm="Transmettre les prospections sélectionnées à votre responsable ?"
                     class="bouton" @disabled(count($this->selectionnes) === 0)>
                     Transmettre la sélection ({{ count($this->selectionnes) }})
                 </button>
             </div>
         </div>
-
-        @if ($message)
-            <div class="encart encart-succes">{{ $message }}</div>
-        @endif
 
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:16px;">
             <x-kpi-card label="Brouillons" :value="$this->compteurs['brouillon']" sub="À transmettre" />
@@ -540,7 +546,7 @@ $transmettreSelection = function () {
                                      au commercial, qui doit pouvoir le corriger. --}}
                                 <tr wire:key="pros-edit-{{ $ligne->id }}" style="background:#FDF2F4;">
                                     <td>—</td>
-                                    <td style="font-weight:700;">{{ $ligne->numero }}</td>
+                                    <td><x-numero-ligne :ligne="$ligne" /></td>
                                     <td>{{ $ligne->date->format('d/m/Y') }}</td>
                                     <td><input type="text" wire:model="eClient" class="champ" style="min-width:130px;"></td>
                                     <td><input type="text" wire:model="eLocalisation" class="champ" style="min-width:110px;"></td>
@@ -592,7 +598,7 @@ $transmettreSelection = function () {
                                         <input type="checkbox" wire:model.live="selection.{{ $ligne->id }}">
                                     @endif
                                 </td>
-                                <td style="font-weight:700;">{{ $ligne->numero }}</td>
+                                <td><x-numero-ligne :ligne="$ligne" /></td>
                                 <td>{{ $ligne->date->format('d/m/Y') }}</td>
                                 <td>{{ $ligne->client }}</td>
                                 <td style="color:var(--th-gris,#6B6E76);">{{ $ligne->localisation ?? '—' }}</td>
@@ -642,7 +648,6 @@ $transmettreSelection = function () {
                                              cocher puis remonter au bouton du haut faisait trois gestes
                                              pour un brouillon isolé, ce qui est le cas courant. --}}
                                         <button type="button" wire:click="transmettre({{ $ligne->id }})"
-                                            wire:confirm="Transmettre cette prospection à votre responsable ?"
                                             class="bouton bouton-petit bouton-vert" style="margin-right:5px;">Transmettre</button>
                                         <button type="button" wire:click="modifier({{ $ligne->id }})"
                                             class="bouton bouton-secondaire bouton-petit" style="margin-right:5px;">Modifier</button>

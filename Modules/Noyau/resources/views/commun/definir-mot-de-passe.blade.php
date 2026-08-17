@@ -4,7 +4,13 @@ use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
-use function Livewire\Volt\{state, mount};
+use function Livewire\Volt\{state, mount, layout, title};
+
+// Mise en page nue, sans la navigation de l'application : on n'y est pas encore entre.
+// Afficher les menus autour d'un ecran de creation de mot de passe donnait a croire
+// que le compte etait deja ouvert.
+layout('layouts.guest');
+title('Choisir mon mot de passe');
 
 /*
 |--------------------------------------------------------------------------
@@ -29,6 +35,7 @@ use function Livewire\Volt\{state, mount};
 
 state([
     'utilisateurId' => null,
+    'entreprise' => null,
     'nom' => '',
     'email' => '',
     'lienDejaUtilise' => false,
@@ -46,6 +53,10 @@ mount(function (int $utilisateur) {
     $this->nom = $compte->name;
     $this->email = $compte->email;
     $this->lienDejaUtilise = ! $compte->doit_changer_mot_de_passe;
+
+    // Le titulaire doit reconnaître la maison avant de saisir quoi que ce soit :
+    // une page nue qui réclame un mot de passe ressemble à un piège.
+    $this->entreprise = $compte->entreprise()->withoutGlobalScopes()->first();
 });
 
 $enregistrer = function () {
@@ -84,8 +95,21 @@ $enregistrer = function () {
 
 ?>
 
-<div style="max-width:480px; margin:40px auto;">
-    <div style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); border-radius:10px; padding:26px;">
+{{-- Page à part entière, hors de l'application : ni menu, ni bandeau d'exercice.
+     On n'est pas encore entré, et l'écran ne doit pas laisser croire le contraire. --}}
+<div style="min-height:100vh; background:var(--th-paper,#F4F3EF); display:flex; align-items:center;
+            justify-content:center; padding:32px 20px; box-sizing:border-box;">
+    <div class="carte" style="width:100%; max-width:460px; padding:30px; box-shadow:0 18px 44px rgba(25,27,32,.10);">
+
+        <div style="text-align:center; margin-bottom:22px;">
+            @if ($entreprise?->logoUrl())
+                <img src="{{ $entreprise->logoUrl() }}" alt="{{ $entreprise->nom }}" style="height:52px; margin:0 auto 12px; display:block;">
+            @endif
+            <p style="font-family:'Barlow Condensed',sans-serif; font-size:15px; font-weight:700; text-transform:uppercase;
+                      letter-spacing:1.4px; margin:0; color:var(--th-gris,#6B6E76);">
+                {{ $entreprise?->nom ?? config('app.name') }}
+            </p>
+        </div>
 
         @if ($lienDejaUtilise)
             <h1 style="font-size:20px; font-weight:800; margin:0 0 6px;">Mot de passe déjà choisi</h1>

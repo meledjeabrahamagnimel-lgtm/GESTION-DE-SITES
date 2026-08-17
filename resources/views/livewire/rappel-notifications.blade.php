@@ -2,6 +2,7 @@
 
 use Modules\Noyau\Commun\Modeles\AbonnementPush;
 use Modules\Noyau\Commun\Services\WebPush\EnvoyeurPush;
+use Illuminate\Support\Facades\Validator;
 use function Livewire\Volt\{computed, state};
 
 /*
@@ -9,6 +10,12 @@ use function Livewire\Volt\{computed, state};
  * d'activer les alertes. Volontairement un bandeau, et non une demande d'autorisation
  * automatique : les navigateurs refusent une telle demande sans clic de l'utilisateur,
  * et Chrome sanctionne durablement les sites qui la déclenchent au chargement.
+ *
+ * Le bouton active tout depuis le bandeau : autorisation du navigateur, agent de
+ * service et abonnement de l'appareil, en un seul geste. Il renvoyait auparavant vers
+ * la page des réglages, où il fallait cliquer une seconde fois sur le même bouton —
+ * un aller-retour pour rien, là où le clic du bandeau suffit à satisfaire
+ * l'exigence du navigateur.
  */
 state(['masque' => false]);
 
@@ -18,6 +25,37 @@ $aBesoin = computed(fn () => ! $this->masque
 
 $masquer = function () {
     $this->masque = true;
+};
+
+/**
+ * Enregistre l'abonnement obtenu par le navigateur.
+ *
+ * Même traitement que sur la page des réglages, et mêmes vérifications : les clés
+ * viennent du navigateur, donc du client, et ne sont pas dignes de confiance par
+ * nature. Le bandeau disparaît ensuite de lui-même, l'appareil étant désormais connu.
+ */
+$enregistrerAbonnement = function (string $endpoint, string $p256dh, string $auth, ?string $appareil = null) {
+    Validator::make(
+        ['endpoint' => $endpoint, 'p256dh' => $p256dh, 'auth' => $auth],
+        [
+            'endpoint' => ['required', 'url', 'max:2000'],
+            'p256dh' => ['required', 'string', 'max:255'],
+            'auth' => ['required', 'string', 'max:255'],
+        ],
+    )->validate();
+
+    AbonnementPush::updateOrCreate(
+        ['user_id' => auth()->id(), 'empreinte' => AbonnementPush::empreinteDe($endpoint)],
+        [
+            'endpoint' => $endpoint,
+            'cle_p256dh' => $p256dh,
+            'cle_auth' => $auth,
+            'appareil' => $appareil ? str($appareil)->limit(190)->value() : null,
+        ],
+    );
+
+    unset($this->aBesoin);
+    $this->dispatch('annonce', texte: 'Alertes activées sur cet appareil.');
 };
 
 ?>
@@ -37,7 +75,29 @@ $masquer = function () {
                 Sans cela, vous devez ouvrir l'application pour voir les nouveautés.
             </span>
 
-            <a href="{{ route('mes-notifications') }}" wire:navigate class="bouton bouton-petit">Activer</a>
+            {{-- Tout se fait ici : l'autorisation du navigateur, l'agent de service et
+                 l'abonnement. Si l'appareil ne s'y prête pas, on renvoie vers les
+                 réglages, qui expliquent précisément ce qui manque. --}}
+            <span x-data="{
+                    occupe: false,
+                    async activer() {
+                        if (! window.activerPush || ! window.pushDisponible || ! window.pushDisponible()) {
+                            window.location = @js(route('mes-notifications'));
+                            return;
+                        }
+                        this.occupe = true;
+                        const issue = await window.activerPush(@js(config('webpush.cle_publique')), $wire);
+                        this.occupe = false;
+                        if (issue.echec || issue.etat !== 'granted') {
+                            window.location = @js(route('mes-notifications'));
+                        }
+                    },
+                }">
+                <button type="button" @click="activer()" :disabled="occupe" class="bouton bouton-petit">
+                    <span x-show="!occupe">Activer</span>
+                    <span x-show="occupe" x-cloak>Activation…</span>
+                </button>
+            </span>
 
             <button type="button" wire:click="masquer" class="rappel-fermer" aria-label="Masquer">×</button>
         </div>

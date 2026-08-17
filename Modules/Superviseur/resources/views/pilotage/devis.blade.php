@@ -297,7 +297,7 @@ $detail = computed(function () {
                             $delaiDepasse = $delaiHeures !== null && $delaiHeures > 24;
                         @endphp
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
-                            <td style="font-weight:700;">{{ $ligne->numero }}</td>
+                            <td><x-numero-ligne :ligne="$ligne" /></td>
                             <td>{{ $ligne->date_reception?->format('d/m/Y') ?? '—' }}</td>
                             <td>{{ $ligne->n_fiche_reception ?? '—' }}</td>
                             <td>{{ $ligne->client }}</td>

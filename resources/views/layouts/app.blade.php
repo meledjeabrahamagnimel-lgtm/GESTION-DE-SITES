@@ -101,6 +101,9 @@
         {{ $slot }}
     </main>
 
+    {{-- Posé une seule fois : tout écran peut annoncer un geste sans le sien. --}}
+    <x-annonce-ephemere />
+
     @livewireScripts
 </body>
 </html>

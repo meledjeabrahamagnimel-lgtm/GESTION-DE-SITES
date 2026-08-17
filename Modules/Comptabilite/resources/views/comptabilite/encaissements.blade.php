@@ -223,17 +223,18 @@ $encaisser = function () {
         <h3 style="font-size:15px; font-weight:700; margin:0 0 14px;">Mes encaissements du jour</h3>
         <div class="tableau-conteneur">
             <table class="tableau">
-                <thead><tr><th>N° facture</th><th>Client</th><th>Moyen</th><th>Montant</th></tr></thead>
+                <thead><tr><th>N° encaissement</th><th>N° facture</th><th>Client</th><th>Moyen</th><th>Montant</th></tr></thead>
                 <tbody>
                     @forelse ($this->mesEncaissementsDuJour->forPage($pageDuJour, 10) as $e)
                         <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                            <td><x-numero-ligne :ligne="$e" /></td>
                             <td style="font-weight:700;">{{ $e->facture?->n_facture ?? '—' }}</td>
                             <td>{{ $e->client ?? '—' }}</td>
                             <td>{{ $e->moyen }}</td>
                             <td style="font-weight:700; color:#0E9F6E; font-variant-numeric:tabular-nums;">{{ ae($e->montant) }}</td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="4" texte="Aucun encaissement saisi aujourd'hui." />
+                        <x-table-vide :colspan="5" texte="Aucun encaissement saisi aujourd'hui." />
                     @endforelse
                 </tbody>
             </table>
