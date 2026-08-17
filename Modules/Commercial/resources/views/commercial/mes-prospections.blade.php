@@ -22,6 +22,12 @@ state([
     'commentaire' => '',
     'message' => null,
     'selection' => [],
+
+    // Édition en ligne d'un brouillon, tant qu'il n'est pas parti chez le responsable.
+    'editionId' => null,
+    'eClient' => '', 'eLocalisation' => '', 'eMoyen' => 'RDV', 'eActivite' => '',
+    'ePassage' => false, 'eDatePassage' => null,
+    'eDevisApres' => false, 'eDateDevis' => null, 'eObservations' => '',
 ]);
 
 // Les filtres sont portés par l'adresse de la page : ils survivent au rechargement,
@@ -141,7 +147,24 @@ $updatedDateDevis = function ($valeur) {
     }
 };
 
-$ajouter = function () {
+/*
+|--------------------------------------------------------------------------
+| Enregistrer une prospection
+|--------------------------------------------------------------------------
+| Deux gestes, pas un : « Brouillon » met de côté une visite dont on n'est pas
+| encore sûr, « Ajouter » la transmet aussitôt au responsable. Obliger à passer
+| par le brouillon puis à cocher pour transmettre faisait trois clics là où la
+| plupart des saisies n'en demandent qu'un.
+*/
+$ajouterEnBrouillon = function () {
+    $this->enregistrerProspection('Brouillon');
+};
+
+$ajouterEtTransmettre = function () {
+    $this->enregistrerProspection('Transmise');
+};
+
+$enregistrerProspection = function (string $statut) {
     if (! $this->commercial) {
         return;
     }
@@ -180,12 +203,164 @@ $ajouter = function () {
         ...$coherence,
         'observations' => $donnees['observations'] ?: null,
         'cree_par' => auth()->id(),
-        'statut_validation' => 'Brouillon',
+        'statut_validation' => $statut,
+        'transmise_le' => $statut === 'Transmise' ? now() : null,
     ]);
+
+    if ($statut === 'Transmise') {
+        $this->prevenirLeResponsable(1);
+    }
 
     $this->reset(['client', 'localisation', 'observations', 'passage', 'datePassage', 'devisApres', 'dateDevis']);
     $this->resetPage();
-    $this->message = 'Prospection enregistrée en brouillon. Sélectionnez-la puis transmettez-la à votre responsable.';
+    $this->message = $statut === 'Transmise'
+        ? 'Prospection transmise à votre responsable.'
+        : "Prospection enregistrée en brouillon — modifiable tant qu'elle n'est pas transmise.";
+};
+
+/** Le responsable est prévenu tout de suite : sans cela, une transmission peut dormir des jours. */
+$prevenirLeResponsable = function (int $nombre) {
+    Notificateur::pourPlusieurs(
+        destinataires: Notificateur::encadrementDeVille($this->commercial?->ville_id, auth()->user()->entreprise_id),
+        titre: $nombre.' prospection(s) à valider',
+        corps: auth()->user()->name.' vient de transmettre '.$nombre.' prospection(s).',
+        canal: NotificationApp::CANAL_GESTION,
+        niveau: NotificationApp::NIVEAU_ALERTE,
+        lien: route('saisie-du-jour'),
+    );
+};
+
+/*
+|--------------------------------------------------------------------------
+| Modifier un brouillon
+|--------------------------------------------------------------------------
+| Tant qu'une prospection n'est pas partie, elle appartient encore au commercial :
+| il doit pouvoir corriger un nom mal orthographié ou une case oubliée. Une fois
+| transmise, elle ne lui appartient plus — c'est le responsable qui la corrige,
+| sans quoi une ligne pourrait changer sous les yeux de celui qui l'arbitre.
+*/
+$modifier = function (int $id) {
+    $p = Prospection::where('commercial_id', $this->commercial?->id ?? 0)
+        ->where('statut_validation', 'Brouillon')->findOrFail($id);
+
+    $this->editionId = $p->id;
+    $this->eClient = $p->client;
+    $this->eLocalisation = $p->localisation ?? '';
+    $this->eMoyen = $p->moyen;
+    $this->eActivite = $p->activite;
+    $this->ePassage = (bool) $p->passage;
+    $this->eDatePassage = $p->date_passage?->toDateString();
+    $this->eDevisApres = (bool) $p->devis_apres_passage;
+    $this->eDateDevis = $p->date_devis?->toDateString();
+    $this->eObservations = $p->observations ?? '';
+};
+
+$annulerEdition = function () {
+    $this->editionId = null;
+    $this->resetValidation();
+};
+
+/** Mêmes règles de cohérence qu'à la saisie : un devis suppose un passage. */
+$updatedEPassage = function ($valeur) {
+    if (! $valeur) {
+        $this->eDevisApres = false;
+        $this->eDateDevis = null;
+        $this->eDatePassage = null;
+
+        return;
+    }
+
+    $this->eDatePassage ??= now()->toDateString();
+};
+
+$updatedEDevisApres = function ($valeur) {
+    if (! $valeur) {
+        $this->eDateDevis = null;
+
+        return;
+    }
+
+    $this->eDateDevis ??= now()->toDateString();
+    $this->ePassage = true;
+    $this->eDatePassage = $this->eDateDevis;
+};
+
+$updatedEDateDevis = function ($valeur) {
+    if ($this->eDevisApres) {
+        $this->eDatePassage = $valeur;
+    }
+};
+
+$enregistrerEdition = function () {
+    // Le formulaire n'apparaît qu'une ligne ouverte : un appel sans ligne ne peut venir
+    // que d'une requête forgée, on l'ignore sans rien changer.
+    $p = $this->editionId
+        ? Prospection::where('commercial_id', $this->commercial?->id ?? 0)
+            ->where('statut_validation', 'Brouillon')->find($this->editionId)
+        : null;
+
+    if (! $p) {
+        $this->annulerEdition();
+
+        return;
+    }
+
+    $donnees = $this->validate([
+        'eClient' => ['required', 'string', 'max:255'],
+        'eLocalisation' => ['nullable', 'string', 'max:255'],
+        'eMoyen' => ['required', 'string', 'max:60'],
+        'eActivite' => ['required', 'string', 'max:60'],
+        'eDatePassage' => ['nullable', 'date'],
+        'eDateDevis' => ['nullable', 'date'],
+        'eObservations' => ['nullable', 'string'],
+    ], [], ['eClient' => 'clients visités', 'eActivite' => 'activité']);
+
+    $coherence = Prospection::normaliserPassage(
+        (bool) $this->ePassage, $donnees['eDatePassage'],
+        (bool) $this->eDevisApres, $donnees['eDateDevis'],
+    );
+
+    $p->update([
+        'client' => $donnees['eClient'],
+        'localisation' => $donnees['eLocalisation'] ?: null,
+        'moyen' => $donnees['eMoyen'],
+        'activite' => $donnees['eActivite'],
+        ...$coherence,
+        'observations' => $donnees['eObservations'] ?: null,
+    ]);
+
+    $this->editionId = null;
+    $this->message = 'Brouillon modifié.';
+};
+
+/** Cocher directement dans la liste, sans ouvrir le formulaire pour une seule case. */
+$basculerPassage = function (int $id) {
+    $p = Prospection::where('commercial_id', $this->commercial?->id ?? 0)
+        ->where('statut_validation', 'Brouillon')->findOrFail($id);
+
+    $passage = ! $p->passage;
+
+    $p->update([
+        'passage' => $passage,
+        'date_passage' => $passage ? ($p->date_passage ?? $p->date) : null,
+        'devis_apres_passage' => $passage ? $p->devis_apres_passage : false,
+        'date_devis' => $passage ? $p->date_devis : null,
+    ]);
+};
+
+$basculerDevisApres = function (int $id) {
+    $p = Prospection::where('commercial_id', $this->commercial?->id ?? 0)
+        ->where('statut_validation', 'Brouillon')->findOrFail($id);
+
+    $devisApres = ! $p->devis_apres_passage;
+    $dateDevis = $devisApres ? ($p->date_devis ?? $p->date_passage ?? $p->date) : null;
+
+    $p->update([
+        'devis_apres_passage' => $devisApres,
+        'date_devis' => $dateDevis,
+        'passage' => $devisApres ? true : $p->passage,
+        'date_passage' => $devisApres ? $dateDevis : $p->date_passage,
+    ]);
 };
 
 $supprimer = function (int $id) {
@@ -214,14 +389,7 @@ $transmettreSelection = function () {
     // Le responsable est prévenu tout de suite : sans cela, une transmission peut
     // dormir plusieurs jours avant d'être arbitrée.
     if ($nombre > 0) {
-        Notificateur::pourPlusieurs(
-            destinataires: Notificateur::encadrementDeVille($this->commercial?->ville_id, auth()->user()->entreprise_id),
-            titre: $nombre.' prospection(s) à valider',
-            corps: auth()->user()->name.' vient de transmettre '.$nombre.' prospection(s).',
-            canal: NotificationApp::CANAL_GESTION,
-            niveau: NotificationApp::NIVEAU_ALERTE,
-            lien: route('saisie-du-jour'),
-        );
+        $this->prevenirLeResponsable($nombre);
     }
 
     $this->selection = [];
@@ -289,7 +457,11 @@ $transmettreSelection = function () {
                     <x-champ label="Date du devis (= date de passage)" model="dateDevis" type="date" live="true" width="180" />
                 @endif
                 <x-champ label="Observations" model="observations" />
-                <button type="button" wire:click="ajouter" class="bouton bouton-sombre">+ Ajouter</button>
+                {{-- Deux gestes distincts : mettre de côté, ou transmettre tout de suite.
+                     La plupart des visites se saisissent une fois rentré, sûr de soi :
+                     les faire passer par le brouillon coûtait deux clics de plus. --}}
+                <button type="button" wire:click="ajouterEtTransmettre" class="bouton bouton-sombre">+ Ajouter et transmettre</button>
+                <button type="button" wire:click="ajouterEnBrouillon" class="bouton bouton-secondaire">Enregistrer en brouillon</button>
             </div>
             {{-- Les listes déroulantes sont fixées par la direction, dans Paramètres →
                  Listes déroulantes. Inviter chaque poste à créer sa propre valeur
@@ -336,9 +508,62 @@ $transmettreSelection = function () {
                                     'Validée' => 'pastille-vert', 'Refusée' => 'pastille-rouge',
                                 ][$ligne->statut_validation] ?? 'pastille-ambre';
                             @endphp
+                            @php $brouillon = $ligne->statut_validation === 'Brouillon'; @endphp
+
+                            @if ($editionId === $ligne->id)
+                                {{-- Un brouillon n'est pas encore parti : il appartient toujours
+                                     au commercial, qui doit pouvoir le corriger. --}}
+                                <tr wire:key="pros-edit-{{ $ligne->id }}" style="background:#FDF2F4;">
+                                    <td>—</td>
+                                    <td style="font-weight:700;">{{ $ligne->numero }}</td>
+                                    <td>{{ $ligne->date->format('d/m/Y') }}</td>
+                                    <td><input type="text" wire:model="eClient" class="champ" style="min-width:130px;"></td>
+                                    <td><input type="text" wire:model="eLocalisation" class="champ" style="min-width:110px;"></td>
+                                    <td>
+                                        <select wire:model="eMoyen" class="champ">
+                                            @foreach ($this->optionsMoyen as $valeur => $libelle)
+                                                <option value="{{ $valeur }}">{{ $libelle }}</option>
+                                            @endforeach
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select wire:model="eActivite" class="champ">
+                                            @foreach ($this->optionsActivite as $valeur => $libelle)
+                                                <option value="{{ $valeur }}">{{ $libelle }}</option>
+                                            @endforeach
+                                        </select>
+                                    </td>
+                                    <td style="white-space:normal; min-width:140px;">
+                                        <label style="display:flex; align-items:center; gap:5px; font-size:13px;">
+                                            <input type="checkbox" wire:model.live="ePassage"> Passage
+                                        </label>
+                                        @if ($ePassage && ! $eDevisApres)
+                                            <input type="date" wire:model="eDatePassage" class="champ" style="margin-top:4px;">
+                                        @endif
+                                    </td>
+                                    <td style="white-space:normal; min-width:170px;">
+                                        <label style="display:flex; align-items:center; gap:5px; font-size:13px;">
+                                            <input type="checkbox" wire:model.live="eDevisApres"> Devis après passage
+                                        </label>
+                                        @if ($eDevisApres)
+                                            <input type="date" wire:model.live="eDateDevis" class="champ" style="margin-top:4px;">
+                                        @endif
+                                    </td>
+                                    <td style="white-space:normal; min-width:180px;">
+                                        <textarea wire:model="eObservations" rows="2" placeholder="Observations"
+                                            style="width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13px;"></textarea>
+                                    </td>
+                                    <td>—</td>
+                                    <td><span class="pastille pastille-ambre">Brouillon</span></td>
+                                    <td style="text-align:right; white-space:nowrap;">
+                                        <button type="button" wire:click="enregistrerEdition" class="bouton bouton-petit bouton-vert" style="margin-right:5px;">Enregistrer</button>
+                                        <button type="button" wire:click="annulerEdition" class="bouton bouton-petit bouton-secondaire">Annuler</button>
+                                    </td>
+                                </tr>
+                            @else
                             <tr wire:key="pros-{{ $ligne->id }}">
                                 <td>
-                                    @if ($ligne->statut_validation === 'Brouillon')
+                                    @if ($brouillon)
                                         <input type="checkbox" wire:model.live="selection.{{ $ligne->id }}">
                                     @endif
                                 </td>
@@ -348,8 +573,29 @@ $transmettreSelection = function () {
                                 <td style="color:var(--th-gris,#6B6E76);">{{ $ligne->localisation ?? '—' }}</td>
                                 <td>{{ $ligne->moyen }}</td>
                                 <td>{{ $ligne->activite }}</td>
-                                <td>{{ $ligne->passage ? '☑' : '☐' }} {{ $ligne->date_passage?->format('d/m/Y') }}</td>
-                                <td>{{ $ligne->devis_apres_passage ? '☑' : '☐' }} {{ $ligne->date_devis?->format('d/m/Y') }}</td>
+
+                                {{-- Sur un brouillon, la case se coche d'un clic. Une fois transmise,
+                                     la ligne se fige : elle ne doit pas changer sous les yeux du
+                                     responsable en train de l'arbitrer. --}}
+                                <td style="text-align:center;">
+                                    @if ($brouillon)
+                                        <input type="checkbox" wire:click="basculerPassage({{ $ligne->id }})"
+                                            @checked($ligne->passage) style="width:16px; height:16px; cursor:pointer;"
+                                            title="Êtes-vous passé sur site ?">
+                                    @else
+                                        {{ $ligne->passage ? '☑' : '☐' }} {{ $ligne->date_passage?->format('d/m/Y') }}
+                                    @endif
+                                </td>
+                                <td style="text-align:center;">
+                                    @if ($brouillon)
+                                        <input type="checkbox" wire:click="basculerDevisApres({{ $ligne->id }})"
+                                            @checked($ligne->devis_apres_passage) style="width:16px; height:16px; cursor:pointer;"
+                                            title="Un devis doit-il suivre ? Cocher marque aussi le passage.">
+                                    @else
+                                        {{ $ligne->devis_apres_passage ? '☑' : '☐' }} {{ $ligne->date_devis?->format('d/m/Y') }}
+                                    @endif
+                                </td>
+
                                 <td style="color:var(--th-gris,#6B6E76);">{{ $ligne->observations ?? '—' }}</td>
                                 <td style="white-space:normal; min-width:230px;">
                                     <x-saisie-libre :sujet="$ligne"
@@ -361,14 +607,17 @@ $transmettreSelection = function () {
                                         <div style="font-size:11px; color:var(--th-accent,#C8102E); margin-top:3px; white-space:normal;">{{ $ligne->motif_refus }}</div>
                                     @endif
                                 </td>
-                                <td style="text-align:right;">
-                                    @if ($ligne->statut_validation === 'Brouillon')
+                                <td style="text-align:right; white-space:nowrap;">
+                                    @if ($brouillon)
+                                        <button type="button" wire:click="modifier({{ $ligne->id }})"
+                                            class="bouton bouton-secondaire bouton-petit" style="margin-right:5px;">Modifier</button>
                                         <button type="button" wire:click="supprimer({{ $ligne->id }})"
                                             wire:confirm="Supprimer ce brouillon ?"
                                             class="bouton bouton-secondaire bouton-petit">Supprimer</button>
                                     @endif
                                 </td>
                             </tr>
+                            @endif
                         @empty
                             <x-table-vide :colspan="13" texte="Aucune prospection ne correspond à ces filtres." />
                         @endforelse

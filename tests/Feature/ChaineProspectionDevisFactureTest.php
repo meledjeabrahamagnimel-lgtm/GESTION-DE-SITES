@@ -109,22 +109,41 @@ class ChaineProspectionDevisFactureTest extends TestCase
         $this->assertFalse($prospection->devis_apres_passage, 'Un devis après passage sans passage serait incohérent.');
     }
 
-    public function test_le_tableau_unique_montre_tous_les_statuts(): void
+    public function test_la_saisie_ne_garde_que_les_prospections_en_cours(): void
     {
         $transmise = $this->prospectionTransmise();
-        $validee = $this->prospectionTransmise(['numero' => 'P-0002', 'statut_validation' => 'Validée']);
-        $refusee = $this->prospectionTransmise(['numero' => 'P-0003', 'statut_validation' => 'Refusée', 'motif_refus' => 'Doublon']);
+        $attendUnDevis = $this->prospectionTransmise([
+            'numero' => 'P-0002', 'statut_validation' => 'Validée',
+            'passage' => true, 'devis_apres_passage' => true,
+        ]);
+        $sansSuite = $this->prospectionTransmise(['numero' => 'P-0003', 'statut_validation' => 'Validée']);
+        $refusee = $this->prospectionTransmise(['numero' => 'P-0004', 'statut_validation' => 'Refusée', 'motif_refus' => 'Doublon']);
 
         $lignes = $this->ecran()->instance()->prospectionsDuJour;
 
-        // Un seul tableau : la ligne à valider, celle déjà validée et celle refusée
-        // s'y trouvent toutes — la refusée reste lisible avec son motif.
-        $this->assertTrue($lignes->contains('id', $transmise->id));
-        $this->assertTrue($lignes->contains('id', $validee->id));
-        $this->assertTrue($lignes->contains('id', $refusee->id));
+        // Reste ce sur quoi il y a encore quelque chose à faire.
+        $this->assertTrue($lignes->contains('id', $transmise->id), 'Une transmission attend une décision.');
+        $this->assertTrue($lignes->contains('id', $attendUnDevis->id), 'Un devis annoncé reste à établir.');
+
+        // Sort ce dont l'histoire est finie : cela se consulte dans la page Prospects.
+        $this->assertFalse($lignes->contains('id', $sansSuite->id), 'Validée sans suite attendue : rien à faire.');
+        $this->assertFalse($lignes->contains('id', $refusee->id), 'Une prospection refusée est close.');
 
         // Les transmissions en tête : c'est là qu'une décision est attendue.
         $this->assertSame($transmise->id, $lignes->first()->id);
+    }
+
+    public function test_la_saisie_ne_garde_que_les_devis_en_cours(): void
+    {
+        $enAttente = $this->devis(montant: 800_000);
+        $valideNonFacture = $this->devis(montant: 500_000, attributs: ['numero' => 'D-0002', 'statut' => 'Validé', 'montant_valide' => 500_000]);
+        $refuse = $this->devis(montant: 300_000, attributs: ['numero' => 'D-0003', 'statut' => 'Refusé', 'motif_refus' => 'Prix']);
+
+        $lignes = $this->ecran()->instance()->devisDuJour;
+
+        $this->assertTrue($lignes->contains('id', $enAttente->id), 'Un devis sans statut attend une décision.');
+        $this->assertTrue($lignes->contains('id', $valideNonFacture->id), 'Un devis validé attend sa facture.');
+        $this->assertFalse($lignes->contains('id', $refuse->id), 'Un devis refusé est clos.');
     }
 
     public function test_une_prospection_validee_change_de_tableau(): void
@@ -197,7 +216,23 @@ class ChaineProspectionDevisFactureTest extends TestCase
         $this->assertSame(800_000, (int) $devis->montant_devis, 'Le montant proposé reste la trace de la négociation.');
     }
 
-    public function test_un_devis_refuse_ne_garde_aucun_montant_retenu(): void
+    public function test_un_devis_ne_se_refuse_pas_sans_motif(): void
+    {
+        $devis = $this->devis(montant: 800_000);
+
+        // Choisir « Refusé » ouvre la saisie du motif, sans rien enregistrer encore.
+        $ecran = $this->ecran()->call('changerStatutDevis', $devis->id, 'Refusé');
+
+        $this->assertSame('En attente', $devis->fresh()->statut);
+        $this->assertSame($devis->id, $ecran->instance()->devisARefuserId);
+
+        $ecran->set('motifRefusDevis', '')->call('confirmerRefusDevis')
+            ->assertHasErrors('motifRefusDevis');
+
+        $this->assertSame('En attente', $devis->fresh()->statut);
+    }
+
+    public function test_un_devis_refuse_garde_son_motif_et_perd_son_montant(): void
     {
         $devis = $this->devis(montant: 800_000);
 
@@ -206,11 +241,15 @@ class ChaineProspectionDevisFactureTest extends TestCase
             ->set('montantValidation', '750000')
             ->call('confirmerValidationDevis');
 
-        $this->ecran()->call('changerStatutDevis', $devis->id, 'Refusé');
+        $this->ecran()
+            ->call('changerStatutDevis', $devis->id, 'Refusé')
+            ->set('motifRefusDevis', 'Prix jugé trop élevé')
+            ->call('confirmerRefusDevis');
 
         $devis->refresh();
         $this->assertSame('Refusé', $devis->statut);
-        $this->assertNull($devis->montant_valide);
+        $this->assertSame('Prix jugé trop élevé', $devis->motif_refus);
+        $this->assertNull($devis->montant_valide, 'Un devis refusé ne retient aucun montant.');
     }
 
     public function test_un_devis_valide_devient_une_facture_au_montant_retenu(): void
@@ -272,7 +311,7 @@ class ChaineProspectionDevisFactureTest extends TestCase
         ]);
     }
 
-    private function devis(int $montant): Devis
+    private function devis(int $montant, array $attributs = []): Devis
     {
         return Devis::create([
             'entreprise_id' => $this->entreprise->id,
@@ -284,6 +323,7 @@ class ChaineProspectionDevisFactureTest extends TestCase
             'activite' => 'Mécanique',
             'statut' => 'En attente',
             'montant_devis' => $montant,
+            ...$attributs,
         ]);
     }
 }

@@ -34,8 +34,10 @@ state([
     'editionProsDevisApres' => false, 'editionProsDateDevis' => null,
     'editionProsObs' => '',
 
-    // Validation d'un devis : le montant retenu se saisit avant que le statut ne change.
+    // Validation ou refus d'un devis : le montant retenu, ou le motif, se saisit
+    // avant que le statut ne change.
     'devisAValiderId' => null, 'montantValidation' => '',
+    'devisARefuserId' => null, 'motifRefusDevis' => '',
 
     'devisSelection' => [], 'devisBrouillon' => [],
     'factureSelection' => [], 'factureBrouillon' => [],
@@ -320,26 +322,51 @@ $validerToutesProspections = function () {
 };
 
 /**
- * Toutes les prospections de la journée, quel que soit leur statut — à valider,
- * validées, refusées. Une refusée reste visible avec son motif : la faire disparaître
- * empêcherait de comprendre pourquoi le compte du commercial ne tombe pas juste.
- * Seuls les brouillons restent cachés : ils appartiennent encore au commercial, qui
- * ne les a pas transmis.
+ * L'en-cours des prospections : ce sur quoi il reste quelque chose à faire.
+ *
+ *   - transmise, donc en attente de votre décision ;
+ *   - validée en annonçant un devis, qui n'est pas encore établi.
+ *
+ * Une prospection refusée, ou validée sans suite attendue, quitte l'écran de saisie :
+ * son histoire est finie, elle se consulte dans la page Prospects. Un écran de saisie
+ * encombré de lignes closes fait perdre de vue celles qui attendent vraiment.
+ *
+ * Aucun filtre sur la date : une transmission d'hier restée sans réponse doit sauter
+ * aux yeux aujourd'hui, pas disparaître avec le changement de journée.
  */
 $prospectionsDuJour = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)
-    ->whereIn('statut_validation', ['Transmise', 'Validée', 'Refusée'])
-    ->whereDate('date', $this->date)
+    ->where(fn ($q) => $q
+        ->where('statut_validation', 'Transmise')
+        ->orWhere(fn ($r) => $r->where('statut_validation', 'Validée')
+            ->where('devis_apres_passage', true)->doesntHave('devis')))
     ->with(['commercial', 'donneesLibres'])
     ->orderByDesc('id')->get()
     // Les transmissions d'abord : c'est là qu'on attend une décision. Le tri se fait
-    // en mémoire — la journée tient en quelques lignes — plutôt qu'en SQL, dont la
-    // syntaxe de tri par valeur diffère d'un moteur à l'autre.
-    ->sortBy(fn ($p) => ['Transmise' => 0, 'Validée' => 1, 'Refusée' => 2][$p->statut_validation] ?? 3)
+    // en mémoire — quelques lignes — plutôt qu'en SQL, dont la syntaxe de tri par
+    // valeur diffère d'un moteur à l'autre.
+    ->sortBy(fn ($p) => $p->statut_validation === 'Transmise' ? 0 : 1)
     ->values());
 
 $prospectionsAttenteDevis = computed(fn () => Prospection::whereIn('site_id', $this->siteIdsActifs)->where('statut_validation', 'Validée')->where('devis_apres_passage', true)->doesntHave('devis')->with('commercial')->orderBy('date')->get());
 
-$devisDuJour = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)->whereDate('date_emission', $this->date)->with('commercial')->orderByDesc('id')->get());
+/**
+ * L'en-cours des devis : ceux dont le sort n'est pas scellé.
+ *
+ *   - en attente d'un statut ;
+ *   - validés mais pas encore facturés.
+ *
+ * Un devis refusé, ou déjà facturé, sort de l'écran de saisie et se retrouve dans la
+ * page Devis. Là encore, pas de filtre sur la date : un devis émis la semaine dernière
+ * et toujours sans réponse doit rester sous les yeux.
+ */
+$devisDuJour = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)
+    ->where(fn ($q) => $q
+        ->where('statut', 'En attente')
+        ->orWhere(fn ($r) => $r->where('statut', 'Validé')->doesntHave('facture')))
+    ->with('commercial')
+    ->orderByDesc('id')->get()
+    ->sortBy(fn ($d) => $d->statut === 'En attente' ? 0 : 1)
+    ->values());
 
 $devisEnAttente = computed(fn () => Devis::whereIn('site_id', $this->siteIdsActifs)->where('statut', 'En attente')->with('commercial')->orderBy('date_emission')->get());
 
@@ -653,6 +680,7 @@ $changerStatutDevis = function (int $id, string $statut) {
     // diffère souvent de celui proposé. On ne le devine donc pas : le statut ne change
     // qu'une fois le montant saisi et confirmé, en deux temps.
     if ($statut === 'Validé') {
+        $this->annulerRefusDevis();
         $this->devisAValiderId = $devis->id;
         $this->montantValidation = (string) ($devis->montant_valide ?? $devis->montant_devis);
         $this->resetValidation();
@@ -660,11 +688,51 @@ $changerStatutDevis = function (int $id, string $statut) {
         return;
     }
 
-    $this->annulerValidationDevis();
+    // Refuser demande la même retenue : un refus sans motif ne s'explique plus trois
+    // mois après, et c'est pourtant ce qui nourrit le commentaire « Devis » du jour.
+    if ($statut === 'Refusé') {
+        $this->annulerValidationDevis();
+        $this->devisARefuserId = $devis->id;
+        $this->motifRefusDevis = (string) ($devis->motif_refus ?? '');
+        $this->resetValidation();
 
-    $devis->update(['statut' => $statut, 'montant_valide' => null]);
+        return;
+    }
+
+    $this->annulerValidationDevis();
+    $this->annulerRefusDevis();
+
+    $devis->update(['statut' => $statut, 'montant_valide' => null, 'motif_refus' => null]);
 
     unset($this->devisDuJour, $this->devisEnAttente, $this->devisValidesNonFactures);
+};
+
+$confirmerRefusDevis = function () {
+    $devis = $this->devisARefuserId
+        ? Devis::whereIn('site_id', $this->siteIdsActifs)->find($this->devisARefuserId)
+        : null;
+
+    if (! $devis) {
+        $this->annulerRefusDevis();
+
+        return;
+    }
+
+    $this->validate([
+        'motifRefusDevis' => ['required', 'string', 'max:255'],
+    ], [
+        'motifRefusDevis.required' => 'Indiquez pourquoi le client a refusé ce devis.',
+    ], ['motifRefusDevis' => 'motif du refus']);
+
+    $devis->update(['statut' => 'Refusé', 'montant_valide' => null, 'motif_refus' => $this->motifRefusDevis]);
+
+    $this->annulerRefusDevis();
+    unset($this->devisDuJour, $this->devisEnAttente, $this->devisValidesNonFactures);
+};
+
+$annulerRefusDevis = function () {
+    $this->devisARefuserId = null;
+    $this->motifRefusDevis = '';
 };
 
 $confirmerValidationDevis = function () {
@@ -1378,7 +1446,12 @@ $ajouterCharge = function () {
                 @endif
             </div>
 
-            <div style="overflow-x:auto; margin-top:14px;">
+            {{-- Un seul tableau pour les devis en cours : ceux qui attendent un statut et
+                 ceux, validés, qui attendent leur facture. Le statut se change ici même,
+                 et rien ne bascule tant que le montant retenu — ou le motif du refus —
+                 n'est pas saisi. Les devis refusés et les devis facturés quittent l'écran
+                 de saisie : leur histoire est close, ils se consultent dans la page Devis. --}}
+            <div class="tableau-conteneur" style="margin-top:14px;">
                 <table class="tableau">
                     <thead>
                         <tr>
@@ -1388,97 +1461,73 @@ $ajouterCharge = function () {
                             <th>Client</th>
                             <th>Émission</th>
                             <th>Commercial</th>
-                            <th>Statut</th>
-                            <th>Montant devis</th>
-                            <th>Montant validé</th>
                             <th>Activité</th>
-                            <th>Obs.</th>
+                            <th>Montant devis</th>
+                            <th>Statut</th>
+                            <th>Montant retenu / motif</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($this->devisDuJour->forPage($pageDevisDuJour, 7) as $d)
-                            <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                            <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="devis-{{ $d->id }}">
                                 <td style="font-weight:700;">{{ $d->numero }}</td>
                                 <td>{{ $d->date_reception?->format('d/m/Y') ?? '—' }}</td>
                                 <td>{{ $d->n_fiche_reception ?? '—' }}</td>
                                 <td>{{ $d->client }}</td>
                                 <td>{{ $d->date_emission->format('d/m/Y') }}</td>
                                 <td>{{ $d->commercial->nom }}</td>
-                                <td style="font-weight:700; color:{{ $d->statut === 'Validé' ? '#0E9F6E' : ($d->statut === 'Refusé' ? '#C8102E' : '#D97706') }};">{{ $d->statut }}</td>
-                                <td>{{ ae($d->montant_devis) }}</td>
-                                <td>{{ $d->statut === 'Validé' ? ae($d->montant_valide) : '—' }}</td>
                                 <td>{{ $d->activite }}</td>
-                                <td style="color:#6B6E76;">{{ $d->observations ?? '—' }}</td>
+                                <td>{{ ae($d->montant_devis) }}</td>
+                                <td>
+                                    <select wire:change="changerStatutDevis({{ $d->id }}, $event.target.value)"
+                                        style="padding:5px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13px;">
+                                        <option {{ $d->statut === 'En attente' ? 'selected' : '' }}>En attente</option>
+                                        <option {{ $d->statut === 'Validé' ? 'selected' : '' }}>Validé</option>
+                                        <option {{ $d->statut === 'Refusé' ? 'selected' : '' }}>Refusé</option>
+                                    </select>
+                                </td>
+                                <td style="min-width:270px;">
+                                    @if ($devisAValiderId === $d->id)
+                                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                            <input type="number" wire:model="montantValidation" min="1" autofocus
+                                                placeholder="Montant retenu"
+                                                style="padding:5px 8px; border:1px solid var(--th-accent,#C8102E); border-radius:6px; font-size:13px; width:120px;">
+                                            <button type="button" wire:click="confirmerValidationDevis"
+                                                class="bouton bouton-petit bouton-vert">Valider</button>
+                                            <button type="button" wire:click="annulerValidationDevis"
+                                                class="bouton bouton-petit bouton-secondaire">Annuler</button>
+                                        </div>
+                                        @error('montantValidation')
+                                            <div style="font-size:11.5px; color:var(--th-accent,#C8102E); margin-top:4px;">{{ $message }}</div>
+                                        @enderror
+                                    @elseif ($devisARefuserId === $d->id)
+                                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                            <input type="text" wire:model="motifRefusDevis" autofocus
+                                                placeholder="Motif du refus (prix, délai…)"
+                                                style="padding:5px 8px; border:1px solid var(--th-accent,#C8102E); border-radius:6px; font-size:13px; width:170px;">
+                                            <button type="button" wire:click="confirmerRefusDevis"
+                                                class="bouton bouton-petit bouton-sombre">Refuser</button>
+                                            <button type="button" wire:click="annulerRefusDevis"
+                                                class="bouton bouton-petit bouton-secondaire">Annuler</button>
+                                        </div>
+                                        @error('motifRefusDevis')
+                                            <div style="font-size:11.5px; color:var(--th-accent,#C8102E); margin-top:4px;">{{ $message }}</div>
+                                        @enderror
+                                    @elseif ($d->statut === 'Validé')
+                                        <span style="font-weight:700; color:#0E9F6E;">{{ ae($d->montant_valide) }}</span>
+                                        <span style="font-size:11.5px; color:var(--th-gris,#6B6E76);">— à facturer</span>
+                                    @else
+                                        <span style="font-size:11.5px; color:var(--th-gris,#6B6E76);">En attente de décision</span>
+                                    @endif
+                                </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="11" texte="Aucun devis émis pour cette journée." />
+                            <x-table-vide :colspan="10" texte="Aucun devis en cours : tout est traité." />
                         @endforelse
                     </tbody>
                 </table>
             </div>
             <x-pagination :page="$pageDevisDuJour" :total="$this->devisDuJour->count()" prop="pageDevisDuJour" :par-page="7" />
-
-            @if ($this->devisEnAttente->isNotEmpty())
-                <div style="width:100%; margin-top:14px;">
-                    <p style="font-size:12.5px; font-weight:700; color:#D97706; margin:0 0 6px;">
-                        Devis en attente ({{ $this->devisEnAttente->count() }}) — changer le statut :
-                    </p>
-                    <div class="tableau-conteneur">
-                        <table class="tableau">
-                            <thead>
-                                <tr>
-                                    <th>N°</th>
-                                    <th>Client</th>
-                                    <th>Émission</th>
-                                    <th>Montant</th>
-                                    <th>Statut</th>
-                                    <th>Montant retenu</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($this->devisEnAttente->forPage($pageDevisEnAttente, 7) as $d)
-                                    <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);" wire:key="devis-attente-{{ $d->id }}">
-                                        <td style="font-weight:700;">{{ $d->numero }}</td>
-                                        <td>{{ $d->client }}</td>
-                                        <td>{{ $d->date_emission->format('d/m/Y') }}</td>
-                                        <td>{{ ae($d->montant_devis) }}</td>
-                                        <td>
-                                            <select wire:change="changerStatutDevis({{ $d->id }}, $event.target.value)"
-                                                style="padding:5px 8px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; font-size:13px;">
-                                                <option {{ $d->statut === 'En attente' ? 'selected' : '' }}>En attente</option>
-                                                <option {{ $d->statut === 'Validé' ? 'selected' : '' }}>Validé</option>
-                                                <option {{ $d->statut === 'Refusé' ? 'selected' : '' }}>Refusé</option>
-                                            </select>
-                                        </td>
-                                        <td>
-                                            {{-- Choisir « Validé » n'enregistre rien tant que le montant retenu
-                                                 n'est pas confirmé : c'est lui, et non le montant proposé, qui
-                                                 deviendra le chiffre d'affaires facturé. --}}
-                                            @if ($devisAValiderId === $d->id)
-                                                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                                                    <input type="number" wire:model="montantValidation" min="1" autofocus
-                                                        placeholder="Montant retenu"
-                                                        style="padding:5px 8px; border:1px solid var(--th-accent,#C8102E); border-radius:6px; font-size:13px; width:120px;">
-                                                    <button type="button" wire:click="confirmerValidationDevis"
-                                                        class="bouton bouton-petit bouton-vert">Valider</button>
-                                                    <button type="button" wire:click="annulerValidationDevis"
-                                                        class="bouton bouton-petit bouton-secondaire">Annuler</button>
-                                                </div>
-                                                @error('montantValidation')
-                                                    <div style="font-size:11.5px; color:var(--th-accent,#C8102E); margin-top:4px;">{{ $message }}</div>
-                                                @enderror
-                                            @else
-                                                —
-                                            @endif
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    <x-pagination :page="$pageDevisEnAttente" :total="$this->devisEnAttente->count()" prop="pageDevisEnAttente" :par-page="7" />
-                </div>
-            @endif
 
             <div style="margin-top:14px;">
                 <label style="display:block; font-size:12.5px; font-weight:600; color:#4B4E55; margin-bottom:5px;">Commentaire — Devis</label>
@@ -1493,7 +1542,7 @@ $ajouterCharge = function () {
             @if ($this->devisValidesNonFactures->isNotEmpty())
                 <div style="width:100%;">
                     <p style="font-size:12.5px; font-weight:700; color:#D97706; margin:0 0 6px;">
-                        Listing des devis émis validés, non facturés ({{ $this->devisValidesNonFactures->count() }}) — cocher les devis à facturer :
+                        Devis validés en attente de facturation ({{ $this->devisValidesNonFactures->count() }}) — cocher ceux à facturer :
                     </p>
                     <div class="tableau-conteneur">
                         <table class="tableau">
