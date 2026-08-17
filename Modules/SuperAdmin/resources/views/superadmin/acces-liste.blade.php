@@ -3,9 +3,7 @@
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
-use Modules\Noyau\Exploitation\Modeles\Commercial;
 use function Livewire\Volt\{state, computed};
 
 state([
@@ -20,10 +18,6 @@ state([
     'exigerChangement' => true,
     'pageUtilisateurs' => 1,
 
-    // Correction en ligne de l'identite : un acces prepare porte souvent un nom
-    // approximatif, qu'on precise avant de l'ouvrir.
-    'editionId' => null,
-    'eNom' => '', 'eEmail' => '', 'eTelephone' => '',
 ]);
 
 $utilisateurs = computed(function () {
@@ -63,75 +57,6 @@ $basculerActif = function (int $id) {
     // un accès préparé inactif n'a reçu aucun courriel, il le reçoit maintenant.
     app(\Modules\Noyau\Entreprises\Actions\CreerAcces::class)->activer($utilisateur);
     $this->message = "Accès de {$utilisateur->name} activé — courriel de bienvenue envoyé.";
-};
-
-/*
-|--------------------------------------------------------------------------
-| Corriger l'identite d'un acces
-|--------------------------------------------------------------------------
-| Un acces prepare a l'avance porte souvent un nom approximatif, ou une adresse
-| a verifier. On doit pouvoir les reprendre avant de l'ouvrir : une fois le
-| courriel de bienvenue parti, l'adresse ne se corrige plus sans reexpedier.
-|
-| Le role et le perimetre ne se touchent pas ici : les changer deplacerait les
-| ecritures deja rattachees a la personne. Ils se reprennent la ou ils ont ete
-| poses, ce qui laisse une trace.
-*/
-$modifier = function (int $id) {
-    $utilisateur = User::find($id);
-
-    if (! $utilisateur) {
-        return;
-    }
-
-    $this->editionId = $utilisateur->id;
-    $this->eNom = $utilisateur->name;
-    $this->eEmail = $utilisateur->email;
-    $this->eTelephone = $utilisateur->telephone ?? '';
-    $this->resetValidation();
-};
-
-$annulerModification = function () {
-    $this->editionId = null;
-    $this->resetValidation();
-};
-
-$enregistrerModification = function () {
-    // Le formulaire n'apparait qu'une ligne ouverte : un appel sans ligne ne peut
-    // venir que d'une requete forgee, on l'ignore sans rien changer.
-    $utilisateur = $this->editionId ? User::find($this->editionId) : null;
-
-    if (! $utilisateur) {
-        $this->annulerModification();
-
-        return;
-    }
-
-    $donnees = $this->validate([
-        'eNom' => ['required', 'string', 'max:255'],
-        'eEmail' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($utilisateur->id)],
-        'eTelephone' => ['nullable', 'string', 'max:40'],
-    ], [], ['eNom' => 'nom', 'eEmail' => 'adresse e-mail', 'eTelephone' => 'telephone']);
-
-    $ancienEmail = $utilisateur->email;
-
-    $utilisateur->forceFill([
-        'name' => $donnees['eNom'],
-        'email' => $donnees['eEmail'],
-        'telephone' => $donnees['eTelephone'] ?: null,
-    ])->save();
-
-    // La fiche commerciale porte le meme nom : la laisser en arriere ferait
-    // apparaitre deux orthographes de la meme personne dans les tableaux.
-    Commercial::where('user_id', $utilisateur->id)->update(['nom' => $donnees['eNom']]);
-
-    $this->journaliser($utilisateur, $ancienEmail === $donnees['eEmail']
-        ? 'Identite corrigee'
-        : "Adresse changee : $ancienEmail vers ".$donnees['eEmail']);
-
-    $this->editionId = null;
-    unset($this->utilisateurs);
-    $this->message = "Acces de {$utilisateur->name} mis a jour.";
 };
 
 $forcerReinitialisation = function (int $id) {
@@ -284,16 +209,8 @@ $journaliser = function (User $utilisateur, string $action) {
                     @forelse ($this->utilisateurs->forPage($pageUtilisateurs, 10) as $utilisateur)
                         <tr wire:key="acces-{{ $utilisateur->id }}" style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td>
-                                @if ($editionId === $utilisateur->id)
-                                    <input type="text" wire:model="eNom" class="champ" placeholder="Nom et prenoms" style="min-width:200px; margin-bottom:4px;">
-                                    @error('eNom') <div style="font-size:11.5px; color:var(--th-accent,#C8102E);">{{ $message }}</div> @enderror
-                                    <input type="email" wire:model="eEmail" class="champ" placeholder="Adresse e-mail" style="min-width:200px; margin-bottom:4px;">
-                                    @error('eEmail') <div style="font-size:11.5px; color:var(--th-accent,#C8102E);">{{ $message }}</div> @enderror
-                                    <input type="text" wire:model="eTelephone" class="champ" placeholder="Telephone" style="min-width:200px;">
-                                @else
-                                    <div style="font-weight:600;">{{ $utilisateur->name }}</div>
-                                    <div style="color:#6B6E76; font-size:13.5px;">{{ $utilisateur->email }}</div>
-                                @endif
+                                <div style="font-weight:600;">{{ $utilisateur->name }}</div>
+                                <div style="color:#6B6E76; font-size:13.5px;">{{ $utilisateur->email }}</div>
                             </td>
                             <td>{{ $utilisateur->entreprise?->nom ?? '— Plateforme —' }}</td>
                             <td>{{ $this->roles[$utilisateur->id] ?? '—' }}</td>
@@ -305,18 +222,14 @@ $journaliser = function (User $utilisateur, string $action) {
                                 @endif
                             </td>
                             <td style="text-align:right; white-space:nowrap;">
-                                @if ($editionId === $utilisateur->id)
-                                    <button type="button" wire:click="enregistrerModification"
-                                        class="bouton bouton-petit bouton-vert" style="margin-right:5px;">Enregistrer</button>
-                                    <button type="button" wire:click="annulerModification"
-                                        class="bouton bouton-petit bouton-secondaire">Annuler</button>
-                                @elseif ($utilisateur->id !== auth()->id())
-                                    {{-- Corriger avant d'ouvrir : une fois le courriel de bienvenue
-                                         parti, l'adresse ne se reprend plus sans reexpedier. --}}
-                                    <button type="button" wire:click="modifier({{ $utilisateur->id }})"
-                                        style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer; margin-right:6px;">
+                                @if ($utilisateur->id !== auth()->id())
+                                    {{-- L'ecran de creation sert aussi a reprendre : les champs sont
+                                         les memes, et un formulaire logé dans une cellule de tableau
+                                         devenait illisible des que l'adresse depassait la colonne. --}}
+                                    <a href="{{ route('super-admin.acces.modifier', $utilisateur) }}" wire:navigate
+                                        style="display:inline-block; text-decoration:none; background:transparent; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; margin-right:6px;">
                                         Modifier
-                                    </button>
+                                    </a>
                                     <button type="button" wire:click="basculerActif({{ $utilisateur->id }})"
                                         wire:confirm="{{ $utilisateur->est_actif ? 'Révoquer l\'accès de '.$utilisateur->name.' ?' : 'Réactiver l\'accès de '.$utilisateur->name.' ?' }}"
                                         style="background:transparent; border:1px solid {{ $utilisateur->est_actif ? '#C8102E55' : '#0E9F6E55' }}; color:{{ $utilisateur->est_actif ? '#C8102E' : '#0E9F6E' }}; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer; margin-right:6px;">

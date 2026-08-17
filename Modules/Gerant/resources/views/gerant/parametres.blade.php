@@ -9,7 +9,7 @@ use Modules\Noyau\Entreprises\Modeles\Ville;
 use Modules\Noyau\Entreprises\Services\EnregistreurLogo;
 use App\Models\User;
 use Illuminate\Validation\Rule;
-use function Livewire\Volt\{state, computed, mount, usesFileUploads};
+use function Livewire\Volt\{state, computed, mount, protect, usesFileUploads};
 
 usesFileUploads();
 
@@ -32,8 +32,11 @@ state([
     // Mon compte
     'monNom' => '', 'monEmail' => '', 'monTelephone' => '',
 
-    // Nouvelle ville (crée aussitôt ses deux sites : Mécanique et Sinistre)
+    // Nouvelle ville : elle crée son premier lieu, du même nom qu'elle.
     'villeNom' => '', 'villeCommune' => '', 'villeTelephone' => '', 'villeAdresse' => '',
+
+    // Second lieu d'une ville qui en compte plusieurs, comme Abidjan.
+    'lieuVilleId' => null, 'lieuNom' => '',
 
     // Nouvel exercice
     'exerciceAnnee' => (int) date('Y'),
@@ -176,6 +179,20 @@ $enregistrerMonCompte = function () {
     $this->message = 'Vos informations ont été mises à jour.';
 };
 
+/*
+|--------------------------------------------------------------------------
+| Villes et lieux
+|--------------------------------------------------------------------------
+| Une ville tient un ou plusieurs lieux ; un lieu accueille les deux activités,
+| Mécanique et Sinistre, qui se saisissent ligne par ligne. Ce n'est donc pas
+| le lieu qui porte l'activité.
+|
+| L'écran créait encore deux sites « — Mécanique » et « — Sinistre » : l'ancien
+| modèle, abandonné quand le site est devenu un lieu physique. La colonne
+| `activite` n'existant plus sur les sites, elle était silencieusement écartée —
+| il ne restait que deux lieux fantômes, sans code, là où un seul avait lieu
+| d'être. Le texte de l'écran, lui, décrivait déjà le bon fonctionnement.
+*/
 $ajouterVille = function () {
     $donnees = $this->validate([
         'villeNom' => ['required', 'string', 'max:255'],
@@ -186,10 +203,11 @@ $ajouterVille = function () {
 
     $rang = $this->villes->count() + 1;
     $couleurs = ['#2563EB', '#0E9F6E', '#D97706', '#C8102E', '#7C3AED', '#0891B2'];
+    $code = $this->codeDeVille($donnees['villeNom']);
 
     $ville = Ville::create([
         'entreprise_id' => auth()->user()->entreprise_id,
-        'code' => 'V'.$rang,
+        'code' => $code,
         'nom' => $donnees['villeNom'],
         'commune' => $donnees['villeCommune'] ?: null,
         'telephone' => $donnees['villeTelephone'] ?: null,
@@ -198,19 +216,88 @@ $ajouterVille = function () {
         'est_actif' => true,
     ]);
 
-    foreach (['Mécanique', 'Sinistre'] as $activite) {
-        Site::create([
-            'entreprise_id' => auth()->user()->entreprise_id,
-            'ville_id' => $ville->id,
-            'nom' => $donnees['villeNom'].' — '.$activite,
-            'activite' => $activite,
-            'est_actif' => true,
-        ]);
-    }
+    // Un seul lieu à la création, qui se confond avec la ville : c'est le cas de
+    // Bouaké et de San Pédro. Une ville qui en compte plusieurs, comme Abidjan,
+    // reçoit les suivants un par un — on ne devine pas combien d'ateliers elle a.
+    Site::create([
+        'entreprise_id' => auth()->user()->entreprise_id,
+        'ville_id' => $ville->id,
+        'code' => $code,
+        'nom' => $donnees['villeNom'],
+        'est_actif' => true,
+    ]);
 
     $this->reset(['villeNom', 'villeCommune', 'villeTelephone', 'villeAdresse']);
     unset($this->villes, $this->sites);
-    $this->message = 'Ville créée avec ses deux sites (Mécanique et Sinistre).';
+    $this->message = "Ville « {$ville->nom} » créée avec son lieu. Ajoutez-en un second si elle en compte plusieurs.";
+};
+
+/**
+ * Un code court et parlant, tiré du nom : Bouaké donne BOU, San Pédro SAN.
+ *
+ * Il se lit dans les codes de lieu (BOU, BOU-2) et sur les écrans de filtre ;
+ * « V1 », « V2 » n'apprenaient rien à personne. En cas de collision — deux villes
+ * commençant pareil — un chiffre départage.
+ */
+// protect() : Volt fait de chaque closure une méthode publique, appelable depuis le
+// navigateur. Un simple calculateur n'a rien à y faire — appelé avec un argument
+// inattendu, il répondrait 500 sur une requête forgée.
+$codeDeVille = protect(function (string $nom): string {
+    $base = str(\Illuminate\Support\Str::ascii($nom))->replaceMatches('/[^A-Za-z]/', '')->upper()->substr(0, 3)->value();
+    $base = $base ?: 'VIL';
+
+    $pris = Ville::where('entreprise_id', auth()->user()->entreprise_id)->pluck('code')->all();
+    $code = $base;
+    $suffixe = 2;
+
+    while (in_array($code, $pris, true)) {
+        $code = $base.$suffixe++;
+    }
+
+    return $code;
+});
+
+/**
+ * Ajoute un lieu à une ville qui en compte plusieurs.
+ *
+ * Abidjan tient deux ateliers ; sans ce geste, l'écran promettait un second lieu
+ * qu'aucun bouton ne permettait de créer.
+ */
+$ajouterLieu = function (int $villeId) {
+    $ville = Ville::where('entreprise_id', auth()->user()->entreprise_id)->find($villeId);
+
+    if (! $ville) {
+        return;
+    }
+
+    $donnees = $this->validate([
+        'lieuNom' => ['required', 'string', 'max:255'],
+    ], [], ['lieuNom' => 'nom du lieu']);
+
+    $existants = Site::where('ville_id', $ville->id)->count();
+
+    Site::create([
+        'entreprise_id' => auth()->user()->entreprise_id,
+        'ville_id' => $ville->id,
+        'code' => $ville->code.'-'.($existants + 1),
+        'nom' => $donnees['lieuNom'],
+        'est_actif' => true,
+    ]);
+
+    $this->reset(['lieuNom', 'lieuVilleId']);
+    unset($this->villes, $this->sites);
+    $this->message = "Lieu « {$donnees['lieuNom']} » ajouté à {$ville->nom}.";
+};
+
+$ouvrirAjoutLieu = function (int $villeId) {
+    $this->lieuVilleId = $villeId;
+    $this->lieuNom = '';
+    $this->resetValidation();
+};
+
+$annulerAjoutLieu = function () {
+    $this->lieuVilleId = null;
+    $this->resetValidation();
 };
 
 /**
@@ -481,8 +568,9 @@ $reouvrirExercice = function (int $exerciceId) {
     @if ($onglet === 'villes')
         <x-carte-section titre="Création d'une ville">
             <p style="font-size:13px; color:var(--th-gris,#6B6E76); margin:0 0 14px;">
-                Créer une ville crée aussitôt son site : le lieu où se tiennent les deux activités
-                (Mécanique et Sinistre). Un second lieu s'ajoute ensuite si la ville en compte plusieurs.
+                Créer une ville crée aussitôt son lieu, du même nom qu'elle : c'est là que se tiennent
+                les deux activités, Mécanique et Sinistre, qui se saisissent ligne par ligne. Une ville
+                qui compte plusieurs ateliers reçoit les suivants avec « + Ajouter un lieu ».
             </p>
             <div class="bloc-saisie">
                 <x-champ label="Nom de la ville" model="villeNom" requis="true" placeholder="Ex : Bouaké" />
@@ -494,10 +582,10 @@ $reouvrirExercice = function (int $exerciceId) {
 
             <div class="tableau-conteneur" style="margin-top:16px;">
                 <table class="tableau">
-                    <thead><tr><th>Code</th><th>Ville</th><th>Commune</th><th>Téléphone</th><th>Responsable</th><th>Sites</th></tr></thead>
+                    <thead><tr><th>Code</th><th>Ville</th><th>Commune</th><th>Téléphone</th><th>Responsable</th><th>Lieux</th><th style="text-align:right;">Actions</th></tr></thead>
                     <tbody>
                         @forelse ($this->villes->forPage($pageVilles, 10) as $ville)
-                            <tr>
+                            <tr wire:key="ville-{{ $ville->id }}">
                                 <td style="font-weight:700;">{{ $ville->code }}</td>
                                 <td>
                                     <span style="display:inline-block; width:9px; height:9px; border-radius:99px; background:{{ $ville->couleur }}; margin-right:7px;"></span>
@@ -506,14 +594,38 @@ $reouvrirExercice = function (int $exerciceId) {
                                 <td>{{ $ville->commune ?? '—' }}</td>
                                 <td>{{ $ville->telephone ?? '—' }}</td>
                                 <td>{{ $ville->responsable?->name ?? '— à nommer —' }}</td>
-                                <td>
+                                <td style="white-space:normal; min-width:220px;">
                                     @foreach ($ville->sites as $site)
-                                        {{ $site->nom }} ({{ $site->responsable?->name ?? 'hérite de la ville' }}){{ ! $loop->last ? ', ' : '' }}
+                                        <div style="font-size:13px;">
+                                            <span style="font-weight:600;">{{ $site->code ?? '—' }}</span>
+                                            · {{ $site->nom }}
+                                            <span style="color:var(--th-gris,#6B6E76);">({{ $site->responsable?->name ?? 'hérite de la ville' }})</span>
+                                        </div>
                                     @endforeach
+
+                                    @if ($lieuVilleId === $ville->id)
+                                        <div style="display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap;">
+                                            <input type="text" wire:model="lieuNom" class="champ" style="min-width:170px;"
+                                                placeholder="Ex : {{ $ville->nom }} — Site 2">
+                                            <button type="button" wire:click="ajouterLieu({{ $ville->id }})"
+                                                class="bouton bouton-petit bouton-vert">Ajouter</button>
+                                            <button type="button" wire:click="annulerAjoutLieu"
+                                                class="bouton bouton-petit bouton-secondaire">Annuler</button>
+                                        </div>
+                                        @error('lieuNom')
+                                            <div style="font-size:11.5px; color:var(--th-accent,#C8102E); margin-top:4px;">{{ $message }}</div>
+                                        @enderror
+                                    @endif
+                                </td>
+                                <td style="text-align:right; white-space:nowrap;">
+                                    @if ($lieuVilleId !== $ville->id)
+                                        <button type="button" wire:click="ouvrirAjoutLieu({{ $ville->id }})"
+                                            class="bouton bouton-petit bouton-secondaire">+ Ajouter un lieu</button>
+                                    @endif
                                 </td>
                             </tr>
                         @empty
-                            <x-table-vide :colspan="6" texte="Aucune ville enregistrée." />
+                            <x-table-vide :colspan="7" texte="Aucune ville enregistrée." />
                         @endforelse
                     </tbody>
                 </table>
