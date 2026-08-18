@@ -2,9 +2,12 @@
 
 use Modules\Noyau\Exploitation\Modeles\Commercial;
 use Modules\Noyau\Entreprises\Actions\CreerAcces;
+use Modules\Noyau\Entreprises\Actions\SupprimerAcces;
 use Modules\Noyau\Entreprises\Modeles\Site;
 use Modules\Noyau\Entreprises\Modeles\Ville;
-use function Livewire\Volt\{state, computed, mount, rules};
+use Modules\Noyau\Entreprises\Services\Annuaire;
+use Modules\Noyau\Entreprises\Support\HierarchieAcces;
+use function Livewire\Volt\{state, computed, mount, protect, rules};
 
 state([
     'roleActif' => null,
@@ -20,6 +23,10 @@ state([
     'pourcentageMecanique' => (int) (Commercial::PART_MECANIQUE_DEFAUT * 100),
     'confirmation' => null,
     'pageAcces' => 1,
+
+    // Accès cochés en vue d'une activation groupée : préparer une équipe puis l'ouvrir
+    // le jour venu, en un geste plutôt qu'un par personne.
+    'selection' => [],
 ]);
 
 mount(function () {
@@ -98,12 +105,47 @@ $derniersAcces = computed(function () {
     ]);
 });
 
-$basculerActif = function (int $utilisateurId) {
-    if ($utilisateurId === auth()->id()) {
-        return;
+/** Vrai si l'annuaire est ouvert à ce lecteur : gérant et superviseur, pas plus bas. */
+$annuaireOuvert = computed(fn () => Annuaire::ouvertA(auth()->user()));
+
+/** Accès préparés visibles ici : ce sont eux que l'activation groupée vise. */
+$inactifs = computed(fn () => $this->derniersAcces
+    ->filter(fn ($ligne) => ! $ligne['utilisateur']->est_actif
+        && HierarchieAcces::autorise(auth()->user(), $ligne['utilisateur']))
+    ->map(fn ($ligne) => (string) $ligne['utilisateur']->id)
+    ->values()->all());
+
+/**
+ * Le compte visé, ou null si l'on n'a pas le droit d'y toucher.
+ *
+ * Un bouton absent de l'écran n'empêche rien : la méthode reste appelable depuis le
+ * navigateur, avec l'identifiant que l'on veut. Le contrôle est donc ici, sur chaque
+ * appel, et non dans la condition qui affiche le bouton.
+ */
+$cibleAutorisee = protect(function (int $utilisateurId): ?\App\Models\User {
+    $utilisateur = \App\Models\User::find($utilisateurId);
+
+    if (! $utilisateur) {
+        return null;
     }
 
-    $utilisateur = \App\Models\User::where('entreprise_id', auth()->user()->entreprise_id)->findOrFail($utilisateurId);
+    $motif = HierarchieAcces::motifDuRefus(auth()->user(), $utilisateur);
+
+    if ($motif !== null) {
+        $this->dispatch('annonce', texte: $motif, ton: 'alerte');
+
+        return null;
+    }
+
+    return $utilisateur;
+});
+
+$basculerActif = function (int $utilisateurId) {
+    $utilisateur = $this->cibleAutorisee($utilisateurId);
+
+    if (! $utilisateur) {
+        return;
+    }
 
     if ($utilisateur->est_actif) {
         $utilisateur->update(['est_actif' => false]);
@@ -116,6 +158,64 @@ $basculerActif = function (int $utilisateurId) {
     // un accès préparé inactif n'a reçu aucun courriel, il le reçoit maintenant.
     app(CreerAcces::class)->activer($utilisateur);
     $this->dispatch('annonce', texte: "Accès de {$utilisateur->name} activé — courriel de bienvenue envoyé.");
+};
+
+$toutSelectionner = function () {
+    $this->selection = $this->inactifs;
+};
+
+$viderSelection = function () {
+    $this->selection = [];
+};
+
+$activerSelection = function (CreerAcces $action) {
+    // On repart de la base : les identifiants viennent du navigateur, et seuls comptent
+    // ceux qui existent, sont inactifs, et relèvent bien de celui qui clique.
+    $comptes = \App\Models\User::whereIn('id', array_map('intval', $this->selection))
+        ->where('est_actif', false)
+        ->get()
+        ->filter(fn ($compte) => HierarchieAcces::autorise(auth()->user(), $compte));
+
+    $this->selection = [];
+
+    if ($comptes->isEmpty()) {
+        $this->dispatch('annonce', texte: 'Aucun accès activable dans la sélection.', ton: 'alerte');
+
+        return;
+    }
+
+    $ouverts = $comptes->filter(fn ($compte) => $action->activer($compte));
+
+    $this->dispatch('annonce', texte: $ouverts->count().' accès '
+        .($ouverts->count() > 1 ? 'activés' : 'activé').' — courriel de bienvenue envoyé.');
+};
+
+/**
+ * Supprime un accès, actif ou préparé.
+ *
+ * Ce que la personne a saisi reste : une prospection appartient à l'entreprise, pas à
+ * celui qui l'a tapée. L'action conserve la fiche commerciale dès qu'elle porte des
+ * écritures, et se contente alors de la détacher.
+ */
+$supprimer = function (int $utilisateurId, SupprimerAcces $action) {
+    $utilisateur = \App\Models\User::find($utilisateurId);
+
+    if (! $utilisateur) {
+        return;
+    }
+
+    try {
+        $bilan = $action->executer(auth()->user(), $utilisateur);
+    } catch (\RuntimeException $e) {
+        $this->dispatch('annonce', texte: $e->getMessage(), ton: 'alerte');
+
+        return;
+    }
+
+    $this->selection = array_values(array_diff($this->selection, [(string) $utilisateurId]));
+    unset($this->derniersAcces, $this->inactifs);
+
+    $this->dispatch('annonce', texte: "Accès de {$utilisateur->name} supprimé — fiche commerciale : {$bilan['fiche commerciale']}.");
 };
 
 $choisirRole = function (string $role) {
@@ -282,11 +382,63 @@ $creer = function (CreerAcces $action) {
     </div>
 
     <div class="carte">
-        <h3 style="font-size:15px; font-weight:700; margin:0 0 12px;">Derniers accès créés</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+            <h3 style="font-size:15px; font-weight:700; margin:0;">Derniers accès créés</h3>
+
+            @if ($this->annuaireOuvert)
+                {{-- Lien ordinaire, sans wire:navigate : un téléchargement demande une
+                     vraie réponse HTTP, que Livewire chargerait sans jamais l'ouvrir. --}}
+                <a href="{{ route('annuaire') }}"
+                   style="border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:8px; padding:8px 14px; font-weight:700; font-size:13.5px; text-decoration:none; background:#fff;">
+                    ↓ Annuaire PDF
+                </a>
+            @endif
+        </div>
+
+        @if ($this->annuaireOuvert)
+            <p style="font-size:12px; color:#9A9DA5; margin:-4px 0 14px; max-width:640px;">
+                Rôle, nom, adresse et périmètre de chacun, groupés par ville.
+                {{ auth()->user()->hasRole('gerant')
+                    ? "Vous y voyez toute l'entreprise."
+                    : 'Vous y voyez votre ville.' }}
+            </p>
+        @endif
+
+        @if (count($this->inactifs) > 0)
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:#FFFBEA; border:1px solid #D9770633; border-radius:8px; padding:10px 14px; margin-bottom:14px;">
+                <span style="font-size:13.5px; color:#4B4E55;">
+                    <b>{{ count($this->inactifs) }}</b> accès préparé{{ count($this->inactifs) > 1 ? 's' : '' }},
+                    en attente d'activation.
+                    @if (count($selection))
+                        <b>{{ count($selection) }}</b> sélectionné{{ count($selection) > 1 ? 's' : '' }}.
+                    @endif
+                </span>
+
+                <button type="button" wire:click="toutSelectionner"
+                    style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:6px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer;">
+                    Tout sélectionner
+                </button>
+
+                @if (count($selection))
+                    <button type="button" wire:click="viderSelection"
+                        style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76; border-radius:6px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer;">
+                        Tout décocher
+                    </button>
+
+                    <button type="button" wire:click="activerSelection"
+                        wire:confirm="Activer les {{ count($selection) }} accès sélectionnés ? Un courriel de bienvenue partira vers chacun."
+                        style="background:#0E9F6E; border:0; color:#fff; border-radius:6px; padding:7px 14px; font-size:12.5px; font-weight:700; cursor:pointer;">
+                        Activer la sélection ({{ count($selection) }})
+                    </button>
+                @endif
+            </div>
+        @endif
+
         <div class="tableau-conteneur">
             <table class="tableau">
                 <thead>
                     <tr>
+                        <th style="width:28px;"></th>
                         <th>Nom</th>
                         <th>E-mail</th>
                         <th>Rôle</th>
@@ -299,7 +451,15 @@ $creer = function (CreerAcces $action) {
                 </thead>
                 <tbody>
                     @foreach ($this->derniersAcces->forPage($pageAcces, 10) as $ligne)
-                        <tr style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                        <tr wire:key="acces-{{ $ligne['utilisateur']->id }}" style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                            <td>
+                                {{-- La case ne s'affiche que sur un accès préparé qui relève
+                                     bien de vous : le reste n'a rien à activer. --}}
+                                @if (in_array((string) $ligne['utilisateur']->id, $this->inactifs, true))
+                                    <input type="checkbox" wire:model.live="selection" value="{{ $ligne['utilisateur']->id }}"
+                                        aria-label="Sélectionner {{ $ligne['utilisateur']->name }}">
+                                @endif
+                            </td>
                             <td style="font-weight:600;">{{ $ligne['utilisateur']->name }}</td>
                             <td style="color:#6B6E76;">{{ $ligne['utilisateur']->email }}</td>
                             <td>{{ $ligne['role'] }}</td>
@@ -319,12 +479,18 @@ $creer = function (CreerAcces $action) {
                                     <span style="color:#C8102E; font-weight:600;">Révoqué</span>
                                 @endif
                             </td>
-                            <td>
-                                @if ($ligne['utilisateur']->id !== auth()->id())
+                            <td style="white-space:nowrap;">
+                                @if (\Modules\Noyau\Entreprises\Support\HierarchieAcces::autorise(auth()->user(), $ligne['utilisateur']))
                                     <button type="button" wire:click="basculerActif({{ $ligne['utilisateur']->id }})"
                                         wire:confirm="{{ $ligne['utilisateur']->est_actif ? 'Révoquer cet accès ?' : 'Réactiver cet accès ?' }}"
-                                        style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer; color:{{ $ligne['utilisateur']->est_actif ? '#C8102E' : '#0E9F6E' }};">
+                                        style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer; margin-right:6px; color:{{ $ligne['utilisateur']->est_actif ? '#C8102E' : '#0E9F6E' }};">
                                         {{ $ligne['utilisateur']->est_actif ? 'Révoquer' : 'Réactiver' }}
+                                    </button>
+
+                                    <button type="button" wire:click="supprimer({{ $ligne['utilisateur']->id }})"
+                                        wire:confirm="Supprimer définitivement l'accès de {{ $ligne['utilisateur']->name }} ?&#10;&#10;La personne ne pourra plus se connecter. Ses saisies, elles, sont conservées : elles appartiennent à l'entreprise."
+                                        style="background:#C8102E; border:0; color:#fff; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer;">
+                                        Supprimer
                                     </button>
                                 @else
                                     <span style="color:#B7B9BE; font-size:12.5px;">—</span>

@@ -4,6 +4,9 @@ use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
+use Modules\Noyau\Entreprises\Actions\CreerAcces;
+use Modules\Noyau\Entreprises\Actions\SupprimerAcces;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use function Livewire\Volt\{state, computed};
 
 state([
@@ -18,6 +21,12 @@ state([
     'exigerChangement' => true,
     'pageUtilisateurs' => 1,
 
+    // Accès cochés en vue d'une activation groupée. Préparer quatorze accès puis les
+    // ouvrir un par un, c'est quatorze allers-retours pour un seul geste réel.
+    'selection' => [],
+
+    // Restreint l'annuaire téléchargé à une entreprise ; vide, il les couvre toutes.
+    'annuaireEntrepriseId' => '',
 ]);
 
 $utilisateurs = computed(function () {
@@ -35,8 +44,16 @@ $roles = computed(fn () => User::nomsRolesParUtilisateur($this->utilisateurs->pl
 /** La personne dont on est en train d'écraser le mot de passe, ou null. */
 $cible = computed(fn () => $this->cibleId ? User::find($this->cibleId) : null);
 
+$entreprises = computed(fn () => Entreprise::orderBy('nom')->pluck('nom', 'id'));
+
+/** Accès inactifs de la recherche courante : ce sont eux que l'activation groupée vise. */
+$inactifs = computed(fn () => $this->utilisateurs->where('est_actif', false)->pluck('id')->all());
+
 $updatedRecherche = function () {
     $this->pageUtilisateurs = 1;
+    // La recherche change : garder des cases cochées sur des lignes devenues invisibles
+    // ferait activer des accès qu'on ne voit plus au moment de valider.
+    $this->selection = [];
 };
 
 $basculerActif = function (int $id) {
@@ -55,8 +72,88 @@ $basculerActif = function (int $id) {
 
     // C'est l'action qui ouvre l'accès, car c'est elle qui sait souhaiter la bienvenue :
     // un accès préparé inactif n'a reçu aucun courriel, il le reçoit maintenant.
-    app(\Modules\Noyau\Entreprises\Actions\CreerAcces::class)->activer($utilisateur);
+    app(CreerAcces::class)->activer($utilisateur);
     $this->message = "Accès de {$utilisateur->name} activé — courriel de bienvenue envoyé.";
+};
+
+/*
+|--------------------------------------------------------------------------
+| Activation groupée
+|--------------------------------------------------------------------------
+| Quatorze accès préparés le même jour s'ouvrent le même jour. Les cocher puis
+| valider en une fois évite quatorze confirmations identiques — et surtout évite
+| d'en oublier un, ce qui ne se voit qu'au moment où la personne ne peut pas entrer.
+|
+| La sélection ne porte que sur des accès inactifs : cocher un accès déjà ouvert
+| n'aurait aucun effet, et lui renverrait au mieux un second courriel de bienvenue.
+*/
+$toutSelectionner = function () {
+    $this->selection = array_map('strval', $this->inactifs);
+};
+
+$viderSelection = function () {
+    $this->selection = [];
+};
+
+$activerSelection = function (CreerAcces $action) {
+    // On repart de la base plutôt que de la liste reçue : les identifiants viennent du
+    // navigateur, et seuls comptent ceux qui existent, sont bien inactifs, et ne sont
+    // pas le compte de celui qui clique.
+    $comptes = User::whereIn('id', array_map('intval', $this->selection))
+        ->where('est_actif', false)
+        ->where('id', '!=', auth()->id())
+        ->get();
+
+    if ($comptes->isEmpty()) {
+        $this->message = 'Aucun accès inactif dans la sélection : rien à activer.';
+        $this->selection = [];
+
+        return;
+    }
+
+    $ouverts = $comptes->filter(fn (User $compte) => $action->activer($compte));
+
+    activity()
+        ->causedBy(auth()->user())
+        ->withProperties(['comptes' => $ouverts->pluck('email')->all()])
+        ->log('Activation groupée de '.$ouverts->count().' accès');
+
+    $this->selection = [];
+    $this->message = $ouverts->count().' accès '.($ouverts->count() > 1 ? 'activés' : 'activé')
+        .' — courriel de bienvenue envoyé à '.$ouverts->pluck('name')->implode(', ').'.';
+};
+
+/*
+|--------------------------------------------------------------------------
+| Suppression d'un accès
+|--------------------------------------------------------------------------
+| Actif ou préparé, un accès se supprime — quelqu'un s'en va, ou l'on s'est trompé
+| d'adresse en le créant. Ce que la personne a saisi, en revanche, reste : une
+| prospection appartient à l'entreprise, pas à celui qui l'a tapée. L'action s'en
+| charge et dit ce qu'elle a fait de la fiche commerciale.
+*/
+$supprimer = function (int $id, SupprimerAcces $action) {
+    $cible = User::find($id);
+
+    if (! $cible) {
+        return;
+    }
+
+    try {
+        $bilan = $action->executer(auth()->user(), $cible);
+    } catch (\RuntimeException $e) {
+        $this->message = null;
+        $this->addError('suppression', $e->getMessage());
+
+        return;
+    }
+
+    // La ligne disparaît : une case restée cochée désignerait un compte absent.
+    $this->selection = array_values(array_diff($this->selection, [(string) $id]));
+    $this->resetErrorBag('suppression');
+    unset($this->utilisateurs, $this->roles, $this->inactifs);
+
+    $this->message = "Accès de {$cible->name} supprimé — fiche commerciale : {$bilan['fiche commerciale']}.";
 };
 
 $forcerReinitialisation = function (int $id) {
@@ -145,19 +242,79 @@ $journaliser = function (User $utilisateur, string $action) {
 
 <x-a-venir titre="Gestion des accès"
         description="Créer, révoquer et redéfinir le mot de passe de toute personne, toutes entreprises confondues.">
-        <a href="{{ route('super-admin.acces.creer') }}" wire:navigate
-           style="display:inline-block; background:#C8102E; color:#fff; border-radius:8px; padding:9px 16px; font-weight:700; font-size:14.5px; text-decoration:none; margin-bottom:16px;">
-            + Créer un accès
-        </a>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
+            <a href="{{ route('super-admin.acces.creer') }}" wire:navigate
+               style="display:inline-block; background:#C8102E; color:#fff; border-radius:8px; padding:9px 16px; font-weight:700; font-size:14.5px; text-decoration:none;">
+                + Créer un accès
+            </a>
+
+            {{-- Le téléchargement n'est pas une action Livewire : il lui faut une vraie
+                 réponse HTTP, donc un lien ordinaire — et surtout pas wire:navigate,
+                 qui chargerait le PDF en arrière-plan sans jamais l'ouvrir. --}}
+            <a href="{{ route('super-admin.annuaire', $annuaireEntrepriseId ? ['entreprise' => $annuaireEntrepriseId] : []) }}"
+               style="display:inline-block; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:8px; padding:9px 16px; font-weight:700; font-size:14.5px; text-decoration:none; background:#fff;">
+                ↓ Annuaire PDF
+            </a>
+
+            <select wire:model.live="annuaireEntrepriseId"
+                style="padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px; background:#fff; max-width:250px;">
+                <option value="">Toutes les entreprises</option>
+                @foreach ($this->entreprises as $id => $nom)
+                    <option value="{{ $id }}">{{ $nom }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <p style="font-size:12px; color:#9A9DA5; margin:-8px 0 16px; max-width:640px;">
+            L'annuaire liste rôle, nom, adresse et périmètre de chaque personne, groupés par
+            entreprise puis par ville. Le gérant et le superviseur en téléchargent chacun le leur,
+            depuis leur propre écran.
+        </p>
 
         <div style="margin-bottom:16px; max-width:340px;">
             <input type="search" wire:model.live.debounce.300ms="recherche" class="champ"
                 placeholder="Rechercher un nom ou un e-mail…">
         </div>
 
+        {{-- Activation groupée : la barre ne s'affiche que s'il y a matière, pour ne pas
+             suggérer une action impossible quand tout est déjà ouvert. --}}
+        @if (count($this->inactifs) > 0)
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:#FFFBEA; border:1px solid #D9770633; border-radius:8px; padding:10px 14px; margin-bottom:16px;">
+                <span style="font-size:13.5px; color:#4B4E55;">
+                    <b>{{ count($this->inactifs) }}</b> accès préparé{{ count($this->inactifs) > 1 ? 's' : '' }},
+                    en attente d'activation.
+                    @if (count($selection))
+                        <b>{{ count($selection) }}</b> sélectionné{{ count($selection) > 1 ? 's' : '' }}.
+                    @endif
+                </span>
+
+                <button type="button" wire:click="toutSelectionner"
+                    style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:6px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer;">
+                    Tout sélectionner
+                </button>
+
+                @if (count($selection))
+                    <button type="button" wire:click="viderSelection"
+                        style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); color:#6B6E76; border-radius:6px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer;">
+                        Tout décocher
+                    </button>
+
+                    <button type="button" wire:click="activerSelection"
+                        wire:confirm="Activer les {{ count($selection) }} accès sélectionnés ? Un courriel de bienvenue partira vers chacun."
+                        style="background:#0E9F6E; border:0; color:#fff; border-radius:6px; padding:7px 14px; font-size:12.5px; font-weight:700; cursor:pointer;">
+                        Activer la sélection ({{ count($selection) }})
+                    </button>
+                @endif
+            </div>
+        @endif
+
         @if ($message)
             <div class="encart encart-succes">{{ $message }}</div>
         @endif
+
+        @error('suppression')
+            <div class="encart encart-alerte">{{ $message }}</div>
+        @enderror
 
         @if ($motDePasseGenere)
             <div style="background:#FFFBEA; border:1px solid #D97706; border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:14px;">
@@ -198,6 +355,7 @@ $journaliser = function (User $utilisateur, string $action) {
             <table class="tableau">
                 <thead>
                     <tr>
+                        <th style="width:28px;"></th>
                         <th>Utilisateur</th>
                         <th>Entreprise</th>
                         <th>Rôle</th>
@@ -208,6 +366,14 @@ $journaliser = function (User $utilisateur, string $action) {
                 <tbody>
                     @forelse ($this->utilisateurs->forPage($pageUtilisateurs, 10) as $utilisateur)
                         <tr wire:key="acces-{{ $utilisateur->id }}" style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
+                            <td>
+                                {{-- La case n'apparaît que sur un accès préparé : cocher un accès
+                                     déjà ouvert n'aurait rien à activer. --}}
+                                @unless ($utilisateur->est_actif)
+                                    <input type="checkbox" wire:model.live="selection" value="{{ $utilisateur->id }}"
+                                        aria-label="Sélectionner {{ $utilisateur->name }}">
+                                @endunless
+                            </td>
                             <td>
                                 <div style="font-weight:600;">{{ $utilisateur->name }}</div>
                                 <div style="color:#6B6E76; font-size:13.5px;">{{ $utilisateur->email }}</div>
@@ -241,8 +407,17 @@ $journaliser = function (User $utilisateur, string $action) {
                                     </button>
                                     <button type="button" wire:click="forcerReinitialisation({{ $utilisateur->id }})"
                                         wire:confirm="Générer un nouveau mot de passe provisoire pour {{ $utilisateur->name }} ?"
-                                        style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer;">
+                                        style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer; margin-right:6px;">
                                         Générer
+                                    </button>
+
+                                    {{-- Supprimer efface le compte, actif ou préparé. Ce que la
+                                         personne a saisi reste : la fiche commerciale qui porte
+                                         des écritures est conservée en Inactif, pas détruite. --}}
+                                    <button type="button" wire:click="supprimer({{ $utilisateur->id }})"
+                                        wire:confirm="Supprimer définitivement l'accès de {{ $utilisateur->name }} ({{ $utilisateur->email }}) ?&#10;&#10;La personne ne pourra plus se connecter. Ses saisies, elles, sont conservées : elles appartiennent à l'entreprise."
+                                        style="background:#C8102E; border:0; color:#fff; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer;">
+                                        Supprimer
                                     </button>
                                 @else
                                     <span style="color:#9A9DA5; font-size:12.5px;">— vous-même —</span>
@@ -250,7 +425,7 @@ $journaliser = function (User $utilisateur, string $action) {
                             </td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="5" texte="Aucun compte ne correspond à cette recherche." />
+                        <x-table-vide :colspan="6" texte="Aucun compte ne correspond à cette recherche." />
                     @endforelse
                 </tbody>
             </table>

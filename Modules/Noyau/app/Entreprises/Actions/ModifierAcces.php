@@ -1,0 +1,234 @@
+<?php
+
+namespace Modules\Noyau\Entreprises\Actions;
+
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Entreprises\Modeles\Site;
+use Modules\Noyau\Entreprises\Modeles\Ville;
+use Modules\Noyau\Entreprises\Services\ProvisionneurEntreprise;
+use Modules\Noyau\Exploitation\Modeles\Commercial;
+use Modules\Noyau\Exploitation\Services\GenerateurNumero;
+use Spatie\Permission\PermissionRegistrar;
+
+/**
+ * Reprend un accès existant : ses coordonnées, son périmètre, et son rôle.
+ *
+ * Changer un rôle n'est pas changer un libellé. Le rôle est ce qui ouvre les écrans,
+ * mais il détermine aussi trois choses qui vivent ailleurs : la ville ou le lieu dont
+ * la personne répond, la désignation portée par cette ville ou ce lieu, et l'existence
+ * d'une fiche commerciale. Ne toucher qu'à l'un des quatre laisse un compte incohérent
+ * — un superviseur encore inscrit comme responsable de son ancienne ville, ou un
+ * commercial devenu comptable et qui continue de figurer dans les objectifs.
+ *
+ * C'est pourquoi tout se fait ici, d'un bloc et dans une transaction : ou les quatre
+ * suivent, ou rien ne bouge.
+ */
+class ModifierAcces
+{
+    /** Rôles dont le titulaire prospecte : il doit exister comme commercial. */
+    private const ROLES_COMMERCIAUX = ['responsable_ville', 'responsable_site', 'commercial'];
+
+    /**
+     * @param  array<string, mixed>  $donnees  nom, email, telephone, mot_de_passe, entreprise_id, ville_id, site_id, objectifs
+     * @param  bool  $structureModifiable  faux si l'accès a déjà servi : le rôle et
+     *                                     l'entreprise sont alors figés, ses écritures
+     *                                     leur étant rattachées.
+     * @return array<string, string> ce qui a changé, pour l'annoncer sans le deviner
+     */
+    public function executer(User $compte, string $role, array $donnees, bool $structureModifiable): array
+    {
+        return DB::transaction(function () use ($compte, $role, $donnees, $structureModifiable) {
+            $ancienRole = $this->roleActuel($compte);
+            $changements = [];
+
+            $compte->forceFill([
+                'name' => $donnees['nom'],
+                'email' => $donnees['email'],
+                'telephone' => ($donnees['telephone'] ?? null) ?: null,
+            ]);
+
+            if (! empty($donnees['mot_de_passe'])) {
+                // Reposer un mot de passe coupe la connexion en cours du titulaire : on
+                // ne le fait que si le champ a été rempli, jamais en corrigeant une adresse.
+                $compte->password = Hash::make($donnees['mot_de_passe']);
+                $compte->doit_changer_mot_de_passe = true;
+                $changements['mot de passe'] = 'remplacé';
+            }
+
+            $compte->save();
+
+            if (! $structureModifiable) {
+                // L'accès a servi : seul son périmètre à l'intérieur du rôle reste
+                // ajustable, et c'est l'ancien rôle qui commande.
+                $this->poserLePerimetre($compte, $ancienRole, $donnees, $changements);
+
+                return $changements;
+            }
+
+            $entrepriseId = (int) ($donnees['entreprise_id'] ?: $compte->entreprise_id);
+
+            if ($entrepriseId !== (int) $compte->entreprise_id) {
+                $changements['entreprise'] = 'transférée';
+            }
+
+            if ($role !== $ancienRole) {
+                $changements['rôle'] = ($ancienRole ?: '—').' → '.$role;
+            }
+
+            // Les désignations d'abord : sans cela, l'ancienne ville continuerait de le
+            // nommer responsable alors qu'il ne l'est plus.
+            DB::table('villes')->where('responsable_id', $compte->id)->update(['responsable_id' => null]);
+            DB::table('sites')->where('responsable_id', $compte->id)->update(['responsable_id' => null]);
+
+            $compte->forceFill(['entreprise_id' => $entrepriseId])->save();
+
+            $this->poserLeRole($compte, $role, $entrepriseId);
+            $ville = $this->poserLePerimetre($compte, $role, $donnees, $changements);
+            $this->accorderLaFiche($compte, $role, $ville, $donnees, $changements);
+
+            return $changements;
+        });
+    }
+
+    /**
+     * Le rôle réellement inscrit en base, sans dépendre de l'équipe posée dans la requête.
+     *
+     * getRoleNames() filtre sur l'équipe courante : depuis un écran Super Admin, qui
+     * n'est rattaché à aucune entreprise, il ne renvoie rien — et l'on croirait le
+     * compte sans rôle.
+     */
+    private function roleActuel(User $compte): string
+    {
+        return (string) DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_type', (new User)->getMorphClass())
+            ->where('model_has_roles.model_id', $compte->id)
+            ->value('roles.name');
+    }
+
+    /**
+     * Repose le rôle, toutes équipes confondues.
+     *
+     * syncRoles() ne retirerait que les rôles de l'équipe courante : un compte transféré
+     * d'une entreprise à l'autre garderait son ancien rôle dans l'ancienne, et le
+     * retrouverait intact si on l'y ramenait. On efface donc la liaison en clair.
+     */
+    private function poserLeRole(User $compte, string $role, int $entrepriseId): void
+    {
+        DB::table('model_has_roles')
+            ->where('model_type', (new User)->getMorphClass())
+            ->where('model_id', $compte->id)
+            ->delete();
+
+        // Une entreprise créée hors du parcours habituel peut n'avoir aucun rôle : on
+        // s'en assure plutôt que d'échouer sur un rôle introuvable.
+        ProvisionneurEntreprise::creerRoles(Entreprise::findOrFail($entrepriseId));
+
+        app(PermissionRegistrar::class)->setPermissionsTeamId($entrepriseId);
+        $compte->unsetRelation('roles');
+        $compte->assignRole($role);
+    }
+
+    /**
+     * Rattache le compte à son périmètre, et inscrit la désignation qui va avec.
+     *
+     * @param  array<string, mixed>  $donnees
+     * @param  array<string, string>  $changements
+     */
+    private function poserLePerimetre(User $compte, string $role, array $donnees, array &$changements): ?Ville
+    {
+        if ($role === 'gerant') {
+            // Le gérant répond de l'entreprise entière : ni ville ni lieu.
+            $compte->forceFill(['ville_id' => null, 'site_id' => null])->save();
+
+            return null;
+        }
+
+        if ($role === 'responsable_site') {
+            $site = Site::withoutGlobalScopes()
+                ->where('id', $donnees['site_id'] ?? null)
+                ->where('entreprise_id', $compte->entreprise_id)
+                ->first();
+
+            if (! $site) {
+                return null;
+            }
+
+            $site->forceFill(['responsable_id' => $compte->id])->save();
+            $compte->forceFill(['ville_id' => $site->ville_id, 'site_id' => $site->id])->save();
+            $changements['périmètre'] = $site->nom;
+
+            return Ville::withoutGlobalScopes()->find($site->ville_id);
+        }
+
+        $ville = Ville::withoutGlobalScopes()
+            ->where('id', $donnees['ville_id'] ?? null)
+            ->where('entreprise_id', $compte->entreprise_id)
+            ->first();
+
+        if (! $ville) {
+            return null;
+        }
+
+        if ($role === 'responsable_ville') {
+            $ville->forceFill(['responsable_id' => $compte->id])->save();
+        }
+
+        $compte->forceFill(['ville_id' => $ville->id, 'site_id' => null])->save();
+        $changements['périmètre'] = $ville->nom;
+
+        return $ville;
+    }
+
+    /**
+     * Crée, met à jour ou retire la fiche commerciale, selon le nouveau rôle.
+     *
+     * @param  array<string, mixed>  $donnees
+     * @param  array<string, string>  $changements
+     */
+    private function accorderLaFiche(User $compte, string $role, ?Ville $ville, array $donnees, array &$changements): void
+    {
+        $fiche = Commercial::withoutGlobalScopes()->where('user_id', $compte->id)->first();
+        $prospecte = in_array($role, self::ROLES_COMMERCIAUX, true);
+
+        if (! $prospecte) {
+            if ($fiche) {
+                $changements['fiche commerciale'] = $fiche->retirerDuService();
+            }
+
+            return;
+        }
+
+        if (! $ville) {
+            return;
+        }
+
+        $valeurs = [
+            'entreprise_id' => $compte->entreprise_id,
+            'ville_id' => $ville->id,
+            'nom' => $donnees['nom'],
+            'objectif_mecanique' => (int) ($donnees['objectif_mecanique'] ?? 0),
+            'objectif_sinistre' => (int) ($donnees['objectif_sinistre'] ?? 0),
+            'statut' => 'Actif',
+        ];
+
+        if ($fiche) {
+            $fiche->forceFill($valeurs)->save();
+
+            return;
+        }
+
+        // Le compte n'était pas commercial jusqu'ici : sans fiche, ni ses prospections
+        // ni son chiffre d'affaires ne seraient rattachables à quiconque.
+        Commercial::withoutGlobalScopes()->create($valeurs + [
+            'user_id' => $compte->id,
+            'numero' => GenerateurNumero::suivant($compte->entreprise_id, 'com'),
+            'est_spontane' => false,
+        ]);
+
+        $changements['fiche commerciale'] = 'créée';
+    }
+}

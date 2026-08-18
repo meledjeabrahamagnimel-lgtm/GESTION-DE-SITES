@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
+use Modules\Noyau\Commun\Controleurs\TelechargerAnnuaire;
 
 /*
 |--------------------------------------------------------------------------
@@ -23,6 +24,9 @@ Route::middleware(['auth', 'role:super_admin'])
         // dans une ligne de tableau donnait un formulaire à l'étroit, illisible dès que
         // l'adresse dépassait la largeur de la colonne.
         Volt::route('/acces/{utilisateur}/modifier', 'superadmin.acces-creer')->name('acces.modifier')->middleware('habilitation:acces');
+        // Un téléchargement n'est pas une page Livewire : il lui faut une vraie réponse
+        // HTTP. Le paramètre ?entreprise= restreint le document à une seule entreprise.
+        Route::get('/annuaire.pdf', TelechargerAnnuaire::class)->name('annuaire')->middleware('habilitation:acces');
         Volt::route('/administrateurs', 'superadmin.administrateurs')->name('administrateurs')->middleware('habilitation:acces');
         Volt::route('/journal', 'superadmin.journal')->name('journal.index')->middleware('habilitation:journal');
         Volt::route('/maintenance', 'superadmin.maintenance')->name('maintenance')->middleware('habilitation:maintenance');

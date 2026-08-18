@@ -127,6 +127,19 @@ $objectifSinistre = computed(fn () => (int) $this->objectifGlobal - $this->objec
 
 $objectifAnnuel = computed(fn () => (int) $this->objectifGlobal * 12);
 
+/**
+ * Changer d'entreprise vide le perimetre.
+ *
+ * Une ville appartient a une entreprise : conservee telle quelle, elle designerait
+ * un lieu de l'ancienne. La validation la refuserait, mais l'ecran afficherait
+ * entre-temps un choix qui n'existe plus dans la liste.
+ */
+$updatedEntrepriseId = function () {
+    $this->villeChoix = '';
+    $this->siteChoix = '';
+    $this->resetValidation();
+};
+
 $choisirRole = function (string $role) {
     if (! array_key_exists($role, $this->rolesDisponibles) || ! $this->structureModifiable) {
         return;
@@ -142,8 +155,13 @@ $choisirRole = function (string $role) {
  * Le mot de passe reste facultatif : le laisser vide ne le touche pas. Le
  * remplacer ici est un geste separe, qui coupe la connexion en cours du
  * titulaire — on ne le fait pas par inadvertance en corrigeant une adresse.
+ *
+ * Le role, l'entreprise, le perimetre et la fiche commerciale sont repris d'un
+ * bloc par l'action : changer le role sans les trois autres laissait un compte
+ * incoherent — un superviseur encore inscrit comme responsable de son ancienne
+ * ville, ou un commercial devenu comptable qui figurait toujours aux objectifs.
  */
-$enregistrer = function () {
+$enregistrer = function (\Modules\Noyau\Entreprises\Actions\ModifierAcces $action) {
     $compte = $this->modifieId ? User::withoutGlobalScopes()->find($this->modifieId) : null;
 
     if (! $compte) {
@@ -159,6 +177,12 @@ $enregistrer = function () {
         'motDePasse' => ['nullable', 'string', 'min:8'],
     ];
 
+    // L'entreprise n'est exigee que si elle est encore reprenable : figee, le champ
+    // est desactive, et un navigateur n'envoie rien pour un champ desactive.
+    if ($this->structureModifiable) {
+        $regles['entrepriseId'] = ['required', 'exists:entreprises,id'];
+    }
+
     if ($this->roleActif === 'responsable_site') {
         $regles['siteChoix'] = ['required', 'in:'.implode(',', array_keys($this->optionsSite))];
     } elseif ($this->roleActif !== 'gerant') {
@@ -171,6 +195,7 @@ $enregistrer = function () {
     }
 
     $donnees = $this->validate($regles, [], [
+        'entrepriseId' => 'entreprise',
         'nom' => 'nom et prenoms',
         'email' => 'adresse e-mail',
         'telephone' => 'telephone',
@@ -181,47 +206,29 @@ $enregistrer = function () {
         'pourcentageMecanique' => 'pourcentage Mecanique',
     ]);
 
-    // Le perimetre depend du role : un responsable de site porte un lieu, les
-    // autres une ville, le gerant ni l'un ni l'autre. Les regles de validation ne
-    // posent donc pas toujours les deux clefs.
-    $lieu = $this->roleActif === 'responsable_site' ? ($donnees['siteChoix'] ?? null) : null;
-    $ville = $this->roleActif === 'responsable_site'
-        ? Site::where('id', $lieu)->value('ville_id')
-        : ($donnees['villeChoix'] ?? null);
-
-    $compte->forceFill([
-        'name' => $donnees['nom'],
+    $changements = $action->executer($compte, $this->roleActif, [
+        'nom' => $donnees['nom'],
         'email' => $donnees['email'],
-        'telephone' => $donnees['telephone'] ?: null,
-        'ville_id' => $ville ?: null,
-        'site_id' => $lieu ?: null,
-    ]);
+        'telephone' => $donnees['telephone'] ?? null,
+        'mot_de_passe' => $donnees['motDePasse'] ?? null,
+        'entreprise_id' => $donnees['entrepriseId'] ?? $compte->entreprise_id,
+        'ville_id' => $donnees['villeChoix'] ?? null,
+        'site_id' => $donnees['siteChoix'] ?? null,
+        'objectif_mecanique' => $this->objectifMecanique,
+        'objectif_sinistre' => $this->objectifSinistre,
+    ], $this->structureModifiable);
 
-    if ($donnees['motDePasse']) {
-        // Reposer un mot de passe coupe la connexion en cours du titulaire : on ne
-        // le fait que si le champ a ete rempli, jamais en corrigeant une adresse.
-        $compte->password = \Illuminate\Support\Facades\Hash::make($donnees['motDePasse']);
-        $compte->doit_changer_mot_de_passe = true;
-    }
+    activity()
+        ->causedBy(auth()->user())
+        ->performedOn($compte)
+        ->withProperties($changements)
+        ->log("Reprise de l'acces de {$donnees['nom']}");
 
-    $compte->save();
+    $this->motDePasse = '';
+    unset($this->compteModifie, $this->structureModifiable);
 
-    // La fiche commerciale porte le meme nom : la laisser en arriere ferait
-    // apparaitre deux orthographes de la meme personne dans les tableaux.
-    $fiche = ['nom' => $donnees['nom']];
-
-    if ($ville) {
-        $fiche['ville_id'] = $ville;
-    }
-
-    if ($this->roleAvecObjectifs) {
-        $fiche['objectif_mecanique'] = $this->objectifMecanique;
-        $fiche['objectif_sinistre'] = $this->objectifSinistre;
-    }
-
-    Commercial::withoutGlobalScopes()->where('user_id', $compte->id)->update($fiche);
-
-    $this->confirmation = "Acces de {$compte->name} mis a jour.";
+    $this->confirmation = "Acces de {$donnees['nom']} mis a jour."
+        .($changements ? ' ('.collect($changements)->map(fn ($v, $k) => "$k : $v")->implode(' · ').')' : '');
 };
 
 $creer = function (CreerAcces $action) {
@@ -317,7 +324,10 @@ $creer = function (CreerAcces $action) {
 
         <form wire:submit="{{ $this->enModification ? 'enregistrer' : 'creer' }}" style="max-width:480px;">
             <label style="display:block; font-size:14px; font-weight:600; color:#4B4E55; margin-bottom:6px;">Entreprise</label>
-            <select wire:model="entrepriseId" @disabled(! $this->structureModifiable)
+            {{-- .live : les villes et les lieux proposes plus bas dependent de
+                 l'entreprise choisie. Differee, la liste serait restee celle de
+                 l'entreprise precedente jusqu'au prochain aller-retour. --}}
+            <select wire:model.live="entrepriseId" @disabled(! $this->structureModifiable)
                 style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #E2E0D8; border-radius:8px; font-size:15.5px; margin-bottom:4px; {{ $this->structureModifiable ? '' : 'background:#F1EFE9; color:#6B6E76;' }}">
                 <option value="">— Choisir une entreprise —</option>
                 @foreach ($this->entreprises as $entreprise)
