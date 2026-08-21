@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Modules\Noyau\Entreprises\Actions\CreerAcces;
+use Modules\Noyau\Entreprises\Actions\RenvoyerLAcces;
 use Modules\Noyau\Entreprises\Actions\SupprimerAcces;
 use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use function Livewire\Volt\{state, computed};
@@ -21,12 +22,20 @@ state([
     'exigerChangement' => true,
     'pageUtilisateurs' => 1,
 
-    // Accès cochés en vue d'une activation groupée. Préparer quatorze accès puis les
-    // ouvrir un par un, c'est quatorze allers-retours pour un seul geste réel.
+    // Accès cochés en vue d'un geste groupé — activation ou renvoi du courriel.
+    // Préparer quatorze accès puis les ouvrir un par un, c'est quatorze allers-retours
+    // pour un seul geste réel.
     'selection' => [],
 
-    // Restreint l'annuaire téléchargé à une entreprise ; vide, il les couvre toutes.
-    'annuaireEntrepriseId' => '',
+    /*
+     * L'entreprise choisie commande trois choses à la fois : elle restreint la liste,
+     * elle restreint l'annuaire téléchargé, et elle coche d'emblée tout son personnel.
+     *
+     * C'est le geste réel : on ne renvoie pas un courriel à « quelques personnes », on le
+     * renvoie à une équipe qui n'a rien reçu. Choisir l'entreprise, vérifier la liste,
+     * valider — plutôt que cocher quatorze cases en espérant n'en oublier aucune.
+     */
+    'entrepriseFiltre' => '',
 ]);
 
 /*
@@ -37,6 +46,7 @@ $utilisateurs = computed(function () {
     $recherche = trim($this->recherche);
 
     return User::with(['entreprise', 'ville', 'site.ville'])
+        ->when($this->entrepriseFiltre !== '', fn ($q) => $q->where('entreprise_id', (int) $this->entrepriseFiltre))
         ->when($recherche !== '', fn ($q) => $q->where(fn ($r) => $r
             ->where('name', 'like', "%$recherche%")
             ->orWhere('email', 'like', "%$recherche%")))
@@ -70,14 +80,49 @@ $cible = computed(fn () => $this->cibleId ? User::find($this->cibleId) : null);
 
 $entreprises = computed(fn () => Entreprise::orderBy('nom')->pluck('nom', 'id'));
 
-/** Accès inactifs de la recherche courante : ce sont eux que l'activation groupée vise. */
+/** Accès inactifs de la liste courante : ce sont eux que l'activation groupée vise. */
 $inactifs = computed(fn () => $this->utilisateurs->where('est_actif', false)->pluck('id')->all());
+
+/**
+ * Comptes de la liste sur lesquels un geste groupé peut porter.
+ *
+ * Son propre compte en est écarté : se révoquer soi-même couperait la session en cours,
+ * et se renvoyer son propre courriel d'accueil n'apprend rien à personne.
+ */
+$selectionnables = computed(fn () => $this->utilisateurs
+    ->where('id', '!=', auth()->id())
+    ->pluck('id')->map(fn ($id) => (string) $id)->all());
+
+/** Comptes cochés qui pourraient encore recevoir un courriel : ils ont une entreprise. */
+$destinatairesPossibles = computed(fn () => $this->utilisateurs
+    ->whereIn('id', array_map('intval', $this->selection))
+    ->filter(fn (User $u) => $u->entreprise_id !== null)
+    ->count());
 
 $updatedRecherche = function () {
     $this->pageUtilisateurs = 1;
     // La recherche change : garder des cases cochées sur des lignes devenues invisibles
-    // ferait activer des accès qu'on ne voit plus au moment de valider.
+    // ferait agir sur des accès qu'on ne voit plus au moment de valider.
     $this->selection = [];
+};
+
+/**
+ * Choisir une entreprise coche tout son personnel.
+ *
+ * C'est le raccourci qui rend le geste groupé utilisable : le cas réel n'est pas
+ * « quelques personnes », c'est « toute l'équipe de cette entreprise n'a rien reçu ».
+ * Les cases restent décochables une par une — la présélection propose, elle n'impose pas.
+ */
+$updatedEntrepriseFiltre = function () {
+    $this->pageUtilisateurs = 1;
+    $this->message = null;
+    $this->resetErrorBag(['suppression', 'renvoi']);
+
+    // Les computed dépendent du filtre : les vider avant de lire « selectionnables »,
+    // sinon on cocherait la liste d'avant.
+    unset($this->utilisateurs, $this->roles, $this->perimetres, $this->inactifs, $this->selectionnables);
+
+    $this->selection = $this->entrepriseFiltre === '' ? [] : $this->selectionnables;
 };
 
 $basculerActif = function (int $id) {
@@ -112,7 +157,15 @@ $basculerActif = function (int $id) {
 | n'aurait aucun effet, et lui renverrait au mieux un second courriel de bienvenue.
 */
 $toutSelectionner = function () {
-    $this->selection = array_map('strval', $this->inactifs);
+    $this->selection = $this->selectionnables;
+};
+
+/** Ne cocher que les accès jamais ouverts : le cas le plus fréquent du renvoi groupé. */
+$selectionnerLesInactifs = function () {
+    $this->selection = array_values(array_intersect(
+        array_map('strval', $this->inactifs),
+        $this->selectionnables,
+    ));
 };
 
 $viderSelection = function () {
@@ -145,6 +198,96 @@ $activerSelection = function (CreerAcces $action) {
     $this->selection = [];
     $this->message = $ouverts->count().' accès '.($ouverts->count() > 1 ? 'activés' : 'activé')
         .' — courriel de bienvenue envoyé à '.$ouverts->pluck('name')->implode(', ').'.';
+};
+
+/*
+|--------------------------------------------------------------------------
+| Renvoi du courriel d'accès
+|--------------------------------------------------------------------------
+| Un courriel qui n'arrive pas ne fait pas de bruit : l'accès est ouvert côté
+| administration, la personne n'a rien reçu, et chacun attend l'autre. Ce bouton
+| coupe court.
+|
+| Ce que l'action ne fait jamais, et c'est le point : elle ne touche à aucune
+| donnée. Sur un accès déjà en service — quelqu'un s'en sert, a saisi des lignes,
+| a choisi son mot de passe — le message repart en simple rappel, sans rien
+| modifier. Le mot de passe n'est ni changé ni réinitialisé.
+*/
+$renvoyer = function (int $id, RenvoyerLAcces $action) {
+    $cible = $this->utilisateurs->firstWhere('id', $id);
+
+    if (! $cible) {
+        return;
+    }
+
+    try {
+        $bilan = $action->executer(auth()->user(), $cible);
+    } catch (\RuntimeException $e) {
+        $this->message = null;
+        $this->addError('renvoi', $e->getMessage());
+
+        return;
+    }
+
+    $this->resetErrorBag('renvoi');
+    unset($this->utilisateurs, $this->inactifs, $this->perimetres);
+
+    $this->message = "Courriel renvoyé à {$cible->name} ({$cible->email})"
+        .($bilan['active'] ? " — l'accès, qui était encore fermé, vient d'être ouvert." : '.')
+        .($bilan['lien'] === 'definition'
+            ? ' Le message contient un lien pour choisir son mot de passe.'
+            : ' Ce compte est déjà en service : son mot de passe est inchangé.');
+};
+
+/**
+ * Renvoi groupé.
+ *
+ * Comme pour l'activation, on repart de la base plutôt que de la liste reçue : les
+ * identifiants viennent du navigateur. Chaque envoi est isolé — une adresse refusée par
+ * le serveur de messagerie ne doit pas interrompre la tournée et laisser la moitié de
+ * l'équipe sans message, sans qu'on sache laquelle.
+ */
+$renvoyerSelection = function (RenvoyerLAcces $action) {
+    $comptes = User::whereIn('id', array_map('intval', $this->selection))
+        ->where('id', '!=', auth()->id())
+        ->whereNotNull('entreprise_id')
+        ->get();
+
+    if ($comptes->isEmpty()) {
+        $this->message = 'Aucun destinataire dans la sélection : rien à renvoyer.';
+
+        return;
+    }
+
+    $partis = [];
+    $echecs = [];
+
+    foreach ($comptes as $compte) {
+        try {
+            $action->executer(auth()->user(), $compte);
+            $partis[] = $compte->name;
+        } catch (\RuntimeException $e) {
+            $echecs[] = $compte->email;
+        }
+    }
+
+    activity()
+        ->causedBy(auth()->user())
+        ->withProperties(['partis' => count($partis), 'echecs' => $echecs])
+        ->log('Renvoi groupé du courriel d\'accès à '.count($partis).' destinataire(s)');
+
+    $this->selection = [];
+    unset($this->utilisateurs, $this->inactifs, $this->perimetres);
+
+    $this->message = count($partis).' courriel'.(count($partis) > 1 ? 's' : '').' renvoyé'
+        .(count($partis) > 1 ? 's' : '').($partis ? ' — '.implode(', ', $partis).'.' : '.');
+
+    if ($echecs) {
+        // Nommer les adresses en échec : « 12 sur 14 » sans dire lesquelles oblige à
+        // tout recommencer pour retrouver les deux manquantes.
+        $this->addError('renvoi', count($echecs).' envoi(s) en échec : '.implode(', ', $echecs)
+            .'. Les accès sont ouverts ; le mot de passe peut être transmis autrement.');
+    }
 };
 
 /*
@@ -275,12 +418,12 @@ $journaliser = function (User $utilisateur, string $action) {
             {{-- Le téléchargement n'est pas une action Livewire : il lui faut une vraie
                  réponse HTTP, donc un lien ordinaire — et surtout pas wire:navigate,
                  qui chargerait le PDF en arrière-plan sans jamais l'ouvrir. --}}
-            <a href="{{ route('super-admin.annuaire', $annuaireEntrepriseId ? ['entreprise' => $annuaireEntrepriseId] : []) }}"
+            <a href="{{ route('super-admin.annuaire', $entrepriseFiltre ? ['entreprise' => $entrepriseFiltre] : []) }}"
                style="display:inline-block; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:8px; padding:9px 16px; font-weight:700; font-size:14.5px; text-decoration:none; background:#fff;">
                 ↓ Annuaire PDF
             </a>
 
-            <select wire:model.live="annuaireEntrepriseId"
+            <select wire:model.live="entrepriseFiltre"
                 style="padding:9px 12px; border:1px solid var(--th-ligne,#E2E0D8); border-radius:8px; font-size:14px; background:#fff; max-width:250px;">
                 <option value="">Toutes les entreprises</option>
                 @foreach ($this->entreprises as $id => $nom)
@@ -289,10 +432,11 @@ $journaliser = function (User $utilisateur, string $action) {
             </select>
         </div>
 
-        <p style="font-size:12px; color:#9A9DA5; margin:-8px 0 16px; max-width:640px;">
-            L'annuaire liste rôle, nom, adresse et périmètre de chaque personne, groupés par
-            entreprise puis par ville. Le gérant et le superviseur en téléchargent chacun le leur,
-            depuis leur propre écran.
+        <p style="font-size:12px; color:#9A9DA5; margin:-8px 0 16px; max-width:680px;">
+            Choisir une entreprise filtre la liste, restreint l'annuaire téléchargé <b>et coche
+            d'emblée tout son personnel</b> — de quoi lui renvoyer le courriel d'accès en un geste.
+            L'annuaire, lui, liste rôle, nom, adresse et périmètre de chacun, groupés par entreprise
+            puis par ville ; le gérant et le superviseur téléchargent le leur depuis leur propre écran.
         </p>
 
         <div style="margin-bottom:16px; max-width:340px;">
@@ -300,22 +444,37 @@ $journaliser = function (User $utilisateur, string $action) {
                 placeholder="Rechercher un nom ou un e-mail…">
         </div>
 
-        {{-- Activation groupée : la barre ne s'affiche que s'il y a matière, pour ne pas
-             suggérer une action impossible quand tout est déjà ouvert. --}}
-        @if (count($this->inactifs) > 0)
+        {{-- Barre des gestes groupés. Elle porte deux actions distinctes : ouvrir des accès
+             préparés, et renvoyer le courriel à ceux qui ne l'ont pas reçu. La seconde vaut
+             pour tout le monde, ouvert ou non — c'est justement quand l'accès est ouvert
+             depuis longtemps sans que la personne ait pu entrer qu'elle sert. --}}
+        @if (count($this->selectionnables) > 0)
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:#FFFBEA; border:1px solid #D9770633; border-radius:8px; padding:10px 14px; margin-bottom:16px;">
                 <span style="font-size:13.5px; color:#4B4E55;">
-                    <b>{{ count($this->inactifs) }}</b> accès préparé{{ count($this->inactifs) > 1 ? 's' : '' }},
-                    en attente d'activation.
                     @if (count($selection))
-                        <b>{{ count($selection) }}</b> sélectionné{{ count($selection) > 1 ? 's' : '' }}.
+                        <b>{{ count($selection) }}</b> compte{{ count($selection) > 1 ? 's' : '' }} sélectionné{{ count($selection) > 1 ? 's' : '' }}
+                        @if ($entrepriseFiltre)
+                            — {{ $this->entreprises[$entrepriseFiltre] ?? '' }}
+                        @endif
+                    @elseif (count($this->inactifs) > 0)
+                        <b>{{ count($this->inactifs) }}</b> accès préparé{{ count($this->inactifs) > 1 ? 's' : '' }},
+                        en attente d'activation.
+                    @else
+                        Cocher des lignes, ou choisir une entreprise pour cocher toute son équipe.
                     @endif
                 </span>
 
                 <button type="button" wire:click="toutSelectionner"
                     style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:6px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer;">
-                    Tout sélectionner
+                    Tout cocher ({{ count($this->selectionnables) }})
                 </button>
+
+                @if (count($this->inactifs) > 0)
+                    <button type="button" wire:click="selectionnerLesInactifs"
+                        style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:6px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer;">
+                        Cocher les non activés ({{ count($this->inactifs) }})
+                    </button>
+                @endif
 
                 @if (count($selection))
                     <button type="button" wire:click="viderSelection"
@@ -323,22 +482,38 @@ $journaliser = function (User $utilisateur, string $action) {
                         Tout décocher
                     </button>
 
+                    <span style="flex-basis:100%; height:0;"></span>
+
+                    <button type="button" wire:click="renvoyerSelection"
+                        wire:confirm="Renvoyer le courriel d'accès aux {{ $this->destinatairesPossibles }} destinataire(s) sélectionné(s) ?&#10;&#10;Aucune donnée ne sera modifiée. Les comptes déjà en service reçoivent un simple rappel : leur mot de passe reste le leur."
+                        @disabled($this->destinatairesPossibles === 0)
+                        style="background:#1D4ED8; border:0; color:#fff; border-radius:6px; padding:7px 14px; font-size:12.5px; font-weight:700; cursor:pointer; {{ $this->destinatairesPossibles === 0 ? 'opacity:.45; cursor:not-allowed;' : '' }}">
+                        ✉ Renvoyer le mail ({{ $this->destinatairesPossibles }})
+                    </button>
+
                     <button type="button" wire:click="activerSelection"
-                        wire:confirm="Activer les {{ count($selection) }} accès sélectionnés ? Un courriel de bienvenue partira vers chacun."
+                        wire:confirm="Activer les accès encore fermés parmi les {{ count($selection) }} sélectionnés ? Un courriel de bienvenue partira vers chacun."
                         style="background:#0E9F6E; border:0; color:#fff; border-radius:6px; padding:7px 14px; font-size:12.5px; font-weight:700; cursor:pointer;">
-                        Activer la sélection ({{ count($selection) }})
+                        Activer les accès fermés
                     </button>
                 @endif
             </div>
+        @endif
+
+        {{-- Le sac d'erreurs est lu directement plutôt que par @error : cette directive
+             définit puis détruit une variable $message, et l'écran en possède déjà une
+             — la sienne disparaîtrait pour tout le reste du gabarit. --}}
+        @if ($errors->has('renvoi'))
+            <div class="encart encart-alerte">{{ $errors->first('renvoi') }}</div>
         @endif
 
         @if ($message)
             <div class="encart encart-succes">{{ $message }}</div>
         @endif
 
-        @error('suppression')
-            <div class="encart encart-alerte">{{ $message }}</div>
-        @enderror
+        @if ($errors->has('suppression'))
+            <div class="encart encart-alerte">{{ $errors->first('suppression') }}</div>
+        @endif
 
         @if ($motDePasseGenere)
             <div style="background:#FFFBEA; border:1px solid #D97706; border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:14px;">
@@ -393,12 +568,13 @@ $journaliser = function (User $utilisateur, string $action) {
                     @forelse ($this->utilisateurs->forPage($pageUtilisateurs, 10) as $utilisateur)
                         <tr wire:key="acces-{{ $utilisateur->id }}" style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td>
-                                {{-- La case n'apparaît que sur un accès préparé : cocher un accès
-                                     déjà ouvert n'aurait rien à activer. --}}
-                                @unless ($utilisateur->est_actif)
+                                {{-- La case couvre désormais toute ligne autre que la sienne : le
+                                     renvoi du courriel concerne aussi les accès ouverts depuis
+                                     longtemps, dont le titulaire n'a jamais reçu de message. --}}
+                                @if ($utilisateur->id !== auth()->id())
                                     <input type="checkbox" wire:model.live="selection" value="{{ $utilisateur->id }}"
                                         aria-label="Sélectionner {{ $utilisateur->name }}">
-                                @endunless
+                                @endif
                             </td>
                             <td>
                                 <div style="font-weight:600;">{{ $utilisateur->name }}</div>
@@ -429,6 +605,18 @@ $journaliser = function (User $utilisateur, string $action) {
                                         style="background:transparent; border:1px solid {{ $utilisateur->est_actif ? '#C8102E55' : '#0E9F6E55' }}; color:{{ $utilisateur->est_actif ? '#C8102E' : '#0E9F6E' }}; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer; margin-right:6px;">
                                         {{ $utilisateur->est_actif ? 'Révoquer' : 'Réactiver' }}
                                     </button>
+                                    {{-- Renvoi du courriel : le geste courant quand quelqu'un dit
+                                         n'avoir jamais rien reçu. Il n'écrit aucune donnée, et sur
+                                         un compte déjà en service il ne touche pas au mot de passe. --}}
+                                    @if ($utilisateur->entreprise_id)
+                                        <button type="button" wire:click="renvoyer({{ $utilisateur->id }})"
+                                            wire:confirm="Renvoyer le courriel d'accès à {{ $utilisateur->name }} ({{ $utilisateur->email }}) ?&#10;&#10;Aucune donnée ne sera modifiée."
+                                            title="Renvoyer le courriel d'accès"
+                                            style="background:transparent; border:1px solid #1D4ED855; color:#1D4ED8; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer; margin-right:6px;">
+                                            ✉ Renvoyer
+                                        </button>
+                                    @endif
+
                                     <button type="button" wire:click="ouvrirEcrasement({{ $utilisateur->id }})"
                                         style="background:transparent; border:1px solid #C8102E55; color:#C8102E; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer; margin-right:6px;">
                                         Définir un mot de passe

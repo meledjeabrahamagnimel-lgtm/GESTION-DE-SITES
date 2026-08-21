@@ -2,6 +2,7 @@
 
 use Modules\Noyau\Exploitation\Modeles\Commercial;
 use Modules\Noyau\Entreprises\Actions\CreerAcces;
+use Modules\Noyau\Entreprises\Actions\RenvoyerLAcces;
 use Modules\Noyau\Entreprises\Actions\SupprimerAcces;
 use Modules\Noyau\Entreprises\Modeles\Site;
 use Modules\Noyau\Entreprises\Modeles\Ville;
@@ -106,6 +107,17 @@ $inactifs = computed(fn () => $this->derniersAcces
     ->values()->all());
 
 /**
+ * Comptes de la liste sur lesquels un geste groupé peut porter : ceux qui relèvent
+ * réellement de celui qui regarde. Plus large que « inactifs », car le renvoi du
+ * courriel vaut aussi — et surtout — pour un accès ouvert depuis longtemps dont le
+ * titulaire n'a jamais reçu de message.
+ */
+$selectionnables = computed(fn () => $this->derniersAcces
+    ->filter(fn ($ligne) => HierarchieAcces::autorise(auth()->user(), $ligne['utilisateur']))
+    ->map(fn ($ligne) => (string) $ligne['utilisateur']->id)
+    ->values()->all());
+
+/**
  * Le compte visé, ou null si l'on n'a pas le droit d'y toucher.
  *
  * Un bouton absent de l'écran n'empêche rien : la méthode reste appelable depuis le
@@ -151,6 +163,11 @@ $basculerActif = function (int $utilisateurId) {
 };
 
 $toutSelectionner = function () {
+    $this->selection = $this->selectionnables;
+};
+
+/** Ne cocher que les accès jamais ouverts : le cas le plus fréquent du renvoi groupé. */
+$selectionnerLesInactifs = function () {
     $this->selection = $this->inactifs;
 };
 
@@ -187,6 +204,77 @@ $activerSelection = function (CreerAcces $action) {
  * celui qui l'a tapée. L'action conserve la fiche commerciale dès qu'elle porte des
  * écritures, et se contente alors de la détacher.
  */
+/*
+|--------------------------------------------------------------------------
+| Renvoi du courriel d'accès
+|--------------------------------------------------------------------------
+| Le même geste que côté plateforme, pour la même raison : un courriel qui n'arrive
+| pas ne fait pas de bruit, et le gérant qui a nommé quelqu'un est le mieux placé
+| pour s'apercevoir qu'il n'a jamais pu entrer.
+|
+| L'action ne modifie aucune donnée. Sur un accès déjà en service, le message repart
+| en simple rappel et le mot de passe reste celui de son titulaire.
+*/
+$renvoyer = function (int $utilisateurId, RenvoyerLAcces $action) {
+    $utilisateur = $this->cibleAutorisee($utilisateurId);
+
+    if (! $utilisateur) {
+        return;
+    }
+
+    try {
+        $bilan = $action->executer(auth()->user(), $utilisateur);
+    } catch (\RuntimeException $e) {
+        $this->dispatch('annonce', texte: $e->getMessage(), ton: 'alerte');
+
+        return;
+    }
+
+    unset($this->derniersAcces, $this->inactifs);
+
+    $this->dispatch('annonce', texte: "Courriel renvoyé à {$utilisateur->name}"
+        .($bilan['active'] ? " — l'accès, encore fermé, vient d'être ouvert." : '.')
+        .($bilan['lien'] === 'definition'
+            ? ' Il contient un lien pour choisir son mot de passe.'
+            : ' Ce compte est déjà en service : son mot de passe est inchangé.'));
+};
+
+/** Renvoi groupé : un envoi refusé n'interrompt pas la tournée. */
+$renvoyerSelection = function (RenvoyerLAcces $action) {
+    $comptes = \App\Models\User::whereIn('id', array_map('intval', $this->selection))
+        ->get()
+        ->filter(fn ($compte) => $action->autorise(auth()->user(), $compte));
+
+    $this->selection = [];
+
+    if ($comptes->isEmpty()) {
+        $this->dispatch('annonce', texte: 'Aucun destinataire dans la sélection.', ton: 'alerte');
+
+        return;
+    }
+
+    $partis = 0;
+    $echecs = [];
+
+    foreach ($comptes as $compte) {
+        try {
+            $action->executer(auth()->user(), $compte);
+            $partis++;
+        } catch (\RuntimeException $e) {
+            $echecs[] = $compte->email;
+        }
+    }
+
+    unset($this->derniersAcces, $this->inactifs);
+
+    $this->dispatch(
+        'annonce',
+        texte: $partis.' courriel'.($partis > 1 ? 's' : '').' renvoyé'.($partis > 1 ? 's' : '')
+            .($echecs ? ' — en échec : '.implode(', ', $echecs) : '.'),
+        ton: $echecs ? 'alerte' : 'succes',
+    );
+};
+
 $supprimer = function (int $utilisateurId, SupprimerAcces $action) {
     $utilisateur = \App\Models\User::find($utilisateurId);
 
@@ -394,20 +482,30 @@ $creer = function (CreerAcces $action) {
             </p>
         @endif
 
-        @if (count($this->inactifs) > 0)
+        @if (count($this->selectionnables) > 0)
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:#FFFBEA; border:1px solid #D9770633; border-radius:8px; padding:10px 14px; margin-bottom:14px;">
                 <span style="font-size:13.5px; color:#4B4E55;">
-                    <b>{{ count($this->inactifs) }}</b> accès préparé{{ count($this->inactifs) > 1 ? 's' : '' }},
-                    en attente d'activation.
                     @if (count($selection))
-                        <b>{{ count($selection) }}</b> sélectionné{{ count($selection) > 1 ? 's' : '' }}.
+                        <b>{{ count($selection) }}</b> compte{{ count($selection) > 1 ? 's' : '' }} sélectionné{{ count($selection) > 1 ? 's' : '' }}.
+                    @elseif (count($this->inactifs) > 0)
+                        <b>{{ count($this->inactifs) }}</b> accès préparé{{ count($this->inactifs) > 1 ? 's' : '' }},
+                        en attente d'activation.
+                    @else
+                        Cocher des lignes pour agir sur plusieurs accès à la fois.
                     @endif
                 </span>
 
                 <button type="button" wire:click="toutSelectionner"
                     style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:6px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer;">
-                    Tout sélectionner
+                    Tout cocher ({{ count($this->selectionnables) }})
                 </button>
+
+                @if (count($this->inactifs) > 0)
+                    <button type="button" wire:click="selectionnerLesInactifs"
+                        style="background:#fff; border:1px solid var(--th-ligne,#E2E0D8); color:#4B4E55; border-radius:6px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer;">
+                        Cocher les non activés ({{ count($this->inactifs) }})
+                    </button>
+                @endif
 
                 @if (count($selection))
                     <button type="button" wire:click="viderSelection"
@@ -415,10 +513,16 @@ $creer = function (CreerAcces $action) {
                         Tout décocher
                     </button>
 
+                    <button type="button" wire:click="renvoyerSelection"
+                        wire:confirm="Renvoyer le courriel d'accès aux {{ count($selection) }} personnes sélectionnées ?&#10;&#10;Aucune donnée ne sera modifiée. Les comptes déjà en service reçoivent un simple rappel : leur mot de passe reste le leur."
+                        style="background:#1D4ED8; border:0; color:#fff; border-radius:6px; padding:7px 14px; font-size:12.5px; font-weight:700; cursor:pointer;">
+                        ✉ Renvoyer le mail ({{ count($selection) }})
+                    </button>
+
                     <button type="button" wire:click="activerSelection"
-                        wire:confirm="Activer les {{ count($selection) }} accès sélectionnés ? Un courriel de bienvenue partira vers chacun."
+                        wire:confirm="Activer les accès encore fermés parmi les {{ count($selection) }} sélectionnés ? Un courriel de bienvenue partira vers chacun."
                         style="background:#0E9F6E; border:0; color:#fff; border-radius:6px; padding:7px 14px; font-size:12.5px; font-weight:700; cursor:pointer;">
-                        Activer la sélection ({{ count($selection) }})
+                        Activer les accès fermés
                     </button>
                 @endif
             </div>
@@ -443,9 +547,10 @@ $creer = function (CreerAcces $action) {
                     @foreach ($this->derniersAcces->forPage($pageAcces, 10) as $ligne)
                         <tr wire:key="acces-{{ $ligne['utilisateur']->id }}" style="border-bottom:1px solid var(--th-ligne,#E2E0D8);">
                             <td>
-                                {{-- La case ne s'affiche que sur un accès préparé qui relève
-                                     bien de vous : le reste n'a rien à activer. --}}
-                                @if (in_array((string) $ligne['utilisateur']->id, $this->inactifs, true))
+                                {{-- La case s'affiche sur tout accès qui relève de vous, ouvert
+                                     ou non : le renvoi du courriel concerne aussi — et surtout —
+                                     ceux qui sont ouverts sans que la personne ait pu entrer. --}}
+                                @if (in_array((string) $ligne['utilisateur']->id, $this->selectionnables, true))
                                     <input type="checkbox" wire:model.live="selection" value="{{ $ligne['utilisateur']->id }}"
                                         aria-label="Sélectionner {{ $ligne['utilisateur']->name }}">
                                 @endif
@@ -475,6 +580,15 @@ $creer = function (CreerAcces $action) {
                                         wire:confirm="{{ $ligne['utilisateur']->est_actif ? 'Révoquer cet accès ?' : 'Réactiver cet accès ?' }}"
                                         style="background:transparent; border:1px solid var(--th-ligne,#E2E0D8); border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer; margin-right:6px; color:{{ $ligne['utilisateur']->est_actif ? '#C8102E' : '#0E9F6E' }};">
                                         {{ $ligne['utilisateur']->est_actif ? 'Révoquer' : 'Réactiver' }}
+                                    </button>
+
+                                    {{-- Renvoi du courriel : aucune écriture métier, et sur un
+                                         compte déjà en service le mot de passe reste le sien. --}}
+                                    <button type="button" wire:click="renvoyer({{ $ligne['utilisateur']->id }})"
+                                        wire:confirm="Renvoyer le courriel d'accès à {{ $ligne['utilisateur']->name }} ({{ $ligne['utilisateur']->email }}) ?&#10;&#10;Aucune donnée ne sera modifiée."
+                                        title="Renvoyer le courriel d'accès"
+                                        style="background:transparent; border:1px solid #1D4ED855; color:#1D4ED8; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:600; cursor:pointer; margin-right:6px;">
+                                        ✉ Renvoyer
                                     </button>
 
                                     <button type="button" wire:click="supprimer({{ $ligne['utilisateur']->id }})"

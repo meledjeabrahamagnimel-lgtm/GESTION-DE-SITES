@@ -35,12 +35,23 @@ class BienvenueNouvelAcces extends Mailable
         public Entreprise $entreprise,
         public string $roleLisible,
         public ?string $perimetre = null,
+        /**
+         * Vrai quand le message est renvoyé à la demande d'un administrateur, le premier
+         * n'étant jamais arrivé. Le contenu ne change pas ; le ton, si — souhaiter la
+         * bienvenue à quelqu'un qui travaille depuis trois semaines le ferait douter de
+         * l'application avant même d'avoir lu la suite.
+         */
+        public bool $renvoi = false,
     ) {}
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: "Bienvenue sur L'Artisan — votre accès est ouvert",
+            subject: match (true) {
+                ! $this->renvoi => "Bienvenue sur L'Artisan — votre accès est ouvert",
+                $this->definirLeMotDePasse() => "Votre accès L'Artisan — choisissez votre mot de passe",
+                default => "Votre accès L'Artisan — rappel de connexion",
+            },
         );
     }
 
@@ -55,8 +66,18 @@ class BienvenueNouvelAcces extends Mailable
                 // Le logo est joint au message : une image appelée par URL reste blanche
                 // dans la plupart des messageries, qui bloquent les contenus distants.
                 'logo' => $this->entreprise->logoChemin(),
+                'renvoi' => $this->renvoi,
+                // Détermine tout le corps du message : « choisissez votre mot de passe »
+                // n'a aucun sens pour quelqu'un qui en a déjà un et s'en sert.
+                'definirLeMotDePasse' => $this->definirLeMotDePasse(),
             ],
         );
+    }
+
+    /** Vrai si le lien mène à l'écran de choix du mot de passe, faux s'il mène à la connexion. */
+    private function definirLeMotDePasse(): bool
+    {
+        return (bool) $this->utilisateur->doit_changer_mot_de_passe;
     }
 
     /**

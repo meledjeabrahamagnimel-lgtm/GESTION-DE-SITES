@@ -31,13 +31,24 @@
                 <tr>
                     <td style="padding:30px 32px 8px; color:#26282E;">
                         <p style="margin:0 0 16px; font-size:17px; font-weight:700; color:#191B20;">
-                            Bienvenue {{ $nom }},
+                            {{ $renvoi ? 'Bonjour' : 'Bienvenue' }} {{ $nom }},
                         </p>
 
-                        <p style="margin:0 0 14px; font-size:14.5px; line-height:1.65;">
-                            Vous voici sur <b>L'ARTISAN — Gestion de sites</b>, l'application de suivi des
-                            opérations de L'Artisan Automobile.
-                        </p>
+                        @if ($renvoi)
+                            {{-- Le premier message n'est pas arrivé : le dire d'emblée évite que la
+                                 personne cherche ce qu'elle a raté, ou croie à une tentative de
+                                 hameçonnage parce qu'elle n'a rien demandé. --}}
+                            <p style="margin:0 0 14px; font-size:14.5px; line-height:1.65;">
+                                Ce message vous est renvoyé à la demande de votre administrateur : le premier
+                                ne vous est vraisemblablement jamais parvenu. Si vous l'aviez bien reçu, vous
+                                pouvez ignorer celui-ci sans conséquence.
+                            </p>
+                        @else
+                            <p style="margin:0 0 14px; font-size:14.5px; line-height:1.65;">
+                                Vous voici sur <b>L'ARTISAN — Gestion de sites</b>, l'application de suivi des
+                                opérations de L'Artisan Automobile.
+                            </p>
+                        @endif
 
                         <p style="margin:0 0 18px; font-size:14.5px; line-height:1.65;">
                             Votre compte a été créé par le cabinet <b>{{ $cabinet['nom'] }}</b>.
@@ -57,11 +68,22 @@
                             </tr>
                         </table>
 
-                        <p style="margin:0 0 20px; font-size:14.5px; line-height:1.65;">
-                            Suivez le lien ci-dessous pour <b>choisir votre mot de passe</b>. Il n'y en a pas
-                            encore : c'est vous qui le créez, et vous seul le connaîtrez. Vous serez ensuite
-                            invité à vous connecter avec.
-                        </p>
+                        @if ($definirLeMotDePasse)
+                            <p style="margin:0 0 20px; font-size:14.5px; line-height:1.65;">
+                                Suivez le lien ci-dessous pour <b>choisir votre mot de passe</b>. Il n'y en a pas
+                                encore : c'est vous qui le créez, et vous seul le connaîtrez. Vous serez ensuite
+                                invité à vous connecter avec.
+                            </p>
+                        @else
+                            {{-- Le compte est déjà en service : lui proposer de « choisir » un mot de
+                                 passe laisserait croire que le sien a été effacé. Il ne l'a pas été. --}}
+                            <p style="margin:0 0 20px; font-size:14.5px; line-height:1.65;">
+                                Votre mot de passe reste celui que vous avez choisi — <b>il n'a pas été
+                                modifié</b>. Le lien ci-dessous vous mène simplement à la page de connexion.
+                                Si vous ne vous en souvenez plus, utilisez « Mot de passe oublié » sur cette
+                                page.
+                            </p>
+                        @endif
 
                         <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;">
                             <tr>
@@ -69,7 +91,7 @@
                                     <a href="{{ $lienConnexion }}"
                                         style="display:inline-block; padding:13px 30px; font-size:15px; font-weight:700;
                                                color:#FFFFFF; text-decoration:none; border-radius:7px;">
-                                        Choisir mon mot de passe
+                                        {{ $definirLeMotDePasse ? 'Choisir mon mot de passe' : 'Me connecter' }}
                                     </a>
                                 </td>
                             </tr>
@@ -80,11 +102,19 @@
                             <span style="color:#C8102E; word-break:break-all;">{{ $lienConnexion }}</span>
                         </p>
 
-                        <p style="margin:0 0 4px; font-size:12.5px; color:#6B6E76; line-height:1.6;">
-                            Ce lien vous est personnel et reste valable <b>sept jours</b>. Il ne sert qu'une
-                            fois : une fois votre mot de passe choisi, il cesse de fonctionner. Ne le
-                            transmettez à personne, et ne communiquez jamais votre mot de passe.
-                        </p>
+                        @if ($definirLeMotDePasse)
+                            <p style="margin:0 0 4px; font-size:12.5px; color:#6B6E76; line-height:1.6;">
+                                Ce lien vous est personnel et reste valable <b>sept jours</b>. Il ne sert qu'une
+                                fois : une fois votre mot de passe choisi, il cesse de fonctionner. Ne le
+                                transmettez à personne, et ne communiquez jamais votre mot de passe.
+                            </p>
+                        @else
+                            <p style="margin:0 0 4px; font-size:12.5px; color:#6B6E76; line-height:1.6;">
+                                Ne communiquez jamais votre mot de passe, y compris à quelqu'un qui se
+                                présenterait comme votre administrateur : il n'a aucune raison de vous le
+                                demander.
+                            </p>
+                        @endif
                     </td>
                 </tr>
 
