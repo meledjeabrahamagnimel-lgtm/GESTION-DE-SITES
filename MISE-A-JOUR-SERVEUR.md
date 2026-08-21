@@ -41,7 +41,62 @@ Ce que la migration fait :
 | `sessions_utilisateur` *(table neuve)* | une ligne par connexion | aucun |
 | `visites_ecran` *(table neuve)* | une ligne par écran ouvert | aucun |
 
-## 3. Mettre à jour les identifiants du super administrateur
+## 3. Faire le ménage parmi les comptes de la plateforme
+
+Une installation qui a vécu accumule des comptes hors entreprise : celui de la
+démonstration du premier jour, un administrateur secondaire d'essai, celui créé pour de
+bon ensuite. Tous portent `super_admin`, c'est-à-dire **tous les droits sur toutes les
+entreprises**. Un compte oublié dont plus personne ne connaît le mot de passe reste une
+porte ouverte.
+
+**D'abord l'inventaire**, qui n'écrit rien :
+
+```bash
+php artisan superadmin:menage
+```
+
+Pour chaque compte, la commande affiche ses rôles, son statut, sa dernière connexion, et
+surtout **ce qu'il porte** : accès qu'il a ouverts, entrées au journal, écritures métier
+saisies. Un compte à zéro partout est un résidu d'installation ; un compte qui a saisi
+des centaines de factures est quelqu'un. On ne supprime pas un administrateur sur la foi
+de son adresse.
+
+**Puis le déroulé**, toujours sans écrire — remplacer les adresses par celles que
+l'inventaire a réellement affichées :
+
+```bash
+php artisan superadmin:menage \
+  --garder=superadmin@gmail.com \
+  --supprimer=superadmin@plateforme.local \
+  --supprimer=support@plateforme.local
+```
+
+La commande annonce qui est conservé, qui est supprimé, et qui perd seulement le statut
+de fondateur. **Lire cette sortie avant de continuer.**
+
+**Enfin l'exécution**, la même ligne suivie de `--confirmer`.
+
+### Ce qui survit à la suppression
+
+- **Les écritures.** Une facture saisie par un compte effacé reste une facture : son
+  `cree_par` retombe à vide, mais le `code_auteur` inscrit à côté garde la trace de qui
+  l'a tapée. Le chiffre d'affaires d'un exercice clos ne bouge pas d'un franc.
+- **Les accès qu'il avait ouverts.** Supprimer celui qui a créé un gérant ne ferme pas le
+  compte de ce gérant.
+- **Le journal d'activité.** Supprimer quelqu'un ne doit pas effacer la preuve de ce
+  qu'il a fait — et la suppression elle-même y est inscrite avant d'avoir lieu.
+
+### Ce que la commande refuse
+
+- garder un compte inconnu, ou un compte sans rôle — cela fermerait la plateforme à tout
+  le monde ;
+- supprimer le compte qu'on lui demande de garder ;
+- toucher un compte rattaché à une entreprise : celui-là se supprime depuis l'écran
+  *Accès*, où la hiérarchie est vérifiée ;
+- effacer quoi que ce soit si **une seule** des adresses données est mauvaise. Rien de
+  partiel : un ménage à moitié fait laisse un état que personne n'a demandé.
+
+## 4. Mettre à jour les identifiants du super administrateur
 
 **D'abord en simulation**, pour vérifier qu'on vise bien le bon compte :
 
@@ -90,7 +145,7 @@ adresse appartient déjà à quelqu'un d'autre : rien n'est écrasé en silence.
 > créerait un **second** super administrateur. La commande ci-dessus modifie la ligne
 > existante ; c'est la seule voie en production.
 
-## 4. Vérifier
+## 5. Vérifier
 
 ```bash
 php artisan superadmin:reparer it.dcknowing@gmail.com --diagnostic
@@ -100,7 +155,7 @@ php artisan app:diagnostic
 Le premier doit afficher `est_fondateur : oui`, `rôles en base : super_admin (équipe 0)` et
 les cinq sections ouvertes. Puis se déconnecter et se reconnecter avec la nouvelle adresse.
 
-## 5. Facultatif — entretien du journal de traçabilité
+## 6. Facultatif — entretien du journal de traçabilité
 
 Le journal des connexions est nominatif et se conserve six mois. Si l'hébergement dispose
 d'une tâche planifiée (cPanel → *Tâches Cron*), y ajouter l'ordonnanceur Laravel :
@@ -128,5 +183,5 @@ l'historique de navigation.
 php artisan migrate:rollback --step=1 --force
 ```
 
-Pour l'adresse du super administrateur, relancer la commande du point 3 avec l'ancienne
+Pour l'adresse du super administrateur, relancer la commande du point 4 avec l'ancienne
 adresse en `--email` et `--compte=it.dcknowing@gmail.com`.

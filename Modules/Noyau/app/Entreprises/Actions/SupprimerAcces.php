@@ -67,7 +67,23 @@ class SupprimerAcces
             ->withProperties(['nom' => $nom, 'email' => $email, 'entreprise_id' => $cible->entreprise_id])
             ->log("Suppression de l'accès de $nom ($email)");
 
-        $bilan = DB::transaction(function () use ($cible) {
+        return $this->effacer($cible);
+    }
+
+    /**
+     * L'effacement lui-même, une fois la question du droit tranchée ailleurs.
+     *
+     * Séparé de executer() parce que la console n'a pas d'acteur au sens de
+     * HierarchieAcces : personne n'y est « connecté », Spatie n'y a pas d'équipe posée,
+     * et un contrôle de rôle y répondrait non pour tout le monde. Sur un serveur, le
+     * droit d'agir est celui d'avoir l'accès au shell ; le reste — quoi effacer, dans
+     * quel ordre, et ce qui doit survivre — est identique et ne se recopie pas.
+     *
+     * @return array<string, int|string>
+     */
+    public function effacer(User $cible): array
+    {
+        return DB::transaction(function () use ($cible) {
             $bilan = ['fiche commerciale' => 'aucune'];
 
             // Les désignations d'abord : une ville qui pointe encore son responsable
@@ -89,8 +105,6 @@ class SupprimerAcces
 
             return $bilan;
         });
-
-        return $bilan;
     }
 
     /** Détache la fiche si elle porte des écritures, la supprime si elle n'a jamais servi. */
