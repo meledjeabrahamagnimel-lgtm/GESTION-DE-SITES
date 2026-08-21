@@ -19,6 +19,7 @@ class MenuNavigation
                 ['label' => 'Entreprises', 'route' => 'super-admin.entreprises.index', 'section' => 'entreprises'],
                 ['label' => 'Accès', 'route' => 'super-admin.acces.index', 'actifPattern' => 'super-admin.acces.*', 'section' => 'acces'],
                 ['label' => 'Administrateurs', 'route' => 'super-admin.administrateurs', 'section' => 'acces'],
+                ['label' => 'Traçabilité', 'route' => 'super-admin.tracabilite', 'section' => 'journal'],
                 ['label' => 'Journal', 'route' => 'super-admin.journal.index', 'section' => 'journal'],
                 ['label' => 'Messages', 'route' => 'messages', 'section' => null],
                 ['label' => 'Notifications', 'route' => 'mes-notifications', 'section' => null],

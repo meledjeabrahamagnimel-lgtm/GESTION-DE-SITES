@@ -59,7 +59,10 @@ $personnel = computed(function () {
     $utilisateurs = \App\Models\User::where('entreprise_id', $this->entrepriseId)->orderBy('id')->get();
     $roles = \App\Models\User::nomsRolesParUtilisateur($utilisateurs->pluck('id'));
 
-    return $utilisateurs->map(fn ($u) => ['utilisateur' => $u, 'role' => $roles[$u->id] ?? '—']);
+    return $utilisateurs->map(fn ($u) => [
+        'utilisateur' => $u,
+        'role' => \Modules\Noyau\Entreprises\Support\LibellesRoles::liste($roles[$u->id] ?? null),
+    ]);
 });
 
 $genererCode = function () {

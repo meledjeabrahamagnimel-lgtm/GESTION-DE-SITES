@@ -7,6 +7,7 @@ use Modules\Noyau\Entreprises\Modeles\Site;
 use Modules\Noyau\Entreprises\Modeles\Ville;
 use Modules\Noyau\Entreprises\Services\Annuaire;
 use Modules\Noyau\Entreprises\Support\HierarchieAcces;
+use Modules\Noyau\Entreprises\Support\LibellesRoles;
 use function Livewire\Volt\{state, computed, mount, protect, rules};
 
 state([
@@ -43,24 +44,13 @@ mount(function () {
  * ne crée donc que des commerciaux et la comptabilité de sa ville.
  */
 $rolesDisponibles = computed(function () {
-    if (auth()->user()->hasRole('gerant')) {
-        return [
-            'responsable_ville' => 'Superviseur de ville',
-            'responsable_site' => 'Responsable de site',
-            'commercial' => 'Commercial',
-            'caissier' => 'Comptabilité',
-        ];
-    }
+    $noms = match (true) {
+        auth()->user()->hasRole('gerant') => ['responsable_ville', 'responsable_site', 'commercial', 'caissier'],
+        auth()->user()->hasRole('responsable_ville') => ['responsable_site', 'commercial', 'caissier'],
+        default => ['commercial', 'caissier'],
+    };
 
-    if (auth()->user()->hasRole('responsable_ville')) {
-        return [
-            'responsable_site' => 'Responsable de site',
-            'commercial' => 'Commercial',
-            'caissier' => 'Comptabilité',
-        ];
-    }
-
-    return ['commercial' => 'Commercial', 'caissier' => 'Comptabilité'];
+    return collect($noms)->mapWithKeys(fn (string $role) => [$role => LibellesRoles::de($role)])->all();
 });
 
 /** Rôles dont le titulaire prospecte : il reçoit une fiche commercial et des objectifs. */
@@ -100,7 +90,7 @@ $derniersAcces = computed(function () {
 
     return $utilisateurs->map(fn ($u) => [
         'utilisateur' => $u,
-        'role' => $roles[$u->id] ?? '—',
+        'role' => LibellesRoles::liste($roles[$u->id] ?? null),
         'commercial' => $fiches->get($u->id),
     ]);
 });

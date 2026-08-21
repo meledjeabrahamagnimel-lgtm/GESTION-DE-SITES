@@ -7,6 +7,7 @@ use Modules\Noyau\Exploitation\Services\GenerateurNumero;
 use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use Modules\Noyau\Entreprises\Modeles\Site;
 use Modules\Noyau\Entreprises\Modeles\Ville;
+use Modules\Noyau\Entreprises\Support\LibellesRoles;
 use Modules\Noyau\Commun\Mails\BienvenueNouvelAcces;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -29,16 +30,6 @@ class CreerAcces
 {
     /** Rôles dont le titulaire prospecte aussi : il doit donc exister comme commercial. */
     private const ROLES_COMMERCIAUX = ['responsable_ville', 'responsable_site', 'commercial'];
-
-    /** Intitulés lisibles des rôles, pour le courriel d'accueil. */
-    private const LIBELLES_ROLES = [
-        'gerant' => 'Gérant',
-        'responsable_ville' => 'Superviseur de ville',
-        'responsable_site' => 'Responsable de site',
-        'commercial' => 'Commercial',
-        'caissier' => 'Comptabilité',
-        'super_admin' => 'Super administrateur',
-    ];
 
     public function executer(Entreprise $entreprise, string $role, array $donnees): User
     {
@@ -132,7 +123,7 @@ class CreerAcces
             Mail::to($utilisateur->email)->send(new BienvenueNouvelAcces(
                 $utilisateur->fresh(),
                 $entreprise,
-                self::LIBELLES_ROLES[$role] ?? $role,
+                LibellesRoles::de($role),
                 $this->libellePerimetre($utilisateur),
             ));
         } catch (\Throwable $e) {

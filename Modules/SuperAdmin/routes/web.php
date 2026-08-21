@@ -29,5 +29,9 @@ Route::middleware(['auth', 'role:super_admin'])
         Route::get('/annuaire.pdf', TelechargerAnnuaire::class)->name('annuaire')->middleware('habilitation:acces');
         Volt::route('/administrateurs', 'superadmin.administrateurs')->name('administrateurs')->middleware('habilitation:acces');
         Volt::route('/journal', 'superadmin.journal')->name('journal.index')->middleware('habilitation:journal');
+        // Même habilitation que le journal : les deux écrans répondent à la même
+        // question — que s'est-il passé, et par qui. Ouvrir une section de plus aurait
+        // laissé les administrateurs secondaires déjà habilités devant un onglet mort.
+        Volt::route('/tracabilite', 'superadmin.tracabilite')->name('tracabilite')->middleware('habilitation:journal');
         Volt::route('/maintenance', 'superadmin.maintenance')->name('maintenance')->middleware('habilitation:maintenance');
     });

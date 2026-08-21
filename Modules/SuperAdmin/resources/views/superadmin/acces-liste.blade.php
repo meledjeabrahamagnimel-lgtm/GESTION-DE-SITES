@@ -29,10 +29,14 @@ state([
     'annuaireEntrepriseId' => '',
 ]);
 
+/*
+ * Ville et site sont chargés avec le compte, et non lus ligne par ligne : dix lignes
+ * affichées feraient sinon vingt requêtes de plus, pour deux mots par ligne.
+ */
 $utilisateurs = computed(function () {
     $recherche = trim($this->recherche);
 
-    return User::with('entreprise')
+    return User::with(['entreprise', 'ville', 'site.ville'])
         ->when($recherche !== '', fn ($q) => $q->where(fn ($r) => $r
             ->where('name', 'like', "%$recherche%")
             ->orWhere('email', 'like', "%$recherche%")))
@@ -40,6 +44,26 @@ $utilisateurs = computed(function () {
 });
 
 $roles = computed(fn () => User::nomsRolesParUtilisateur($this->utilisateurs->pluck('id')));
+
+/**
+ * Ville et site d'affectation de chaque ligne, résolus une fois pour toutes.
+ *
+ * La ville n'est pas toujours écrite au même endroit : un responsable de site n'a pas de
+ * `ville_id`, la sienne est celle de son lieu. Afficher un tiret pour lui laisserait
+ * croire qu'il n'est rattaché nulle part, alors qu'il tient un atelier précis.
+ *
+ * Un compte sans ville ni site n'est pas pour autant sans périmètre : le gérant couvre
+ * l'entreprise entière, le super administrateur la plateforme. Le dire vaut mieux qu'un
+ * tiret, qui se lit comme un oubli de saisie.
+ *
+ * @return array<int, array{ville: string, site: string}>
+ */
+$perimetres = computed(fn () => $this->utilisateurs->mapWithKeys(fn (User $u) => [$u->id => [
+    'ville' => $u->ville?->nom
+        ?? $u->site?->ville?->nom
+        ?? ($u->entreprise_id ? "Toute l'entreprise" : 'Plateforme'),
+    'site' => $u->site?->nom ?? ($u->ville_id ? 'Toute la ville' : '—'),
+]])->all());
 
 /** La personne dont on est en train d'écraser le mot de passe, ou null. */
 $cible = computed(fn () => $this->cibleId ? User::find($this->cibleId) : null);
@@ -151,7 +175,7 @@ $supprimer = function (int $id, SupprimerAcces $action) {
     // La ligne disparaît : une case restée cochée désignerait un compte absent.
     $this->selection = array_values(array_diff($this->selection, [(string) $id]));
     $this->resetErrorBag('suppression');
-    unset($this->utilisateurs, $this->roles, $this->inactifs);
+    unset($this->utilisateurs, $this->roles, $this->inactifs, $this->perimetres);
 
     $this->message = "Accès de {$cible->name} supprimé — fiche commerciale : {$bilan['fiche commerciale']}.";
 };
@@ -359,6 +383,8 @@ $journaliser = function (User $utilisateur, string $action) {
                         <th>Utilisateur</th>
                         <th>Entreprise</th>
                         <th>Rôle</th>
+                        <th>Ville</th>
+                        <th>Site</th>
                         <th>Statut</th>
                         <th></th>
                     </tr>
@@ -379,7 +405,9 @@ $journaliser = function (User $utilisateur, string $action) {
                                 <div style="color:#6B6E76; font-size:13.5px;">{{ $utilisateur->email }}</div>
                             </td>
                             <td>{{ $utilisateur->entreprise?->nom ?? '— Plateforme —' }}</td>
-                            <td>{{ $this->roles[$utilisateur->id] ?? '—' }}</td>
+                            <td>{{ \Modules\Noyau\Entreprises\Support\LibellesRoles::liste($this->roles[$utilisateur->id] ?? null) }}</td>
+                            <td>{{ $this->perimetres[$utilisateur->id]['ville'] }}</td>
+                            <td>{{ $this->perimetres[$utilisateur->id]['site'] }}</td>
                             <td>
                                 @if ($utilisateur->est_actif)
                                     <span style="color:#0E9F6E; font-weight:600;">Actif</span>
@@ -425,7 +453,7 @@ $journaliser = function (User $utilisateur, string $action) {
                             </td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="6" texte="Aucun compte ne correspond à cette recherche." />
+                        <x-table-vide :colspan="8" texte="Aucun compte ne correspond à cette recherche." />
                     @endforelse
                 </tbody>
             </table>

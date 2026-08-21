@@ -5,6 +5,8 @@ use Modules\Noyau\Entreprises\Actions\CreerAcces;
 use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use Modules\Noyau\Entreprises\Modeles\Site;
 use Modules\Noyau\Entreprises\Modeles\Ville;
+use Modules\Noyau\Entreprises\Services\ProvisionneurEntreprise;
+use Modules\Noyau\Entreprises\Support\LibellesRoles;
 use App\Models\User;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\PermissionRegistrar;
@@ -109,13 +111,14 @@ $optionsSite = computed(fn () => $this->entrepriseId
     ? Site::where('entreprise_id', $this->entrepriseId)->where('est_actif', true)->orderBy('nom')->pluck('nom', 'id')->all()
     : []);
 
-$rolesDisponibles = computed(fn () => [
-    'gerant' => 'Gérant',
-    'responsable_ville' => 'Superviseur de ville',
-    'responsable_site' => 'Responsable de site',
-    'commercial' => 'Commercial',
-    'caissier' => 'Comptabilité',
-]);
+/*
+ * La liste des rôles suit celle que le provisionneur crée réellement en base : un rôle
+ * proposé ici mais absent de l'entreprise ferait échouer l'affectation au moment
+ * d'enregistrer, et un rôle créé sans être proposé resterait inattribuable.
+ */
+$rolesDisponibles = computed(fn () => collect(ProvisionneurEntreprise::ROLES)
+    ->mapWithKeys(fn (string $role) => [$role => LibellesRoles::de($role)])
+    ->all());
 
 /** Rôles dont le titulaire prospecte : il reçoit une fiche commercial et des objectifs. */
 $roleAvecObjectifs = computed(fn () => in_array($this->roleActif, ['responsable_ville', 'responsable_site', 'commercial'], true));

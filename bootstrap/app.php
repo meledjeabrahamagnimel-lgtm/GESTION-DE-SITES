@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\DefinirEquipePermissions;
+use App\Http\Middleware\EnregistreLaVisite;
 use App\Http\Middleware\ForcerChangementMotDePasse;
 use App\Http\Middleware\VerifieHabilitation;
 use App\Http\Middleware\VerifierCompteActif;
@@ -46,6 +47,9 @@ return Application::configure(basePath: dirname(__DIR__))
             DefinirEquipePermissions::class,
             VerifierCompteActif::class,
             ForcerChangementMotDePasse::class,
+            // Placé en dernier : son écriture a lieu après l'envoi de la réponse, et il
+            // ne doit en aucun cas s'interposer entre l'utilisateur et sa page.
+            EnregistreLaVisite::class,
         ]);
 
         $middleware->alias([

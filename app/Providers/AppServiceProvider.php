@@ -2,9 +2,14 @@
 
 namespace App\Providers;
 
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use Modules\Noyau\Tracabilite\Ecouteurs\FermeLaSession;
+use Modules\Noyau\Tracabilite\Ecouteurs\OuvreLaSession;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -34,5 +39,14 @@ class AppServiceProvider extends ServiceProvider
          * la console affiche « was preloaded using link preload but not used ».
          */
         Vite::usePreloadTagAttributes(false);
+
+        /*
+         * Traçabilité des connexions. Déclarée ici plutôt que découverte
+         * automatiquement : les écouteurs vivent dans un module, hors du dossier que
+         * Laravel inspecte, et une traçabilité qui ne s'enregistre pas ne se remarque
+         * qu'au moment où l'on a besoin du journal — c'est-à-dire trop tard.
+         */
+        Event::listen(Login::class, OuvreLaSession::class);
+        Event::listen(Logout::class, FermeLaSession::class);
     }
 }

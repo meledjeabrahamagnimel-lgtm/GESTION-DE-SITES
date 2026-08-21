@@ -193,7 +193,7 @@ class AnnuaireAccesTest extends TestCase
         $this->assertStringContainsString('(Page 1 sur ', $rendu);
     }
 
-    public function test_la_table_de_reference_pointe-t-elle_au_bon_octet(): void
+    public function test_la_table_de_reference_pointe_au_bon_octet(): void
     {
         $pdf = new DocumentPdf('Essai');
         $pdf->titre('Essai');

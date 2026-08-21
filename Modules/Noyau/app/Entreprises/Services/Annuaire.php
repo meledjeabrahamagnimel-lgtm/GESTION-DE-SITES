@@ -7,6 +7,7 @@ use Illuminate\Support\Collection;
 use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use Modules\Noyau\Entreprises\Modeles\Site;
 use Modules\Noyau\Entreprises\Modeles\Ville;
+use Modules\Noyau\Entreprises\Support\LibellesRoles;
 
 /**
  * Qui travaille où, et à quel titre.
@@ -25,16 +26,6 @@ use Modules\Noyau\Entreprises\Modeles\Ville;
  */
 class Annuaire
 {
-    /** Intitulés lisibles : le nom technique du rôle n'a pas sa place sur un document remis. */
-    public const LIBELLES = [
-        'gerant' => 'Gérant',
-        'responsable_ville' => 'Superviseur de ville',
-        'responsable_site' => 'Responsable de site',
-        'caissier' => 'Comptabilité',
-        'commercial' => 'Commercial',
-        'super_admin' => 'Super administrateur',
-    ];
-
     /** Du plus large au plus étroit : un annuaire se lit de la direction vers le terrain. */
     private const ORDRE = ['gerant', 'responsable_ville', 'responsable_site', 'caissier', 'commercial'];
 
@@ -92,7 +83,7 @@ class Annuaire
         $groupes = $comptes
             ->map(fn (User $compte) => [
                 'cle_role' => $roles[$compte->id] ?? '',
-                'role' => self::LIBELLES[$roles[$compte->id] ?? ''] ?? '—',
+                'role' => LibellesRoles::de($roles[$compte->id] ?? null),
                 'nom' => $compte->name,
                 'email' => $compte->email,
                 'telephone' => $compte->telephone ?: '—',
