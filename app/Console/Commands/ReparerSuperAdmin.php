@@ -27,7 +27,7 @@ use Spatie\Permission\PermissionRegistrar;
 class ReparerSuperAdmin extends Command
 {
     protected $signature = 'superadmin:reparer
-                            {email=it@dcknowing.com : adresse du compte à remettre d\'aplomb}
+                            {email=it.dcknowing@gmail.com : adresse du compte à remettre d\'aplomb}
                             {--diagnostic : se contenter d\'afficher l\'état, sans rien modifier}';
 
     protected $description = "Diagnostique et répare un accès super administrateur qui répond 403";

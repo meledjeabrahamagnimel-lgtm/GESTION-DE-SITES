@@ -34,7 +34,7 @@ class SuperAdminSeeder extends Seeder
          * qui l'a cloné, et le changer plus tard ne l'en retire pas. Le repli ci-dessous
          * ne sert qu'à une installation neuve de développement.
          */
-        $superAdmin = User::firstOrCreate(['email' => env('SUPER_ADMIN_EMAIL', 'it@dcknowing.com')], [
+        $superAdmin = User::firstOrCreate(['email' => env('SUPER_ADMIN_EMAIL', 'it.dcknowing@gmail.com')], [
             'entreprise_id' => null,
             'name' => 'Super Admin DC-KNOWING',
             'password' => env('SUPER_ADMIN_MOT_DE_PASSE', 'password'),

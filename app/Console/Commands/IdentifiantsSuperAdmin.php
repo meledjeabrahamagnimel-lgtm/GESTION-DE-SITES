@@ -195,7 +195,7 @@ class IdentifiantsSuperAdmin extends Command
     {
         if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $this->error("« $email » n'est pas une adresse de courriel valide.");
-            $this->line('  Une adresse comporte un @ : « it@dcknowing.com », pas « it.dcknowing.com ».');
+            $this->line('  Une adresse comporte un @ : « it.dcknowing@gmail.com », pas « it.dcknowing.gmail.com ».');
 
             return false;
         }

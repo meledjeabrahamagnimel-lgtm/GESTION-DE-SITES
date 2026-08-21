@@ -48,7 +48,7 @@ Ce que la migration fait :
 ```bash
 php artisan superadmin:identifiants \
   --compte=superadmin@gmail.com \
-  --email=it@dcknowing.com \
+  --email=it.dcknowing@gmail.com \
   --nom="Super Admin DC-KNOWING" \
   --mot-de-passe='@@@###26dcknowing' \
   --simulation
@@ -63,7 +63,7 @@ Puis, une fois la sortie vérifiée, relancer **la même ligne sans `--simulatio
 ```bash
 php artisan superadmin:identifiants \
   --compte=superadmin@gmail.com \
-  --email=it@dcknowing.com \
+  --email=it.dcknowing@gmail.com \
   --nom="Super Admin DC-KNOWING" \
   --mot-de-passe='@@@###26dcknowing'
 ```
@@ -84,10 +84,16 @@ adresse appartient déjà à quelqu'un d'autre : rien n'est écrasé en silence.
   n'ouvre plus la session avec l'ancien mot de passe ;
 - inscrit le changement au journal d'audit — **sans jamais y écrire le mot de passe**.
 
+> **Ne pas passer par le seeder pour cela.** `SuperAdminSeeder` porte bien la nouvelle
+> adresse par défaut, mais il travaille en `firstOrCreate` sur l'e-mail : lancé sur un
+> serveur dont la ligne porte encore l'ancienne adresse, il ne la corrigerait pas — il
+> créerait un **second** super administrateur. La commande ci-dessus modifie la ligne
+> existante ; c'est la seule voie en production.
+
 ## 4. Vérifier
 
 ```bash
-php artisan superadmin:reparer it@dcknowing.com --diagnostic
+php artisan superadmin:reparer it.dcknowing@gmail.com --diagnostic
 php artisan app:diagnostic
 ```
 
@@ -123,4 +129,4 @@ php artisan migrate:rollback --step=1 --force
 ```
 
 Pour l'adresse du super administrateur, relancer la commande du point 3 avec l'ancienne
-adresse en `--email` et `--compte=it@dcknowing.com`.
+adresse en `--email` et `--compte=it.dcknowing@gmail.com`.
