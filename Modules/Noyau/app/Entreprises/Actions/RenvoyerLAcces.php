@@ -11,7 +11,6 @@ use Modules\Noyau\Entreprises\Modeles\Site;
 use Modules\Noyau\Entreprises\Modeles\Ville;
 use Modules\Noyau\Entreprises\Support\HierarchieAcces;
 use Modules\Noyau\Entreprises\Support\LibellesRoles;
-use Spatie\Permission\PermissionRegistrar;
 
 /**
  * Renvoie à quelqu'un le courriel qui lui ouvre son accès.
@@ -179,12 +178,26 @@ class RenvoyerLAcces
         }
     }
 
-    /** Le rôle, lu sans dépendre de l'équipe posée dans la requête en cours. */
+    /**
+     * Le rôle, lu en base.
+     *
+     * Il l'était par getRoleNames() après avoir repointé l'équipe de Spatie, et le
+     * courriel annonçait « Rôle : — » à des gens qui en ont un. Deux raisons, l'une et
+     * l'autre suffisantes :
+     *
+     * - la relation `roles` est mise en cache sur le modèle. Chargée plus tôt dans la
+     *   requête — la liste des accès le fait — elle n'est pas rejouée, et le filtre
+     *   d'équipe posé après coup n'a plus aucun effet ;
+     * - repointer l'équipe est un effet de bord qui n'est jamais défait. Dans un envoi
+     *   groupé, l'équipe restait celle du dernier destinataire : le super administrateur
+     *   qui venait d'agir n'était plus reconnu comme tel pour la suite de sa requête.
+     *
+     * La lecture directe n'a ni l'un ni l'autre de ces défauts, et c'est déjà ainsi que
+     * la hiérarchie tranche les droits.
+     */
     private function roleDe(User $utilisateur): string
     {
-        app(PermissionRegistrar::class)->setPermissionsTeamId($utilisateur->entreprise_id);
-
-        return $utilisateur->getRoleNames()->first() ?? '';
+        return HierarchieAcces::roleDe($utilisateur);
     }
 
     /** « Abidjan — Site 2 » pour un responsable de lieu, « Abidjan » pour les autres. */

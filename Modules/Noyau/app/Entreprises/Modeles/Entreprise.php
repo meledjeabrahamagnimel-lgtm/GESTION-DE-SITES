@@ -77,10 +77,22 @@ class Entreprise extends Model
     }
 
     /**
-     * URL publique du logo, ou null s'il n'est pas réellement servable.
-     * Le lien symbolique public/storage n'est pas versionné : sans « php artisan storage:link »
-     * le fichier existe mais n'est pas accessible. On préfère alors afficher le nom de
-     * l'entreprise plutôt qu'une image cassée.
+     * URL publique du logo, ou null s'il n'y en a pas.
+     *
+     * Trois chemins, du moins cher au plus sûr :
+     *
+     * 1. Préfixe « public: » — fichier livré avec le dépôt, servi directement par le
+     *    serveur web.
+     * 2. Fichier téléversé, lien symbolique public/storage en place — servi directement
+     *    lui aussi.
+     * 3. Fichier téléversé, lien absent — servi par l'application.
+     *
+     * Le troisième cas existe parce que ce lien n'est pas versionné : il se crée avec
+     * « php artisan storage:link », et un hébergement mutualisé le perd volontiers. On
+     * rendait alors null, et le logo disparaissait sans un mot — de l'application comme
+     * des courriels. Un fichier présent sur le disque doit pouvoir être montré ; passer
+     * par une route coûte un aller-retour PHP, ce qui reste préférable à ne rien
+     * afficher du tout.
      */
     public function logoUrl(): ?string
     {
@@ -88,7 +100,6 @@ class Entreprise extends Model
             return null;
         }
 
-        // Préfixe « public: » : fichier livré avec le dépôt, servi directement.
         if (str_starts_with($this->logo_chemin, 'public:')) {
             return asset(substr($this->logo_chemin, 7));
         }
@@ -97,11 +108,11 @@ class Entreprise extends Model
             return null;
         }
 
-        if (! is_link(public_path('storage')) && ! is_dir(public_path('storage'))) {
-            return null;
+        if (is_link(public_path('storage')) || is_dir(public_path('storage'))) {
+            return Storage::disk('public')->url($this->logo_chemin);
         }
 
-        return Storage::disk('public')->url($this->logo_chemin);
+        return route('entreprise.logo', ['entreprise' => $this->getKey()]);
     }
 
     /** Palette de marque, prête à être injectée en custom properties CSS. */

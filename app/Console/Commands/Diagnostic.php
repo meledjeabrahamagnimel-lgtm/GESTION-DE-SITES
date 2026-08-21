@@ -69,6 +69,10 @@ class Diagnostic extends Command
         );
 
         $this->newLine();
+        $this->info('=== Logos des entreprises ===');
+        $this->controlerLesLogos();
+
+        $this->newLine();
         $this->info('=== Redirections et session (hébergement mutualisé) ===');
         $this->controlerRedirections();
 
@@ -193,6 +197,50 @@ class Diagnostic extends Command
             is_writable(storage_path('logs')) && is_writable(storage_path('framework/views')),
             'Donnez les droits d’écriture : chmod -R 775 storage bootstrap/cache',
         );
+    }
+
+    /**
+     * L'état réel de chaque logo : ce que dit la base, ce qu'il y a sur le disque, et
+     * l'adresse effectivement produite.
+     *
+     * Une image absente ne provoque aucune erreur : elle manque, simplement, et personne
+     * ne sait dire pourquoi. Les trois informations côte à côte tranchent — colonne vide,
+     * fichier disparu, ou fichier présent mais non servi.
+     */
+    private function controlerLesLogos(): void
+    {
+        if (! Schema::hasTable('entreprises')) {
+            $this->line('  (table absente — migrations à passer)');
+
+            return;
+        }
+
+        $entreprises = \Modules\Noyau\Entreprises\Modeles\Entreprise::all();
+
+        if ($entreprises->isEmpty()) {
+            $this->line('  (aucune entreprise)');
+
+            return;
+        }
+
+        foreach ($entreprises as $entreprise) {
+            $this->line('  '.$entreprise->nom);
+            $this->ligne('    colonne', $entreprise->logo_chemin ?: '(vide — aucun logo choisi)');
+
+            if (! $entreprise->logo_chemin) {
+                continue;
+            }
+
+            $chemin = str_starts_with($entreprise->logo_chemin, 'public:')
+                ? public_path(substr($entreprise->logo_chemin, 7))
+                : \Illuminate\Support\Facades\Storage::disk('public')->path($entreprise->logo_chemin);
+
+            $this->ligne('    fichier sur le disque', is_file($chemin) ? 'présent' : 'ABSENT — '.$chemin);
+            $this->ligne('    adresse produite', $entreprise->logoUrl() ?: 'AUCUNE');
+        }
+
+        $this->line('  Ouvrez cette adresse dans un navigateur : elle doit afficher l\'image.');
+        $this->line('  Si elle répond 404, c\'est le serveur web qui ne sert pas le dossier — pas l\'application.');
     }
 
     private function verifier(string $intitule, bool $present, string $remede): void

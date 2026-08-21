@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\GoogleAuthController;
+use App\Http\Controllers\LogoEntrepriseController;
 use App\Http\Controllers\RedirectionController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
@@ -36,6 +37,15 @@ Route::middleware(['signed'])->group(function () {
     Volt::route('/premiere-connexion/{utilisateur}', 'commun.definir-mot-de-passe')
         ->name('mot-de-passe.definir');
 });
+
+/*
+ * Logo d'entreprise servi par l'application. Hors session, volontairement : un courriel
+ * est lu dans une boîte aux lettres, et l'écran de connexion est par définition ouvert.
+ * Le repli n'est utilisé que si le lien symbolique public/storage manque — voir
+ * Entreprise::logoUrl().
+ */
+Route::get('/entreprises/{entreprise}/logo', LogoEntrepriseController::class)
+    ->name('entreprise.logo');
 
 Route::get('/auth/google', [GoogleAuthController::class, 'rediriger'])->name('auth.google');
 Route::get('/auth/callback', [GoogleAuthController::class, 'callback'])->name('auth.callback');

@@ -284,6 +284,51 @@ class RenvoiAccesTest extends TestCase
     |--------------------------------------------------------------------------
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Ce que le message annonce
+    |--------------------------------------------------------------------------
+    */
+
+    public function test_le_courriel_annonce_le_role_du_destinataire(): void
+    {
+        $admin = $this->superAdmin();
+        $compte = $this->compte('gerant', actif: false, doitChanger: true);
+
+        /*
+         * On rejoue la condition réelle, celle qui faisait échouer l'annonce.
+         *
+         * L'écran des accès charge les rôles avant d'envoyer, et le super administrateur
+         * travaille dans l'équipe 0. La relation `roles` est donc déjà en mémoire,
+         * filtrée sur une équipe qui n'est pas celle du destinataire — et repointer
+         * l'équipe après coup ne la rejoue pas. Le message partait avec « Rôle : — ».
+         */
+        $this->equipePlateforme();
+        $compte->load('roles');
+
+        app(RenvoyerLAcces::class)->executer($admin, $compte);
+
+        Mail::assertSent(
+            BienvenueNouvelAcces::class,
+            fn ($mail) => $mail->hasTo($compte->email) && $mail->roleLisible === 'Gérant',
+        );
+    }
+
+    public function test_le_courriel_annonce_le_perimetre_du_destinataire(): void
+    {
+        $admin = $this->superAdmin();
+        $compte = $this->compte('responsable_ville', actif: false, doitChanger: true);
+
+        $this->equipePlateforme();
+
+        app(RenvoyerLAcces::class)->executer($admin, $compte);
+
+        Mail::assertSent(
+            BienvenueNouvelAcces::class,
+            fn ($mail) => $mail->perimetre === 'Abidjan',
+        );
+    }
+
     private function compte(string $role, bool $actif, bool $doitChanger, ?string $email = null): User
     {
         app(PermissionRegistrar::class)->setPermissionsTeamId($this->entreprise->id);

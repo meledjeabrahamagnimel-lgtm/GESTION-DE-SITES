@@ -7,6 +7,7 @@ use Modules\Noyau\Exploitation\Services\GenerateurNumero;
 use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use Modules\Noyau\Entreprises\Modeles\Site;
 use Modules\Noyau\Entreprises\Modeles\Ville;
+use Modules\Noyau\Entreprises\Support\HierarchieAcces;
 use Modules\Noyau\Entreprises\Support\LibellesRoles;
 use Modules\Noyau\Commun\Mails\BienvenueNouvelAcces;
 use App\Models\User;
@@ -71,12 +72,20 @@ class CreerAcces
         return true;
     }
 
-    /** Le rôle, lu sans dépendre de l'équipe posée dans la requête en cours. */
+    /**
+     * Le rôle, lu en base.
+     *
+     * getRoleNames() ne convient pas ici, même après avoir repointé l'équipe de Spatie :
+     * la relation `roles` est mise en cache sur le modèle, et si elle a été chargée plus
+     * tôt dans la requête, le filtre posé après coup ne rejoue rien. Le courriel
+     * annonçait alors « Rôle : — » à quelqu'un qui en a bien un.
+     *
+     * S'ajoutait un effet de bord jamais défait : l'équipe restait celle du dernier
+     * compte traité pour toute la suite de la requête.
+     */
     private function roleDe(User $utilisateur): string
     {
-        app(PermissionRegistrar::class)->setPermissionsTeamId($utilisateur->entreprise_id);
-
-        return $utilisateur->getRoleNames()->first() ?? '';
+        return HierarchieAcces::roleDe($utilisateur);
     }
 
     private function creer(Entreprise $entreprise, string $role, array $donnees): User
@@ -97,8 +106,23 @@ class CreerAcces
                 'est_actif' => $donnees['est_actif'] ?? true,
             ]);
 
-            app(PermissionRegistrar::class)->setPermissionsTeamId($entreprise->id);
-            $utilisateur->assignRole($role);
+            /*
+             * assignRole écrit dans l'équipe posée : il faut donc la poser sur
+             * l'entreprise du nouveau compte. Mais elle est ensuite remise telle qu'on
+             * l'a trouvée — celle de l'administrateur qui agit. Sans cela, un super
+             * administrateur qui vient d'ouvrir un accès n'est plus reconnu comme tel
+             * pour la suite de sa propre requête : son rôle vit dans l'équipe 0, et on
+             * l'aurait laissé dans celle de l'entreprise.
+             */
+            $registrar = app(PermissionRegistrar::class);
+            $equipeInitiale = $registrar->getPermissionsTeamId();
+
+            try {
+                $registrar->setPermissionsTeamId($entreprise->id);
+                $utilisateur->assignRole($role);
+            } finally {
+                $registrar->setPermissionsTeamId($equipeInitiale);
+            }
 
             $ville = $this->affecterPerimetre($entreprise, $utilisateur, $role, $donnees);
 
