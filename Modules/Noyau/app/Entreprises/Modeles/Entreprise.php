@@ -104,24 +104,6 @@ class Entreprise extends Model
         return Storage::disk('public')->url($this->logo_chemin);
     }
 
-    /**
-     * Chemin disque du logo, ou null. Utilisé par les courriels, qui ne peuvent pas se
-     * contenter d'une URL : le fichier doit y être joint pour s'afficher chez le
-     * destinataire, y compris quand sa messagerie bloque les images distantes.
-     */
-    public function logoChemin(): ?string
-    {
-        if (! $this->logo_chemin) {
-            return null;
-        }
-
-        $chemin = str_starts_with($this->logo_chemin, 'public:')
-            ? public_path(substr($this->logo_chemin, 7))
-            : Storage::disk('public')->path($this->logo_chemin);
-
-        return is_file($chemin) ? $chemin : null;
-    }
-
     /** Palette de marque, prête à être injectée en custom properties CSS. */
     public function theme(): array
     {

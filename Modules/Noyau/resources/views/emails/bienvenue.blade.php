@@ -15,8 +15,12 @@
                 <tr>
                     <td style="background:#191B20; padding:22px 28px;" align="center">
                         @if ($logo)
-                            <img src="{{ $message->embed($logo) }}" alt="{{ $entreprise?->nom }}"
-                                width="150" style="display:block; height:auto; max-width:150px; margin:0 auto 10px;">
+                            {{-- alt vide, et c'est voulu : le nom de l'entreprise est écrit juste
+                                 en dessous. Un texte de remplacement le répéterait, et laisserait
+                                 surtout une icône d'image cassée tant que le destinataire n'a pas
+                                 touché « Afficher les images ». Sans lui, le bandeau reste net. --}}
+                            <img src="{{ $logo }}" alt="" role="presentation"
+                                width="150" style="display:block; height:auto; max-width:150px; margin:0 auto 10px; border:0; outline:none; text-decoration:none;">
                         @endif
                         <div style="color:#FFFFFF; font-size:19px; font-weight:700; letter-spacing:.3px;">
                             {{ $entreprise?->nom ?? "L'Artisan Automobile" }}

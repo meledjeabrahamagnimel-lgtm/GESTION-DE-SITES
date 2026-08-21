@@ -63,9 +63,23 @@ class BienvenueNouvelAcces extends Mailable
                 'nom' => $this->utilisateur->name,
                 'lienConnexion' => $this->lienPremiereConnexion(),
                 'cabinet' => config('cabinet'),
-                // Le logo est joint au message : une image appelée par URL reste blanche
-                // dans la plupart des messageries, qui bloquent les contenus distants.
-                'logo' => $this->entreprise->logoChemin(),
+                /*
+                 * Le logo est appelé par son adresse, et non joint au message.
+                 *
+                 * Il l'était : on pensait ainsi passer outre le blocage des images
+                 * distantes. C'était une erreur, et elle se voit à l'écran. Gmail bloque
+                 * aussi les images jointes tant qu'on n'a pas touché « Afficher les
+                 * images » : l'en-tête restait blanc de toute façon. Mais en plus, une
+                 * pièce jointe est affichée par les messageries mobiles comme une pièce
+                 * jointe — le logo réapparaissait en grand sous la signature, hors du
+                 * cadre, et le message avait l'air mal fabriqué.
+                 *
+                 * Une adresse ne coûte rien de tout cela : image bloquée, le bandeau
+                 * garde son fond sombre et le nom de l'entreprise en toutes lettres ;
+                 * image acceptée, elle s'affiche à sa place. Dans les deux cas, rien ne
+                 * traîne en bas du message.
+                 */
+                'logo' => $this->entreprise->logoUrl(),
                 'renvoi' => $this->renvoi,
                 // Détermine tout le corps du message : « choisissez votre mot de passe »
                 // n'a aucun sens pour quelqu'un qui en a déjà un et s'en sert.
