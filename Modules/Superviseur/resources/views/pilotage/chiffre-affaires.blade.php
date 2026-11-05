@@ -2,6 +2,7 @@
 
 use Modules\Noyau\Exploitation\Modeles\Charge;
 use Modules\Noyau\Commun\Services\FiltreLibre;
+use Modules\Noyau\Commun\Services\Exportateur;
 use Modules\Noyau\Exploitation\Services\EtatDesImpayes;
 use Modules\Noyau\Exploitation\Modeles\Commercial;
 use Modules\Noyau\Exploitation\Modeles\Facture;
@@ -378,6 +379,89 @@ $detail = computed(fn () => (clone $this->requeteDetail)
     ->get());
 
 /**
+ * Emporter toutes les lignes qui correspondent exactement aux filtres de l'écran.
+ *
+ * La pagination ne s'applique pas à l'export : le fichier contient l'ensemble du résultat
+ * filtré, pas seulement les dix lignes visibles. La requête de base reste la même que celle
+ * du tableau, y compris les filtres libres, l'origine, l'état et le périmètre autorisé.
+ */
+$telecharger = function () {
+    $lignes = (clone $this->requeteDetail)
+        ->with(['commercial', 'site'])
+        ->withSum('encaissements', 'montant')
+        ->latest('date')->latest('id')
+        ->get();
+
+    $avecSite = count($this->idsSites) > 1;
+    $avecEtat = (bool) $this->peutPorter;
+
+    $entetes = [
+        'Référence', 'Origine', 'Date de la facture', 'N° facture', 'N° sticker',
+        'Fiche de réception', 'N° sinistre', 'Immatriculation', 'Marque', 'Modèle',
+        'Code client', 'Client', 'Montant facture', 'Réglé', 'Reste',
+    ];
+    if ($avecSite) $entetes[] = 'Site';
+    $entetes[] = 'Activité';
+    $entetes[] = 'Commercial';
+    if ($avecEtat) $entetes[] = 'État des impayés';
+
+    $corps = $lignes->map(function ($ligne) use ($avecSite, $avecEtat) {
+        $encaisse = montant_de($ligne->encaissements_sum_montant ?? 0);
+        $reste = Recouvrement::reste($ligne);
+        $etat = $ligne->exercice_impayes !== null
+            ? 'À l’état '.$ligne->exercice_impayes
+            : ($reste < Recouvrement::SEUIL_SOLDE ? 'Réglée' : 'Non portée à l’état');
+
+        $colonnes = [
+            (string) ($ligne->numero ?? ''),
+            $ligne->estImportee() ? 'Reprise' : 'Saisie ici',
+            $ligne->date?->format('d/m/Y') ?? '',
+            (string) ($ligne->n_facture ?? ''),
+            (string) ($ligne->n_sticker ?? ''),
+            (string) ($ligne->reference_devis ?? ''),
+            (string) ($ligne->n_sinistre ?? ''),
+            (string) ($ligne->immatriculation ?? ''),
+            (string) ($ligne->marque ?: $ligne->vehicule ?: ''),
+            (string) ($ligne->modele ?? ''),
+            (string) ($ligne->code_client ?? ''),
+            (string) ($ligne->client ?? ''),
+            montant_de($ligne->montant),
+            $encaisse,
+            $reste < Recouvrement::SEUIL_SOLDE ? 0 : $reste,
+        ];
+
+        if ($avecSite) $colonnes[] = (string) ($ligne->site?->nom ?? '— à rattacher —');
+        $colonnes[] = (string) ($ligne->activite ?? '');
+        $colonnes[] = (string) ($ligne->commercial?->nom ?? '');
+        if ($avecEtat) $colonnes[] = $etat;
+
+        return $colonnes;
+    })->values()->all();
+
+    $total = array_fill(0, count($entetes), '');
+    $total[0] = 'TOTAL';
+    $total[12] = montant_de($lignes->sum('montant'));
+    $total[13] = montant_de($lignes->sum(fn ($l) => montant_de($l->encaissements_sum_montant ?? 0)));
+    $total[14] = montant_de($lignes->sum(fn ($l) => max(0, Recouvrement::reste($l))));
+
+    $chapeau = 'Période '.$this->plage[0]->format('d/m/Y').' au '.$this->plage[1]->format('d/m/Y')
+        .' · '.$this->libellePerimetre.' · '.$lignes->count().' facture(s)'
+        .($this->activiteFiltre ? ' · '.$this->activiteFiltre : '')
+        .($this->commercialFiltre ? ' · commercial filtré' : '')
+        .($this->origineFiltre ? ' · origine : '.$this->origineFiltre : '')
+        .($this->etatImpayesFiltre ? ' · état : '.$this->etatImpayesFiltre : '')
+        .($this->recherche ? ' · recherche : '.$this->recherche : '');
+
+    return Exportateur::excel(
+        'Chiffre affaires '.$this->plage[0]->format('Y-m-d').' au '.$this->plage[1]->format('Y-m-d'),
+        'Chiffre d’affaires',
+        $entetes,
+        $corps,
+        ['total' => $total, 'chapeau' => $chapeau],
+    );
+};
+
+/**
  * Combien de lignes de chaque origine — avec le filtre d'état appliqué, et pas le sien.
  *
  * Même raison que ci-dessus : « Reprises du logiciel d'atelier (2 288) » pendant que le
@@ -442,7 +526,14 @@ $comptesParOrigine = computed(function () {
          seule valeur. Une donnée dans une phrase ne se trie pas, ne se filtre pas et ne
          s'affiche pas en colonne : elle était conservée sans être consultable. --}}
     <div class="carte">
-        <h3 style="font-size:15px; font-weight:700; margin:0 0 4px;">Détail des factures ({{ $this->nombreDetail }})</h3>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:4px;">
+            <h3 style="font-size:15px; font-weight:700; margin:0;">Détail des factures ({{ $this->nombreDetail }})</h3>
+            <button type="button" wire:click="telecharger" wire:loading.attr="disabled" class="bouton bouton-secondaire"
+                style="display:inline-flex; align-items:center; gap:7px;">
+                <span wire:loading.remove wire:target="telecharger">↓ Exporter Excel</span>
+                <span wire:loading wire:target="telecharger">Préparation…</span>
+            </button>
+        </div>
         <p style="font-size:12.5px; color:#6B6E76; margin:0 0 14px;">
             Les colonnes sont celles du fichier CATTC. Le filtre d'origine ne touche que ce tableau :
             les totaux et le graphique ci-dessus comptent tout, sans quoi ce ne serait plus le chiffre
