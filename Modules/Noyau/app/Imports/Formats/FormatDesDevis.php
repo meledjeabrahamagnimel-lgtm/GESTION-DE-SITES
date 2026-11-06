@@ -4,6 +4,7 @@ namespace Modules\Noyau\Imports\Formats;
 
 use Modules\Noyau\Exploitation\Modeles\Devis;
 use Modules\Noyau\Exploitation\Services\RapprochementProspectionDevis;
+use Modules\Noyau\Exploitation\Services\RapprochementDevisFacture;
 use Modules\Noyau\Imports\Modeles\DossierVehicule;
 use Modules\Noyau\Imports\Services\CodesDesCommerciaux;
 
@@ -212,6 +213,7 @@ class FormatDesDevis extends Format
              * concluent à partir d'indices.
              */
             RapprochementProspectionDevis::relierParLeNumero($cree);
+            RapprochementDevisFacture::lierFacturesDuDevis($cree);
 
             return 'cree';
         }
@@ -235,6 +237,7 @@ class FormatDesDevis extends Format
         // la case a pu être cochée depuis. On réessaie à chaque passage : la méthode ne
         // fait rien quand le rattachement existe déjà.
         RapprochementProspectionDevis::relierParLeNumero($existant);
+        RapprochementDevisFacture::lierFacturesDuDevis($existant);
 
         if (! $existant->isDirty()) {
             return 'ignore';
