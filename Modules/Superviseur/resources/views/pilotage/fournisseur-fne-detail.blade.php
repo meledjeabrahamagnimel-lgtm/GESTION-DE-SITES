@@ -97,6 +97,9 @@ $peutPorter = computed(fn () => EtatDesFournisseurs::peutEcrire(auth()->user()))
         :sous-titre="($f->emetteur_nom ?: 'Émetteur inconnu').' — '.($f->date_facture?->format('d/m/Y') ?? 'sans date')">
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
             <a href="{{ route('fournisseurs.fne') }}" wire:navigate class="bouton bouton-secondaire">← Factures FNE</a>
+            @if ($f->urlDeVerification())
+                <a href="{{ $f->urlDeVerification() }}" target="_blank" rel="noopener noreferrer" class="bouton">Voir la facture sur le portail FNE ↗</a>
+            @endif
             @if ($f->pieceDuSuivi)
                 <a href="{{ route('fournisseurs.piece', $f->pieceDuSuivi->id) }}" wire:navigate class="bouton bouton-secondaire">Au suivi : {{ $f->pieceDuSuivi->numero_piece }}</a>
             @elseif ($this->peutPorter)
