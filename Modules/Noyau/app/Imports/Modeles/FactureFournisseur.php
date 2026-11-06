@@ -132,7 +132,7 @@ class FactureFournisseur extends Model
     }
 
     /** Les avoirs enregistrés sur cette facture. */
-    public function avoirs(): \\Illuminate\\Database\\Eloquent\\Relations\\HasMany
+    public function avoirs(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(self::class, 'avoir_de_id');
     }
