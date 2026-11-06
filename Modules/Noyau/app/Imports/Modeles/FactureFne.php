@@ -48,4 +48,26 @@ class FactureFne extends Model
     {
         return $this->belongsTo(FactureFournisseur::class, 'facture_fournisseur_id');
     }
+
+    /**
+     * Adresse de vérification officielle de la facture reçue.
+     * Le relevé FNE conserve le token dans le contenu brut de la réponse API.
+     */
+    public function urlDeVerification(): ?string
+    {
+        $contenu = is_array($this->contenu) ? $this->contenu : [];
+        $token = trim((string) ($contenu['token'] ?? ''));
+
+        if ($token === '') {
+            return null;
+        }
+
+        if (str_starts_with($token, 'https://') || str_starts_with($token, 'http://')) {
+            return $token;
+        }
+
+        $hote = rtrim((string) config('fne.url_verification', 'https://www.services.fne.dgi.gouv.ci'), '/');
+
+        return $hote === '' ? null : $hote.'/fr/verification/'.$token;
+    }
 }
