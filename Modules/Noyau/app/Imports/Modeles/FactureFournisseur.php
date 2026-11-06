@@ -21,7 +21,7 @@ use Modules\Noyau\Imports\Formats\FormatDesFournisseurs;
  * existante dans toute la chaîne.
  */
 #[Fillable([
-    'entreprise_id', 'ville_id', 'site_id', 'lot_import_id', 'user_id',
+    'entreprise_id', 'ville_id', 'site_id', 'lot_import_id', 'user_id', 'avoir_de_id',
     // La ville qui a REÇU la facture quand elle n'est pas celle qui a commandé (13/10).
     'recue_par_ville_id',
     'numero_piece', 'nature_piece', 'numero_bc', 'fournisseur',
@@ -125,6 +125,18 @@ class FactureFournisseur extends Model
     }
 
     /** La ville qui a reçu la facture, quand ce n'est pas celle qui a commandé. */
+    /** La facture d'origine corrigée par cet avoir fournisseur. */
+    public function factureOrigineAvoir(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'avoir_de_id');
+    }
+
+    /** Les avoirs enregistrés sur cette facture. */
+    public function avoirs(): \\Illuminate\\Database\\Eloquent\\Relations\\HasMany
+    {
+        return $this->hasMany(self::class, 'avoir_de_id');
+    }
+
     public function recuePar(): BelongsTo
     {
         return $this->belongsTo(Ville::class, 'recue_par_ville_id');
