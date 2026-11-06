@@ -285,7 +285,7 @@ class FormatDesFactures extends Format
         }
 
         if ($existante === null) {
-            $this->tenir(Facture::withoutGlobalScopes()->create($valeurs + [
+            $facture = $this->tenir(Facture::withoutGlobalScopes()->create($valeurs + [
                 'entreprise_id' => $this->entrepriseId,
                 'n_facture' => $numero,
                 // Le numéro interne suit la même valeur : la facture n'est pas née ici, elle
@@ -295,6 +295,7 @@ class FormatDesFactures extends Format
                     ->where('entreprise_id', $this->entrepriseId)->where('numero', $candidat)->exists()),
             ]));
 
+            RapprochementDevisFacture::relierExactementParFiche($facture);
             $this->numerosConnus[$numero] = true;
 
             return 'cree';
@@ -316,6 +317,7 @@ class FormatDesFactures extends Format
         }
 
         $existante->save();
+        RapprochementDevisFacture::relierExactementParFiche($existante);
 
         return 'maj';
     }
@@ -355,6 +357,7 @@ class FormatDesFactures extends Format
         }
 
         $creance->save();
+        RapprochementDevisFacture::relierExactementParFiche($creance);
 
         return 'maj';
     }
