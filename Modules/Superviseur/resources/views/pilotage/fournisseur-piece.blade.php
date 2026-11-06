@@ -386,6 +386,10 @@ $enregistrerAvoir = function () {
     }
 
     \\Illuminate\\Support\\Facades\\DB::transaction(function () use ($p, $donnees, $montant) {
+        // Le crédit diminue le reste de la facture d'origine ; l'avoir négatif
+        // reste tracé comme pièce distincte, sans être enregistré comme paiement.
+        $p->forceFill(['reste_a_payer' => montant_de($p->reste_a_payer) - $montant])->save();
+
         $avoir = FactureFournisseur::create([
             'entreprise_id' => $p->entreprise_id,
             'ville_id' => $p->ville_id,
