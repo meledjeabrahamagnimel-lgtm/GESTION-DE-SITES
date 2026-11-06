@@ -100,6 +100,29 @@ class LaFactureRetrouveSonCommercialTest extends TestCase
         $this->assertSame(18, $propositions[0]['ecart']);
     }
 
+    public function test_une_fiche_exacte_unique_attribue_automatiquement_la_facture_a_la_commission(): void
+    {
+        $devis = $this->devis('2026-03-02', 'FR-AB 010136');
+        $facture = $this->facture('2026-03-20', 32_000_000, ['reference_devis' => 'fr ab 010136']);
+
+        $this->assertTrue(RapprochementDevisFacture::relierExactementParFiche($facture));
+
+        $facture->refresh();
+        $this->assertSame($devis->id, $facture->devis_id);
+        $this->assertSame($this->commercial->id, $facture->commercial_id);
+    }
+
+    public function test_une_fiche_ambigue_ne_donne_pas_lieu_a_une_attribution_automatique(): void
+    {
+        $this->devis('2026-03-02', 'FR-AB 010136');
+        $this->devis('2026-03-03', 'FR-AB-010136');
+        $facture = $this->facture('2026-03-20', 32_000_000, ['reference_devis' => 'FR-AB 010136']);
+
+        $this->assertFalse(RapprochementDevisFacture::relierExactementParFiche($facture));
+        $this->assertNull($facture->fresh()->devis_id);
+        $this->assertNull($facture->fresh()->commercial_id);
+    }
+
     public function test_a_defaut_la_plaque_du_vehicule_les_relie(): void
     {
         $devis = $this->devis('2026-03-02', 'FR-AB 010136');
