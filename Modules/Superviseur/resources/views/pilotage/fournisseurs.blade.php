@@ -55,6 +55,9 @@ state(['exercice' => null])->url(except: '');
 
 state([
     'villeFiltre' => '',
+    // Période facultative sur la date de facture ; l'exercice et le report restent le cadre.
+    'dateDebutFiltre' => '',
+    'dateFinFiltre' => '',
     /*
      * **Toutes les factures par défaut — 22/10** : « c'est la page des fournisseurs, on doit y
      * avoir toutes les factures fournisseurs — suivies ou pas, venant de la FNE ou pas ». Elle
@@ -309,6 +312,8 @@ $choisirLaSaisie = function () {
 
 $updatedExercice = function () { $this->pageDetail = 1; };
 $updatedVilleFiltre = function () { $this->pageDetail = 1; };
+$updatedDateDebutFiltre = function () { $this->pageDetail = 1; };
+$updatedDateFinFiltre = function () { $this->pageDetail = 1; };
 $updatedEtatFiltre = function () { $this->pageDetail = 1; };
 $updatedRapprochementFiltre = function () { $this->pageDetail = 1; };
 /* La FNE pas encore au suivi ne dit pas ce qui en a été réglé : la choisir, c'est regarder toutes
@@ -400,6 +405,14 @@ $requete = computed(function () {
      * avant le filtre d'état, puisque celui-ci clôt la requête par un `match`.
      */
     FiltreLibre::appliquer($requete, $this->colonnesFiltrables, (array) $this->filtresLibres);
+
+    // La période filtre la date de facture, sans modifier les totaux d'exercice ni les reports.
+    if ($this->dateDebutFiltre !== '') {
+        $requete->whereDate('date_facture', '>=', $this->dateDebutFiltre);
+    }
+    if ($this->dateFinFiltre !== '') {
+        $requete->whereDate('date_facture', '<=', $this->dateFinFiltre);
+    }
 
     // Le rapprochement au relevé FNE, par le n° de pièce (26/10).
     if (in_array($this->rapprochementFiltre, ['rapprochees', 'non'], true) && \App\Support\SchemaDisponible::table('factures_fne')) {
@@ -830,6 +843,8 @@ $fneHorsSuivi = computed(function () {
     $terme = trim($this->recherche);
 
     return FactureFne::query()->whereNull('facture_fournisseur_id')->where('exercice', $this->annee)
+        ->when($this->dateDebutFiltre !== '', fn ($q) => $q->whereDate('date_facture', '>=', $this->dateDebutFiltre))
+        ->when($this->dateFinFiltre !== '', fn ($q) => $q->whereDate('date_facture', '<=', $this->dateFinFiltre))
         ->when($terme !== '', fn ($q) => $q->where(fn ($sous) => $sous
             ->where('emetteur_nom', 'like', '%'.$terme.'%')
             ->orWhere('emetteur_ncc', 'like', '%'.$terme.'%')
@@ -1195,6 +1210,8 @@ $fiches = computed(fn () => ConditionsFournisseur::pour(
                      retrouvaient rejetés trois lignes plus bas. Le reste de la maison écrit déjà
                      `width:auto` sur ses filtres en rangée (voir `x-filtre-periode`) ; ces deux-là
                      l'avaient oublié. --}}
+                <label style="font-size:12px; color:#6B6E76;">Du <input type="date" wire:model.live="dateDebutFiltre" class="champ" style="width:auto;"></label>
+                <label style="font-size:12px; color:#6B6E76;">Au <input type="date" wire:model.live="dateFinFiltre" class="champ" style="width:auto;"></label>
                 <input type="search" wire:model.live.debounce.400ms="recherche" value="{{ $recherche }}"
                     placeholder="Fournisseur, n° de pièce…" class="champ" style="width:auto; min-width:0; flex:0 1 230px;">
 
@@ -1286,6 +1303,7 @@ $fiches = computed(fn () => ConditionsFournisseur::pour(
                         <th>FNE</th>
                         <th>Report</th>
                         <th>Facture</th>
+                        <th>Enregistrée le</th>
                         <th>Échéance</th>
                         <th>Ancienneté</th>
                         <th>Section</th>
@@ -1310,6 +1328,8 @@ $fiches = computed(fn () => ConditionsFournisseur::pour(
                                 <td style="white-space:nowrap;"><span style="color:#C8102E; font-weight:800;" title="Aucune ligne du suivi ne porte ce n°">✘</span></td>
                                 <td style="color:#6B6E76;">—</td>
                                 <td style="white-space:nowrap;">{{ $ligne->date_facture?->format('d/m/Y') ?? '—' }}</td>
+                            <td style="white-space:nowrap; color:#6B6E76;">{{ $ligne->created_at?->format('d/m/Y H:i') ?? '—' }}</td>
+                                <td style="white-space:nowrap; color:#6B6E76;">{{ $ligne->created_at?->format('d/m/Y H:i') ?? '—' }}</td>
                                 <td style="color:#6B6E76;">—</td>
                                 <td style="color:#6B6E76;">—</td>
                                 <td style="color:#6B6E76;">—</td>
@@ -1412,7 +1432,7 @@ $fiches = computed(fn () => ConditionsFournisseur::pour(
                             </td>
                         </tr>
                     @empty
-                        <x-table-vide :colspan="13"
+                        <x-table-vide :colspan="14"
                             texte="Aucune facture fournisseur pour cette année et ce filtre. Le suivi fournisseurs se dépose depuis le module Import." />
                     @endforelse
                 </tbody>
