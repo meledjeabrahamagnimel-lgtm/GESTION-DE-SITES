@@ -14,6 +14,9 @@
 | journal. On l'allume quand `node achats.js` a réussi une fois à la main.
 */
 return [
+    // Hôte du portail utilisé pour ouvrir la vérification d'une facture reçue via son token.
+    'url_verification' => env('FNE_URL_VERIFICATION', 'https://www.services.fne.dgi.gouv.ci'),
+
     /*
      * **Allumé dès que le scraper est réglé — 18/10.** « Le système doit lancer directement le
      * relevé, sans déposer de fichier, comme Selflow. » Sans `FNE_SCRAPER_ACTIF` dans le .env, le
