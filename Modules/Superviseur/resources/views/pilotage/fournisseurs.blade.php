@@ -887,10 +887,10 @@ $detail = computed(function () {
 
     $ids = fn (string $source) => $page->getCollection()->where('source', $source)->pluck('id')->all();
     $pieces = FactureFournisseur::query()->with(['ville', 'recuePar'])
-        ->when(\App\Support\SchemaDisponible::table('factures_fne'), fn ($q) => $q->with('factureFne:id,reference,facture_fournisseur_id'))
+        ->when(\App\Support\SchemaDisponible::table('factures_fne'), fn ($q) => $q->with('factureFne:id,reference,facture_fournisseur_id,contenu'))
         ->whereIn('id', $ids('suivi'))->get()->keyBy('id');
     $fne = $ids('fne') === [] ? collect() : FactureFne::query()->whereIn('id', $ids('fne'))
-        ->get(['id', 'reference', 'est_avoir', 'date_facture', 'emetteur_nom', 'emetteur_ncc', 'montant_ttc'])->keyBy('id');
+        ->get(['id', 'reference', 'est_avoir', 'date_facture', 'emetteur_nom', 'emetteur_ncc', 'montant_ttc', 'contenu'])->keyBy('id');
 
     return $page->setCollection($page->getCollection()
         ->map(fn ($l) => $l->source === 'suivi' ? ($pieces[$l->id] ?? null) : ($fne[$l->id] ?? null))
@@ -1342,6 +1342,10 @@ $fiches = computed(fn () => ConditionsFournisseur::pour(
                                         <a href="{{ route('fournisseurs', ['porter' => $ligne->id]) }}" wire:navigate
                                             class="bouton" style="padding:4px 10px; font-size:12px; text-decoration:none;">Porter</a>
                                     @endif
+                                    @if ($ligne->urlDeVerification())
+                                        <a href="{{ $ligne->urlDeVerification() }}" target="_blank" rel="noopener noreferrer"
+                                            class="bouton" style="padding:4px 10px; font-size:12px; text-decoration:none;">Voir FNE</a>
+                                    @endif
                                     <a href="{{ route('fournisseurs.fne.detail', $ligne->id) }}" wire:navigate
                                         class="bouton bouton-secondaire" style="padding:4px 10px; font-size:12px; text-decoration:none;">Détails</a>
                                 </td>
@@ -1391,6 +1395,9 @@ $fiches = computed(fn () => ConditionsFournisseur::pour(
                                 @if ($ligne->relationLoaded('factureFne') && $ligne->factureFne)
                                     <span style="color:#0E9F6E; font-weight:800;">✔</span>
                                     <a href="{{ route('fournisseurs.fne.detail', $ligne->factureFne->id) }}" wire:navigate title="La facture FNE rapprochée">{{ $ligne->factureFne->reference }}</a>
+                                    @if ($ligne->factureFne->urlDeVerification())
+                                        <a href="{{ $ligne->factureFne->urlDeVerification() }}" target="_blank" rel="noopener noreferrer" title="Ouvrir la facture sur le portail FNE">Voir ↗</a>
+                                    @endif
                                 @else
                                     <span style="color:#C8102E; font-weight:800;" title="Aucune facture FNE ne porte ce n° de pièce">✘</span>
                                 @endif
