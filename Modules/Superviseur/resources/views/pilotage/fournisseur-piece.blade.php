@@ -75,6 +75,17 @@ $sortiesPossibles = computed(function () {
 
 mount(function (int $piece) {
     $this->id = $piece;
+
+    // Depuis le bouton « Régler » du tableau, ouvrir directement les champs de paiement.
+    if (request()->boolean('regler')) {
+        $facture = FactureFournisseur::query()->find($piece);
+        if ($facture && EtatDesFournisseurs::peutEcrire(auth()->user()) && montant_de($facture->reste_a_payer) > 0) {
+            $this->reglerMontant = (string) montant_de($facture->reste_a_payer);
+            $this->reglerDate = now()->toDateString();
+            $this->reglerMode = (string) $facture->mode_reglement;
+            $this->enReglement = true;
+        }
+    }
 });
 
 $piece = computed(function () {
