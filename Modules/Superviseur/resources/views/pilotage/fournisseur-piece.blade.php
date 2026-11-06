@@ -441,6 +441,9 @@ $enregistrerAvoir = function () {
                 @if ($this->peutEcrire && ! $enReglement && montant_de($p->reste_a_payer) !== 0)
                     <button type="button" wire:click="ouvrirReglement" class="bouton">Régler</button>
                 @endif
+                @if ($this->peutEcrire && ! $enAvoir && montant_de($p->reste_a_payer) > 0)
+                    <button type="button" wire:click="$set('enAvoir', true)" class="bouton bouton-secondaire">Faire un avoir</button>
+                @endif
                 @if ($this->peutModifier && ! $enModification)
                     <button type="button" wire:click="modifier" class="bouton bouton-secondaire">Modifier</button>
                 @endif
@@ -542,6 +545,28 @@ $enregistrerAvoir = function () {
                 @endif
             @endif
         </div>
+
+        @if ($enAvoir)
+            <div class="carte" style="margin-bottom:16px; border-left:3px solid #C8102E;">
+                <h3 style="font-size:15px; font-weight:700; margin:0 0 4px;">Enregistrer un avoir fournisseur</h3>
+                <p style="margin:0 0 12px; font-size:12.5px; color:#6B6E76;">
+                    L'avoir sera enregistré comme une pièce négative, rattachée à cette facture.
+                    Il diminuera le reste dû. Maximum autorisé : {{ ae(montant_de($p->reste_a_payer)) }}.
+                </p>
+                <form wire:submit="enregistrerAvoir">
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px;">
+                        <x-champ label="Montant de l'avoir" model="avoirMontant" type="number" requis />
+                        <x-champ label="Date de l'avoir" model="avoirDate" type="date" requis />
+                        <x-champ label="N° de l'avoir" model="avoirNumero" />
+                    </div>
+                    <div style="margin-top:12px;"><x-champ label="Commentaire" model="avoirCommentaire" type="textarea" /></div>
+                    <div style="display:flex; gap:9px; margin-top:14px;">
+                        <button type="submit" class="bouton">Enregistrer l'avoir</button>
+                        <button type="button" wire:click="$set('enAvoir', false)" class="bouton bouton-secondaire">Annuler</button>
+                    </div>
+                </form>
+            </div>
+        @endif
 
         @if ($enReglement)
             <div class="carte" style="margin-bottom:16px; border-left:3px solid #0E9F6E;">
