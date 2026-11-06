@@ -4,6 +4,7 @@ namespace Modules\Noyau\Imports\Formats;
 
 use Illuminate\Support\Facades\DB;
 use Modules\Noyau\Exploitation\Modeles\Facture;
+use Modules\Noyau\Exploitation\Services\RapprochementDevisFacture;
 use Modules\Noyau\Imports\Modeles\DossierVehicule;
 use Modules\Noyau\Imports\Services\PontDesFactures;
 
