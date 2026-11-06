@@ -1430,6 +1430,8 @@ $fiches = computed(fn () => ConditionsFournisseur::pour(
                                 @if ($ligne->reste_a_payer > 0 && $this->peutEcrire)
                                     <a href="{{ route('fournisseurs.piece', ['piece' => $ligne->id, 'regler' => 1]) }}" wire:navigate
                                         class="bouton" style="padding:4px 10px; font-size:12px; text-decoration:none;">Régler</a>
+                                    <a href="{{ route('fournisseurs.piece', ['piece' => $ligne->id, 'avoir' => 1]) }}" wire:navigate
+                                        class="bouton bouton-secondaire" style="padding:4px 10px; font-size:12px; text-decoration:none;">Avoir</a>
                                 @endif
                                 <a href="{{ route('fournisseurs.piece', $ligne) }}" wire:navigate
                                     class="bouton bouton-secondaire" style="padding:4px 10px; font-size:12px; text-decoration:none;">Détail</a>
