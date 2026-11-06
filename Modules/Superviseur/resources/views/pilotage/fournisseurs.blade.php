@@ -1426,7 +1426,11 @@ $fiches = computed(fn () => ConditionsFournisseur::pour(
                                        color:{{ $ligne->reste_a_payer > 0 ? '#C8102E' : '#6B6E76' }};">
                                 {{ ae(montant_de($ligne->reste_a_payer)) }}
                             </td>
-                            <td class="colonne-collee" style="text-align:right;{{ $fondRapprochee }}">
+                            <td class="colonne-collee" style="text-align:right; white-space:nowrap;{{ $fondRapprochee }}">
+                                @if ($ligne->reste_a_payer > 0 && $this->peutEcrire)
+                                    <a href="{{ route('fournisseurs.piece', ['piece' => $ligne->id, 'regler' => 1]) }}" wire:navigate
+                                        class="bouton" style="padding:4px 10px; font-size:12px; text-decoration:none;">Régler</a>
+                                @endif
                                 <a href="{{ route('fournisseurs.piece', $ligne) }}" wire:navigate
                                     class="bouton bouton-secondaire" style="padding:4px 10px; font-size:12px; text-decoration:none;">Détail</a>
                             </td>
