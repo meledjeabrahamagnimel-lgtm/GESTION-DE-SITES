@@ -47,6 +47,7 @@ state([
 
 // « Régler », 12/10 : chaque paiement s'enregistre et se lettre avec la facture qu'il solde.
 state(['enReglement' => false, 'reglerMontant' => '', 'reglerDate' => '', 'reglerMode' => '', 'reglerSortie' => '']);
+state(['enAvoir' => false, 'avoirMontant' => '', 'avoirDate' => '', 'avoirNumero' => '', 'avoirCommentaire' => '']);
 
 /*
  * Les sorties de caisse qui peuvent avoir payé cette pièce — 20/10 : « si la caisse fait un
@@ -84,6 +85,15 @@ mount(function (int $piece) {
             $this->reglerDate = now()->toDateString();
             $this->reglerMode = (string) $facture->mode_reglement;
             $this->enReglement = true;
+        }
+    }
+
+    if (request()->boolean('avoir')) {
+        $facture = FactureFournisseur::query()->find($piece);
+        if ($facture && EtatDesFournisseurs::peutEcrire(auth()->user()) && montant_de($facture->reste_a_payer) > 0) {
+            $this->avoirMontant = (string) montant_de($facture->reste_a_payer);
+            $this->avoirDate = now()->toDateString();
+            $this->enAvoir = true;
         }
     }
 });
@@ -349,6 +359,60 @@ $confirmerLaSuppression = function () {
 
     session()->flash('message', 'Pièce '.($numero !== '' ? $numero.' ' : '').'supprimée. Le journal en garde le contenu.');
     $this->redirectRoute('fournisseurs', navigate: true);
+};
+
+
+$enregistrerAvoir = function () {
+    if (! EtatDesFournisseurs::peutEcrire(auth()->user())) {
+        abort(403);
+    }
+
+    $p = $this->piece;
+    if ($p === null || montant_de($p->reste_a_payer) <= 0) {
+        abort(422, 'Cette facture ne présente plus de reste à payer.');
+    }
+
+    $donnees = $this->validate([
+        'avoirMontant' => ['required', 'numeric', 'gt:0'],
+        'avoirDate' => ['required', 'date'],
+        'avoirNumero' => ['nullable', 'string', 'max:60'],
+        'avoirCommentaire' => ['nullable', 'string', 'max:1000'],
+    ]);
+
+    $montant = montant_de($donnees['avoirMontant']);
+    if ($montant > montant_de($p->reste_a_payer)) {
+        $this->addError('avoirMontant', 'L’avoir ne peut pas dépasser le reste dû de '.montant_nombre(montant_de($p->reste_a_payer)).' F.');
+        return;
+    }
+
+    \\Illuminate\\Support\\Facades\\DB::transaction(function () use ($p, $donnees, $montant) {
+        $avoir = FactureFournisseur::create([
+            'entreprise_id' => $p->entreprise_id,
+            'ville_id' => $p->ville_id,
+            'site_id' => $p->site_id,
+            'user_id' => auth()->id(),
+            'avoir_de_id' => $p->id,
+            'fournisseur' => $p->fournisseur,
+            'numero_piece' => $donnees['avoirNumero'] ?: ('AVOIR-'.$p->id.'-'.now()->format('YmdHis')),
+            'nature_piece' => 'Avoir fournisseur',
+            'date_facture' => $donnees['avoirDate'],
+            'montant' => -$montant,
+            'montant_regle' => 0,
+            'reste_a_payer' => -$montant,
+            'mode_reglement' => $p->mode_reglement,
+            'imputation' => $p->imputation,
+            'immatriculation' => $p->immatriculation,
+            'observations' => trim('Avoir rattaché à la facture '.$p->numero_piece.'. '.($donnees['avoirCommentaire'] ?? '')),
+        ]);
+
+        activity()->performedOn($avoir)->causedBy(auth()->user())
+            ->withProperties(['facture_origine_id' => $p->id, 'montant_avoir' => $montant])
+            ->log('Avoir fournisseur enregistré');
+    });
+
+    $this->enAvoir = false;
+    unset($this->piece, $this->historique);
+    $this->dispatch('annonce', texte: 'Avoir enregistré et rattaché à la facture.', ton: 'succes');
 };
 
 ?>
