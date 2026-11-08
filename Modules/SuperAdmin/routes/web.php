@@ -58,7 +58,7 @@ Route::middleware(['auth', 'role:super_admin'])
         Volt::route('/comptaflow/liaison', 'superadmin.comptaflow-liaison')
             ->name('comptaflow.liaison')->middleware('habilitation:maintenance');
         Route::post('/comptaflow/liaison', [\Modules\SuperAdmin\Http\Controllers\LiaisonComptaflowController::class, 'store'])
-            ->name('comptaflow.liaison')->middleware('habilitation:maintenance');
+            ->name('comptaflow.liaison.store')->middleware('habilitation:maintenance');
         // Un incident par la référence lue sur la page de panne — demandé le 09/10. Même
         // habilitation que la maintenance, où la liste des incidents se trouve.
         Volt::route('/incidents/{reference}', 'superadmin.incident')->name('incident')
