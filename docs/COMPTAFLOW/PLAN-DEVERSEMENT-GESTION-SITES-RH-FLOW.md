@@ -229,3 +229,52 @@ Le chantier ne sera considéré terminé que lorsque :
 
 ---
 Ce document est un plan d'implémentation et de recette. Il ne signifie pas que les endpoints de consultation/création des référentiels, les écrans, les tâches asynchrones ou les tests de bout en bout sont déjà développés.
+
+
+## 9. Séparation des connecteurs dans COMPTAFLOW
+
+Le moteur d'importation comptable reste commun : c'est précisément la section d'importation native de COMPTAFLOW qui doit appliquer les mêmes règles à toutes les applications. En revanche, chaque application dispose de son propre connecteur isolé.
+
+Arborescence cible proposée :
+
+```
+app/Integrations/
+├── Selflow/
+│   ├── Controllers/
+│   ├── Services/
+│   ├── Middleware/
+│   ├── Requests/
+│   └── Tests/
+├── GestionDeSites/
+│   ├── Controllers/
+│   ├── Services/
+│   ├── Middleware/
+│   ├── Requests/
+│   └── Tests/
+└── RhFlow/
+    ├── Controllers/
+    ├── Services/
+    ├── Middleware/
+    ├── Requests/
+    └── Tests/
+```
+
+Chaque connecteur possède ses routes, ses contrôleurs, ses validations, son authentification et ses tests. Il transforme son format source en commande normalisée puis appelle le moteur d'importation commun. Aucun connecteur ne doit appeler directement les contrôleurs d'un autre connecteur.
+
+La migration doit se faire sans rupture :
+1. caractériser et tester les routes et payloads SELFLOW existants ;
+2. déplacer/encapsuler le connecteur SELFLOW en conservant ses URL publiques et réponses ;
+3. créer le connecteur GESTION-DE-SITES avec ses routes propres ;
+4. ajouter RH-FLOW dans son propre dossier ;
+5. déplacer progressivement les règles communes vers des services neutres partagés ;
+6. exécuter les tests de non-régression et comparer les balances avant/après.
+
+La séparation des dossiers réduit les risques de modification accidentelle et facilite la maintenance. Elle ne remplace pas les contrôles d'accès, les identités de source, les transactions et les tests : le moteur commun reste une surface partagée qui doit être stable.
+
+## 10. Configuration IA dans GESTION-DE-SITES
+
+Une interface SuperAdmin est préparée à l'adresse `/super-admin/intelligence-artificielle`. Elle permet de renseigner une clé et un identifiant de modèle pour OpenAI, Anthropic, Google Gemini ou OpenRouter.
+
+Les clés sont stockées chiffrées dans la table `configurations_ia`. L'écran ne réaffiche pas la clé ; un champ vide conserve la clé existante. Seul le rôle `super_admin` peut enregistrer les paramètres, et la route est aussi protégée par l'habilitation maintenance.
+
+Cette première étape est la configuration et le stockage sécurisé uniquement. Il reste à développer le test de connexion fournisseur, le choix du fournisseur actif dans un service IA, le moteur d'imputation, les journaux de prompts/réponses sans secrets, les seuils de confiance et la validation humaine des propositions. Aucun appel IA ni aucune écriture comptable automatique n'est activé par cette interface.
