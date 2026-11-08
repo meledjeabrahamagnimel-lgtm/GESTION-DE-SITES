@@ -1,7 +1,7 @@
 <?php
 
-use Modules\\Noyau\\Entreprises\\Modeles\\Entreprise;
-use Modules\\Noyau\\Exploitation\\Modeles\\LiaisonComptaflow;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Exploitation\Modeles\LiaisonComptaflow;
 
 ?>
 
