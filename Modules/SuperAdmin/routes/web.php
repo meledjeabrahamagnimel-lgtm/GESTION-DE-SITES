@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 use Modules\Noyau\Commun\Controleurs\TelechargerAnnuaire;
 use Modules\SuperAdmin\Http\Controllers\CodesAtelierController;
+use Modules\SuperAdmin\Http\Controllers\ConfigurationIAController;
 use Modules\SuperAdmin\Http\Controllers\SwitchController;
 
 /*
@@ -57,6 +58,10 @@ Route::middleware(['auth', 'role:super_admin'])
         Volt::route('/maintenance', 'superadmin.maintenance')->name('maintenance')->middleware('habilitation:maintenance');
         Volt::route('/comptaflow/liaison', 'superadmin.comptaflow-liaison')
             ->name('comptaflow.liaison')->middleware('habilitation:maintenance');
+        Volt::route('/intelligence-artificielle', 'superadmin.configuration-ia')
+            ->name('ia.configuration')->middleware('habilitation:maintenance');
+        Route::post('/intelligence-artificielle', [ConfigurationIAController::class, 'store'])
+            ->name('ia.enregistrer')->middleware('habilitation:maintenance');
         Route::post('/comptaflow/liaison', [\Modules\SuperAdmin\Http\Controllers\LiaisonComptaflowController::class, 'store'])
             ->name('comptaflow.liaison.store')->middleware('habilitation:maintenance');
         // Un incident par la référence lue sur la page de panne — demandé le 09/10. Même
