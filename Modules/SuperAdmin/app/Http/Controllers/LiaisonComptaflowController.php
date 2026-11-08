@@ -1,13 +1,13 @@
 <?php
 
-namespace Modules\\SuperAdmin\\Http\\Controllers;
+namespace Modules\SuperAdmin\Http\Controllers;
 
-use Illuminate\\Http\\RedirectResponse;
-use Illuminate\\Http\\Request;
-use Illuminate\\Routing\\Controller;
-use Modules\\Noyau\\Entreprises\\Modeles\\Entreprise;
-use Modules\\Noyau\\Exploitation\\Modeles\\LiaisonComptaflow;
-use Modules\\Noyau\\Exploitation\\Services\\ComptaflowClient;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Exploitation\Modeles\LiaisonComptaflow;
+use Modules\Noyau\Exploitation\Services\ComptaflowClient;
 use Throwable;
 
 class LiaisonComptaflowController extends Controller
