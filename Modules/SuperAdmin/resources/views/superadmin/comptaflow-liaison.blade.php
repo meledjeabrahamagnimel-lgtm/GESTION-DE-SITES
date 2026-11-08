@@ -24,7 +24,7 @@ use Modules\\Noyau\\Exploitation\\Modeles\\LiaisonComptaflow;
     @endif
 
     <div class="carte">
-        <form method="POST" action="{{ route('super-admin.comptaflow.liaison') }}">
+        <form method="POST" action="{{ route('super-admin.comptaflow.liaison.store') }}">
             @csrf
             <label for="entreprise_id">Entreprise GESTION-DE-SITES</label>
             <select id="entreprise_id" name="entreprise_id" class="champ" required>
