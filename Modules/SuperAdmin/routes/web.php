@@ -55,6 +55,10 @@ Route::middleware(['auth', 'role:super_admin'])
         // laissé les administrateurs secondaires déjà habilités devant un onglet mort.
         Volt::route('/tracabilite', 'superadmin.tracabilite')->name('tracabilite')->middleware('habilitation:journal');
         Volt::route('/maintenance', 'superadmin.maintenance')->name('maintenance')->middleware('habilitation:maintenance');
+        Volt::route('/comptaflow/liaison', 'superadmin.comptaflow-liaison')
+            ->name('comptaflow.liaison')->middleware('habilitation:maintenance');
+        Route::post('/comptaflow/liaison', [\\Modules\\SuperAdmin\\Http\\Controllers\\LiaisonComptaflowController::class, 'store'])
+            ->name('comptaflow.liaison')->middleware('habilitation:maintenance');
         // Un incident par la référence lue sur la page de panne — demandé le 09/10. Même
         // habilitation que la maintenance, où la liste des incidents se trouve.
         Volt::route('/incidents/{reference}', 'superadmin.incident')->name('incident')
