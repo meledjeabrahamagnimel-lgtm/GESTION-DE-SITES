@@ -74,9 +74,22 @@ Le contrat de haut niveau utilisé par GESTION-DE-SITES est :
 - `exercice_debut`, `exercice_fin` ;
 - `ecritures` : tableau de lignes comptables.
 
-**À confirmer par tests et à figer dans une spécification versionnée :** les champs obligatoires de chaque ligne, notamment date, pièce, journal, compte général, libellé, débit, crédit, tiers, référence source, point de vente et exercice. Le code d'import doit refuser une écriture déséquilibrée et une ligne qui pointe vers un journal, un compte ou un tiers non résolu.
+**Champs réellement lus par le contrôleur actuel pour chaque ligne :**
+- `date_ecriture` : date comptable ;
+- `code_journal` : code existant dans le dossier COMPTAFLOW ;
+- `reference_document` : référence de pièce ;
+- `libelle` : libellé de la ligne ;
+- `debit` et `credit` : montants ;
+- `compte_debit` ou `compte_credit` : numéro de compte général utilisé pour résoudre le compte de la ligne ;
+- `compte_tiers` : numéro d'origine du tiers, facultatif techniquement mais à fournir dès qu'une ligne concerne un tiers ;
+- `cle_source` (ou ancien alias `cle_selflow`) : clé stable et unique de la ligne pour l'idempotence ;
+- `operation_source` (ou ancien alias `operation_selflow`) : identifiant stable de l'opération comptable à laquelle appartient la ligne.
 
-Une opération doit être idempotente : renvoyer le même identifiant d'opération ne doit jamais créer une deuxième écriture.
+Au niveau de la requête, `operation` peut servir de repli pour former l'identifiant d'opération si la ligne n'en fournit pas. `atomique=true` demande l'annulation de toute l'opération si une ligne est refusée. Le contrôleur lit aussi `exercice_debut` et `exercice_fin` pour vérifier le recouvrement avec l'exercice COMPTAFLOW.
+
+Le contrôleur actuel **ne lit pas** directement les champs point de vente, avoir lié, détail de facture ou tiers enrichi dans l'écriture : ces informations doivent être conservées dans la traçabilité source ou faire l'objet d'un enrichissement contractuel explicite. La date et l'exercice sont contrôlés, mais le point de vente ne doit pas être perdu côté GESTION-DE-SITES.
+
+Une opération doit être idempotente : renvoyer les mêmes clés de ligne ne doit jamais créer une deuxième écriture. Le contrôleur range actuellement l'opération dans la colonne historique `operation_selflow` et la clé de ligne dans `cle_selflow`, avec un préfixe de source. Ce nommage historique doit être généralisé en colonnes neutres (`source`, `source_operation_id`, `source_entry_id`) avant d'ajouter RH-FLOW, ou à défaut être encapsulé par une couche commune strictement testée.
 
 ## 3. Référentiels : mécanisme recommandé
 
