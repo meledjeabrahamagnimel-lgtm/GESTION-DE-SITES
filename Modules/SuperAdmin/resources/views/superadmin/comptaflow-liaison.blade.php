@@ -5,6 +5,8 @@ use Modules\Noyau\Exploitation\Modeles\LiaisonComptaflow;
 use Modules\Noyau\Exploitation\Modeles\Tiers;
 use Modules\Noyau\Exploitation\Modeles\CorrespondanceTiersComptaflow;
 use Modules\Noyau\Exploitation\Services\ComptaflowClient;
+use Modules\Noyau\Imports\Modeles\FournisseurReferentiel;
+use Modules\Noyau\Imports\Modeles\CorrespondanceFournisseurComptaflow;
 
 ?>
 
