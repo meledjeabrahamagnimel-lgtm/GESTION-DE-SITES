@@ -141,5 +141,56 @@ use Modules\Noyau\Exploitation\Services\ComptaflowClient;
                 </table>
             </div>
         </div>
+
+        <div class="carte" style="margin-top:16px;">
+            <h3>Correspondance des fournisseurs — {{ $liaisonActive->entreprise?->nom }}</h3>
+            <p style="font-size:12px;color:#6B7280;">
+                Les fournisseurs sont issus du référentiel fournisseurs, distinct des clients et autres tiers.
+                Associez chaque fournisseur à un tiers déjà existant dans COMPTAFLOW. Aucun tiers n'est créé ici.
+            </p>
+            @php
+                $fournisseursLocaux = FournisseurReferentiel::query()
+                    ->where('entreprise_id', $liaisonActive->entreprise_id)
+                    ->orderBy('nom')->get();
+                $correspondancesFournisseurs = CorrespondanceFournisseurComptaflow::query()
+                    ->where('entreprise_id', $liaisonActive->entreprise_id)->get()->keyBy('fournisseur_id');
+            @endphp
+            <div class="tableau-conteneur">
+                <table class="tableau">
+                    <thead><tr><th>Fournisseur GESTION-DE-SITES</th><th>Code local</th><th>Tiers COMPTAFLOW associé</th><th>État</th></tr></thead>
+                    <tbody>
+                        @forelse ($fournisseursLocaux as $fournisseurLocal)
+                            @php $correspondanceFournisseur = $correspondancesFournisseurs->get($fournisseurLocal->id); @endphp
+                            <tr>
+                                <td>{{ $fournisseurLocal->nom }}</td>
+                                <td>{{ $fournisseurLocal->code ?? '—' }}</td>
+                                <td>
+                                    <form method="POST" action="{{ route('super-admin.comptaflow.liaison.fournisseurs.associer') }}" style="display:flex;gap:8px;align-items:center;">
+                                        @csrf
+                                        <input type="hidden" name="entreprise_id" value="{{ $liaisonActive->entreprise_id }}">
+                                        <input type="hidden" name="fournisseur_id" value="{{ $fournisseurLocal->id }}">
+                                        <select name="comptaflow_tier_id" class="champ" required>
+                                            <option value="">Choisir un tiers COMPTAFLOW</option>
+                                            @foreach ($tiersComptaflow as $tiersCf)
+                                                <option value="{{ $tiersCf['id'] }}" @selected((int) $correspondanceFournisseur?->comptaflow_tier_id === (int) $tiersCf['id'])>
+                                                    {{ $tiersCf['numero_de_tiers'] }} — {{ $tiersCf['intitule'] }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <button type="submit" class="bouton" @disabled($tiersComptaflow->isEmpty())>Associer</button>
+                                    </form>
+                                    @if ($correspondanceFournisseur)
+                                        <small style="color:#15803D;">Actuellement : {{ $correspondanceFournisseur->numero_de_tiers }} — {{ $correspondanceFournisseur->intitule }}</small>
+                                    @endif
+                                </td>
+                                <td>{{ $correspondanceFournisseur ? 'Correspondance enregistrée' : 'À associer' }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="4">Aucun fournisseur n'est encore enregistré dans le référentiel.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
     @endforeach
 </div>
