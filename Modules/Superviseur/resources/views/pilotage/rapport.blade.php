@@ -41,10 +41,11 @@ mount(function () {
     abort_unless(HabilitationsDActions::accorde(auth()->user(), 'rapport', 'voir'), 403);
 });
 
-$onglets = [
+// Un tableau local ne passe pas à la vue d'un composant Volt : il faut un `computed` (lu par `$this->onglets`).
+$onglets = computed(fn () => [
     'presentation' => 'Présentation', 'ca' => 'Chiffre d\'affaires', 'recouvrement' => 'Recouvrement', 'charges' => 'Charges',
     'conclusion' => 'Conclusion', 'commerciaux' => 'Commerciaux', 'precedent' => 'Année précédente', 'depot' => 'Dépôt de fichiers',
-];
+]);
 
 $exerciceChoisi = computed(fn () => (int) ($this->exercice ?: now()->year));
 $annees = computed(fn () => range((int) now()->year, (int) now()->year - 4));
@@ -163,7 +164,7 @@ $retirerLesPropositions = function () {
 
     {{-- Les boutons alignés en haut : les feuilles de l'Excel. --}}
     <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:6px 0 14px;">
-        @foreach ($onglets as $cle => $libelle)
+        @foreach ($this->onglets as $cle => $libelle)
             <button type="button" wire:click="aller('{{ $cle }}')" class="bouton"
                 style="padding:8px 14px; font-weight:700; {{ $this->vue === $cle ? 'background:#C8102E; color:#fff; border-color:#C8102E;' : '' }}">{{ $libelle }}</button>
         @endforeach
