@@ -1,11 +1,11 @@
 <?php
 
-namespace Modules\\Noyau\\Imports\\Modeles;
+namespace Modules\Noyau\Imports\Modeles;
 
-use Illuminate\\Database\\Eloquent\\Model;
-use Illuminate\\Database\\Eloquent\\Relations\\BelongsTo;
-use Modules\\Noyau\\Entreprises\\Modeles\\Entreprise;
-use Modules\\Noyau\\Exploitation\\Modeles\\LiaisonComptaflow;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Modules\Noyau\Entreprises\Modeles\Entreprise;
+use Modules\Noyau\Exploitation\Modeles\LiaisonComptaflow;
 
 class CorrespondanceFournisseurComptaflow extends Model
 {
