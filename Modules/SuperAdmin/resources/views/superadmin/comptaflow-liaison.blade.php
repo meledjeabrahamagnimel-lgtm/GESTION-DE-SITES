@@ -52,7 +52,7 @@ use Modules\Noyau\Exploitation\Modeles\LiaisonComptaflow;
         <h3>Liaisons enregistrées</h3>
         <div class="tableau-conteneur">
             <table class="tableau">
-                <thead><tr><th>Entreprise</th><th>Dossier COMPTAFLOW</th><th>Statut</th><th>Dernier déversement</th></tr></thead>
+                <thead><tr><th>Entreprise</th><th>Dossier COMPTAFLOW</th><th>Statut</th><th>Dernier déversement</th><th>Dernier retour</th><th>Action</th></tr></thead>
                 <tbody>
                     @forelse (LiaisonComptaflow::query()->with('entreprise')->latest()->get() as $liaison)
                         <tr>
@@ -60,9 +60,16 @@ use Modules\Noyau\Exploitation\Modeles\LiaisonComptaflow;
                             <td>{{ $liaison->comptaflow_company_id }}</td>
                             <td>{{ $liaison->statut }}</td>
                             <td>{{ $liaison->dernier_deversement_le?->format('d/m/Y H:i') ?? 'Jamais' }}</td>
+                            <td>{{ $liaison->dernier_message ?? 'Aucun retour' }}</td>
+                            <td>
+                                <form method="POST" action="{{ route('super-admin.comptaflow.liaison.verifier', $liaison) }}">
+                                    @csrf
+                                    <button type="submit" class="bouton">Vérifier</button>
+                                </form>
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="4">Aucune liaison COMPTAFLOW pour le moment.</td></tr>
+                        <tr><td colspan="6">Aucune liaison COMPTAFLOW pour le moment.</td></tr>
                     @endforelse
                 </tbody>
             </table>
