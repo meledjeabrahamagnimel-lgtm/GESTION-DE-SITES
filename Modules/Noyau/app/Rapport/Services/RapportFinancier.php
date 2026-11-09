@@ -86,7 +86,7 @@ final class RapportFinancier
             $lignes = EtatDesImpayes::dansLePerimetre(Facture::query()->duChiffreDAffaires(), $this->idsSites, $this->idsVilles)
                 ->whereBetween('factures.date', [$this->debut(), $this->fin()])
                 ->toBase()
-                ->get(['factures.date', 'factures.montant', 'factures.activite', 'factures.ville_id']);
+                ->get(['factures.date', 'factures.montant', 'factures.activite', 'factures.ville_id', 'factures.client', 'factures.numero', 'factures.reference_devis']);
 
             $villes = Ville::withoutGlobalScopes()->pluck('nom', 'id');
             $total = montant_de($lignes->sum('montant'));
@@ -126,6 +126,11 @@ final class RapportFinancier
                 'matrice' => $matrice,
                 // Les factures dont le code éditeur a sauté : la ville est inconnue, le total les garde.
                 'nonRattache' => ['nombre' => $nonRattache->count(), 'montant' => montant_de($nonRattache->sum('montant'))],
+                // Leur liste, une par une, comme la section « Factures sans code éditeur » de l'Excel.
+                'nonRattacheLignes' => $nonRattache->sortBy('date')->take(200)->map(fn ($l) => [
+                    'numero' => (string) $l->numero, 'date' => $l->date, 'client' => (string) $l->client,
+                    'activite' => (string) $l->activite, 'montant' => montant_de($l->montant), 'fiche' => (string) $l->reference_devis,
+                ])->values()->all(),
             ];
         });
     }
