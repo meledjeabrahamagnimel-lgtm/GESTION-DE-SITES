@@ -92,7 +92,7 @@ use Modules\Noyau\Exploitation\Services\ComptaflowClient;
                 try {
                     $tiersComptaflow = collect(app(ComptaflowClient::class)->listerTiers($liaisonActive));
                     $erreurChargementTiers = null;
-                } catch (\\Throwable $exception) {
+                } catch (\Throwable $exception) {
                     $tiersComptaflow = collect();
                     $erreurChargementTiers = $exception->getMessage();
                 }
