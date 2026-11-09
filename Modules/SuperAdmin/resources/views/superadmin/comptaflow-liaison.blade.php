@@ -2,6 +2,9 @@
 
 use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use Modules\Noyau\Exploitation\Modeles\LiaisonComptaflow;
+use Modules\Noyau\Exploitation\Modeles\Tiers;
+use Modules\Noyau\Exploitation\Modeles\CorrespondanceTiersComptaflow;
+use Modules\Noyau\Exploitation\Services\ComptaflowClient;
 
 ?>
 
@@ -75,4 +78,68 @@ use Modules\Noyau\Exploitation\Modeles\LiaisonComptaflow;
             </table>
         </div>
     </div>
+
+    @foreach (LiaisonComptaflow::query()->where('statut', 'active')->with('entreprise')->get() as $liaisonActive)
+        <div class="carte" style="margin-top:16px;">
+            <h3>Correspondance des tiers — {{ $liaisonActive->entreprise?->nom }}</h3>
+            <p style="font-size:12px;color:#6B7280;">
+                Associez chaque client ou autre tiers de GESTION-DE-SITES à un tiers déjà créé dans COMPTAFLOW.
+                Aucun tiers comptable n'est créé depuis cet écran.
+            </p>
+            @php
+                $tiersLocaux = Tiers::query()->where('entreprise_id', $liaisonActive->entreprise_id)->orderBy('nom')->get();
+                $correspondances = CorrespondanceTiersComptaflow::query()->where('entreprise_id', $liaisonActive->entreprise_id)->get()->keyBy('tiers_id');
+                try {
+                    $tiersComptaflow = collect(app(ComptaflowClient::class)->listerTiers($liaisonActive));
+                    $erreurChargementTiers = null;
+                } catch (\\Throwable $exception) {
+                    $tiersComptaflow = collect();
+                    $erreurChargementTiers = $exception->getMessage();
+                }
+            @endphp
+
+            @if ($erreurChargementTiers)
+                <p style="color:#B91C1C;">Impossible de charger les tiers COMPTAFLOW : {{ $erreurChargementTiers }}</p>
+            @elseif ($tiersComptaflow->isEmpty())
+                <p style="color:#B45309;">Aucun tiers trouvé dans le dossier COMPTAFLOW. Créez-les d'abord dans COMPTAFLOW, puis rechargez cette page.</p>
+            @endif
+
+            <div class="tableau-conteneur">
+                <table class="tableau">
+                    <thead><tr><th>Tiers GESTION-DE-SITES</th><th>Rôle</th><th>Tiers COMPTAFLOW associé</th><th>Action</th></tr></thead>
+                    <tbody>
+                        @forelse ($tiersLocaux as $tiersLocal)
+                            @php $correspondance = $correspondances->get($tiersLocal->id); @endphp
+                            <tr>
+                                <td>{{ $tiersLocal->nom }}</td>
+                                <td>{{ $tiersLocal->role ?: '—' }}</td>
+                                <td>
+                                    <form method="POST" action="{{ route('super-admin.comptaflow.liaison.tiers.associer') }}" style="display:flex;gap:8px;align-items:center;">
+                                        @csrf
+                                        <input type="hidden" name="entreprise_id" value="{{ $liaisonActive->entreprise_id }}">
+                                        <input type="hidden" name="tiers_id" value="{{ $tiersLocal->id }}">
+                                        <select name="comptaflow_tier_id" class="champ" required>
+                                            <option value="">Choisir un tiers COMPTAFLOW</option>
+                                            @foreach ($tiersComptaflow as $tiersCf)
+                                                <option value="{{ $tiersCf['id'] }}" @selected((int) $correspondance?->comptaflow_tier_id === (int) $tiersCf['id'])>
+                                                    {{ $tiersCf['numero_de_tiers'] }} — {{ $tiersCf['intitule'] }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <button type="submit" class="bouton" @disabled($tiersComptaflow->isEmpty())>Associer</button>
+                                    </form>
+                                    @if ($correspondance)
+                                        <small style="color:#15803D;">Actuellement : {{ $correspondance->numero_de_tiers }} — {{ $correspondance->intitule }}</small>
+                                    @endif
+                                </td>
+                                <td>{{ $correspondance ? 'Correspondance enregistrée' : 'À associer' }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="4">Aucun tiers GESTION-DE-SITES n'est encore enregistré.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endforeach
 </div>
