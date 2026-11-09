@@ -45,4 +45,25 @@ class LiaisonComptaflowController extends Controller
             return back()->withErrors(['comptaflow_company_id' => $e->getMessage()]);
         }
     }
+
+    public function verifier(LiaisonComptaflow $liaison, Request $request, ComptaflowClient $client): RedirectResponse
+    {
+        abort_unless($request->user()?->hasRole('super_admin'), 403);
+
+        try {
+            $reponse = $client->verifier($liaison);
+            $liaison->statut = 'active';
+            $liaison->dernier_message = $reponse['message'] ?? 'Liaison vérifiée avec COMPTAFLOW.';
+            $liaison->save();
+
+            return back()->with('success', 'La liaison avec le dossier COMPTAFLOW n° '.$liaison->comptaflow_company_id.' est valide.');
+        } catch (Throwable $e) {
+            report($e);
+            $liaison->statut = 'erreur';
+            $liaison->dernier_message = mb_substr($e->getMessage(), 0, 2000);
+            $liaison->save();
+
+            return back()->withErrors(['liaison' => 'Vérification impossible : '.$e->getMessage()]);
+        }
+    }
 }
