@@ -19,7 +19,6 @@ return new class extends Migration
             $table->foreignId('associe_par')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
             $table->unique(['entreprise_id', 'tiers_id'], 'corr_cf_tiers_local_unique');
-            $table->unique(['entreprise_id', 'comptaflow_tier_id'], 'corr_cf_tiers_distant_unique');
         });
     }
 
