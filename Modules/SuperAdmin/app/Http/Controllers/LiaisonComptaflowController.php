@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Noyau\Entreprises\Modeles\Entreprise;
 use Modules\Noyau\Exploitation\Modeles\LiaisonComptaflow;
+use Modules\Noyau\Exploitation\Modeles\Tiers;
+use Modules\Noyau\Exploitation\Modeles\CorrespondanceTiersComptaflow;
 use Modules\Noyau\Exploitation\Services\ComptaflowClient;
 use Throwable;
 
@@ -43,6 +45,50 @@ class LiaisonComptaflowController extends Controller
         } catch (Throwable $e) {
             report($e);
             return back()->withErrors(['comptaflow_company_id' => $e->getMessage()]);
+        }
+    }
+
+    public function associerTiers(Request $request, ComptaflowClient $client): RedirectResponse
+    {
+        abort_unless($request->user()?->hasRole('super_admin'), 403);
+
+        $data = $request->validate([
+            'entreprise_id' => ['required', 'integer', 'exists:entreprises,id'],
+            'tiers_id' => ['required', 'integer'],
+            'comptaflow_tier_id' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $liaison = LiaisonComptaflow::query()
+            ->where('entreprise_id', $data['entreprise_id'])
+            ->where('statut', 'active')
+            ->firstOrFail();
+
+        $tiers = Tiers::query()
+            ->where('entreprise_id', $liaison->entreprise_id)
+            ->findOrFail($data['tiers_id']);
+
+        try {
+            $tiersDistant = collect($client->listerTiers($liaison))
+                ->first(fn ($tiersCf) => (int) ($tiersCf['id'] ?? 0) === (int) $data['comptaflow_tier_id']);
+
+            if (!$tiersDistant) {
+                return back()->withErrors(['comptaflow_tier_id' => 'Ce tiers n’existe plus dans le dossier COMPTAFLOW. Rechargez la page.']);
+            }
+
+            CorrespondanceTiersComptaflow::query()->updateOrCreate(
+                ['entreprise_id' => $liaison->entreprise_id, 'tiers_id' => $tiers->id],
+                [
+                    'comptaflow_tier_id' => (int) $tiersDistant['id'],
+                    'numero_de_tiers' => $tiersDistant['numero_de_tiers'] ?? null,
+                    'intitule' => $tiersDistant['intitule'] ?? null,
+                    'associe_par' => $request->user()->id,
+                ]
+            );
+
+            return back()->with('success', 'Le tiers « '.$tiers->nom.' » est maintenant associé au tiers COMPTAFLOW « '.($tiersDistant['intitule'] ?? $tiersDistant['numero_de_tiers'] ?? 'sans intitulé').' ».');
+        } catch (Throwable $e) {
+            report($e);
+            return back()->withErrors(['comptaflow_tier_id' => 'Impossible de récupérer les tiers COMPTAFLOW : '.$e->getMessage()]);
         }
     }
 
